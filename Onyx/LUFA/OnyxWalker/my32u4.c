@@ -188,6 +188,10 @@ void setup_delay(void) {
 
 extern unsigned char sbuf[];
 extern unsigned char sbuflen;
+extern unsigned char epic;
+extern unsigned char epiir;
+extern unsigned char epirwa;
+
 
 void show_error(unsigned char errkind, unsigned char errdata) {
 
@@ -201,10 +205,12 @@ void show_error(unsigned char errkind, unsigned char errdata) {
         delayms(200);
         PORTB &= ~0xf;
         delayms(20);
-        unsigned char buf[5] = {
-            0xee, 0xee, errkind, errdata, sbuflen
+        unsigned char buf[8] = {
+            0xee, 0xee, errkind, errdata, 
+            epic, epiir, epirwa,
+            sbuflen
         };
-        send_sync(buf, 5);
+        send_sync(buf, 8);
         send_sync(sbuf, sbuflen);
     }
 }

@@ -263,7 +263,7 @@ int main(int argc, char const *argv[]) {
                 use_speed = std::max(prevspeed - dt * SPEED_SLEW, use_speed);
             }
             prevspeed = use_speed;
-            poselegs(ss, step, use_speed, use_turn);
+            poselegs(ss, step, use_speed, -use_turn);
         }
         ss.step();
         if (ss.queue_depth() > 30) {

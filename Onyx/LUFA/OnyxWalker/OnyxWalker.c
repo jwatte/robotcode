@@ -409,6 +409,10 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
     }
 }
 
+unsigned char epic;
+unsigned char epiir;
+unsigned char epirwa;
+
 void OnyxWalker_Task(void) {
     if (USB_DeviceState != DEVICE_STATE_Configured) {
         return;
@@ -417,7 +421,10 @@ void OnyxWalker_Task(void) {
     unsigned short now = getms();
     Endpoint_SelectEndpoint(DATA_RX_EPNUM);
     Endpoint_SetEndpointDirection(ENDPOINT_DIR_IN);
-    if (Endpoint_IsConfigured() && Endpoint_IsINReady() && Endpoint_IsReadWriteAllowed()) {
+    epic = Endpoint_IsConfigured();
+    epiir = epic && Endpoint_IsINReady();
+    epirwa = epiir && Endpoint_IsReadWriteAllowed();
+    if (epirwa) {
         unsigned char gg = xbufptr;
         unsigned char m = recv_avail();
         if (gg || m || (now - last_in > EMPTY_IN_TIMEOUT)) {

@@ -6,6 +6,12 @@
 #include <stdexcept>
 #include <boost/lexical_cast.hpp>
 
+
+#define SEQ_TIMEOUT 1
+#define SEQ_RETRY 0.1
+#define MIN_SEND_PERIOD 0.075
+
+
 #define SET_REG1 0x13
 #define SET_REG2 0x14
 #define GET_STATUS 0x20
@@ -232,14 +238,16 @@ Servo &ServoSet::add_servo(unsigned char id, unsigned short neutral) {
         nextSeq_,
         SET_REG1, id, REG_STATUS_RETURN_LEVEL, 1,           //  set reg
         DELAY, 0,
-        SET_REG1, id, REG_RETURN_DELAY_TIME, 5,
-        SET_REG1, id, REG_HIGHEST_LIMIT_TEMPERATURE, 75,
+        SET_REG1, id, REG_RETURN_DELAY_TIME, 2,
+        SET_REG1, id, REG_ALARM_LED, 0x7C,      //  everything except voltage and angle limit
+        SET_REG1, id, REG_ALARM_SHUTDOWN, 0x4,  //  temperature
+        SET_REG1, id, REG_HIGHEST_LIMIT_TEMPERATURE, 70,
         SET_REG1, id, REG_HIGHEST_LIMIT_VOLTAGE, 169,
-        SET_REG1, id, REG_LOWEST_LIMIT_VOLTAGE, 128,
-        SET_REG1, id, REG_LOCK, 1,
+        SET_REG1, id, REG_LOWEST_LIMIT_VOLTAGE, 120,
         SET_REG2, id, REG_TORQUE_LIMIT, 103, 0,     //  10% of full torque to start out
         SET_REG2, id, REG_GOAL_POSITION, (unsigned char)(neutral & 0xff), (unsigned char)((neutral >> 8) & 0xff),
         SET_REG2, id, REG_MOVING_SPEED, 0, 0,       //  set speed at max
+        SET_REG1, id, REG_LOCK, 1,
         SET_REG1, id, REG_TORQUE_ENABLE, 1,
     };
     ++nextSeq_;
@@ -270,12 +278,13 @@ void ServoSet::step() {
     if (now - lastStep_ >= 0.001) {
         lastStep_ = floor(now * 1000) * 0.001;
         timeready = true;
-        if (nextSeq_ - lastSeq_ > 1) {
+        if (nextSeq_ - lastSeq_ >= 3) {
             //  force out at least one packet per 100 ms
-            if (now - lastSend_ > 0.2) {
-                //std::cerr << "forcing a packet" << std::endl;
-                lastSend_ = now;
-                //lastSeq_ = nextSeq_;
+            if (now - lastSend_ > SEQ_TIMEOUT) {
+                std::cerr << "forcing a seq update from " << (int)lastSeq_ << " to "
+                    << (lastSeq_+1) << " with nextSeq_ " << (int)nextSeq_ << std::endl;
+                lastSend_ = now - SEQ_TIMEOUT + SEQ_RETRY;
+                lastSeq_++;
             }
         }
     }
@@ -357,7 +366,8 @@ void ServoSet::step() {
             }
             ++ptr;
         }
-        if (bufptr != 0) {
+        if ((bufptr > 1) || (now - lastSend_ > MIN_SEND_PERIOD)) {
+            lastSend_ = now;
             usb_->raw_send(buf, bufptr);
             cmds_.erase(cmds_.begin(), ptr);
         }

@@ -14,6 +14,12 @@
 #define WRITE_USB 1
 
 
+int inCount_;
+int inComplete_;
+int outCount_;
+int outComplete_;
+
+
 class Transfer {
 public:
     Transfer(libusb_device_handle *dh, unsigned char iep, unsigned char oep) :
@@ -109,8 +115,10 @@ private:
         outXfer_->dev_handle = dh_;
         libusb_fill_bulk_transfer(outXfer_, dh_, oep_, outPack_->buffer(), outPack_->size(),
                 &Transfer::out_callback, this, 1000); //  a second is a long time!
+        outCount_++;
         int err = libusb_submit_transfer(outXfer_);
         if (err != 0) {
+            outCount_--;
             std::cerr << "libusb_submit_transfer() failed writing to board: "
                 << libusb_error_name(err) << " (" << err << ")" << std::endl;
             outPack_->destroy();
@@ -129,6 +137,7 @@ private:
 
     static void out_callback(libusb_transfer *cbArg) {
         #if WRITE_USB
+        outComplete_++;
         reinterpret_cast<Transfer *>(cbArg->user_data)->out_complete();
         #endif
     }
@@ -161,8 +170,10 @@ private:
             inXfer_->dev_handle = dh_;
             libusb_fill_bulk_transfer(inXfer_, dh_, iep_, inPack_->buffer(), inPack_->max_size(),
                     &Transfer::in_callback, this, 1000); //  a second is a long time!
+            inCount_++;
             int err = libusb_submit_transfer(inXfer_);
             if (err != 0) {
+                inCount_--;
                 std::cerr << "libusb_submit_transfer() failed reading from board: "
                     << libusb_error_name(err) << " (" << err << ")" << std::endl;
                 inPack_->destroy();
@@ -172,6 +183,7 @@ private:
     }
 
     static void in_callback(libusb_transfer *cbArg) {
+        inComplete_++;
         reinterpret_cast<Transfer *>(cbArg->user_data)->in_complete();
     }
 

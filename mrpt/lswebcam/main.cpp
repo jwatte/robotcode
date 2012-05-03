@@ -1,5 +1,6 @@
 
 #include <iostream>
+#include <sstream>
 #include <webcam.h>
 #include <stdlib.h>
 
@@ -8,7 +9,7 @@
 
 CResult err_(CResult res, char const *cmd, char const *file, int line) {
   if (res != C_SUCCESS) {
-    std::cerr << file << ":" << line <<": " << cmd << ": " << res << std::endl;
+    std::cerr << file << ":" << line <<": " << cmd << ": " << res << ": " << c_get_error_text(res) << std::endl;
     exit(1);
   }
   return res;
@@ -27,8 +28,33 @@ CHandle hRight;
 CHandle hLeft;
 
 void open_cameras() {
-  hRight = errh(c_open_device("/dev/video0"));
-  hLeft = errh(c_open_device("/dev/video1"));
+  hRight = errh(c_open_device("/dev/videoX"));
+  hLeft = errh(c_open_device("/dev/videoY"));
+}
+
+std::string ctl_value(CControlType type, CControlValue const &val) {
+  std::stringstream ss;
+  switch (type) {
+  case CC_TYPE_BOOLEAN:
+    ss << "bool(" << (val.value ? "true" : "false") << ")";
+    break;
+  case CC_TYPE_CHOICE:
+    ss << "choice(" << val.value << ")";
+    break;
+  case CC_TYPE_BYTE:
+    ss << "byte(" << val.value << ")";
+    break;
+  case CC_TYPE_WORD:
+    ss << "word(" << val.value << ")";
+    break;
+  case CC_TYPE_DWORD:
+    ss << "dword(" << val.value << ")";
+    break;
+  default:
+    ss << "unknown value type " << type;
+    break;
+  }
+  return ss.str();
 }
 
 void configure_cameras() {
@@ -184,6 +210,27 @@ void configure_cameras() {
   if (hz10 == (unsigned int)-1) {
     std::cerr << "Can't find 10Hz frame rate -- giving up!" << std::endl;
     exit(1);
+  }
+  
+  char cpBuf[16384];
+  size = sizeof(cpBuf);
+  err(c_enum_controls(hRight, (CControl *)cpBuf, &size, &cnt));
+  std::cout << "==== config params ===" << std::endl;
+  for (unsigned int i = 0; i < cnt; ++i) {
+    CControl *cc = (CControl *)cpBuf + i;
+    std::cout << "[" << i << "] {" << std::endl;
+    std::cout << "id: " << cc->id << std::endl;
+    std::cout << "name: " << cc->name << std::endl;
+    std::cout << "type: " << cc->type << std::endl;
+    std::cout << "flags: " << cc->flags << std::endl;
+    std::cout << "value: " << ctl_value(cc->type, cc->value) << std::endl;
+    std::cout << "def: " << ctl_value(cc->type, cc->def) << std::endl;
+    if (cc->type == CC_TYPE_BYTE || cc->type == CC_TYPE_WORD || cc->type == CC_TYPE_DWORD) {
+      std::cout << "min: " << ctl_value(cc->type, cc->min) << std::endl;
+      std::cout << "max: " << ctl_value(cc->type, cc->max) << std::endl;
+      std::cout << "step: " << ctl_value(cc->type, cc->step) << std::endl;
+    }
+    std::cout << "}" << std::endl;
   }
 }
 

@@ -4,6 +4,17 @@
 /* global volatile int to avoid optimization of spinloop */
 int volatile globalctr;
 
+void fatal_no_blink(bool) {}
+void (*g_fatal_blink)(bool) = &fatal_no_blink;
+
+void fatal_set_blink(void (*blink)(bool))
+{
+  if (blink == NULL) {
+    blink = &fatal_no_blink;
+  }
+  g_fatal_blink = blink;
+}
+
 /* tell the world about an emergency by flashing indicators */
 void fatal(int err)
 {
@@ -12,20 +23,16 @@ void fatal(int err)
   if (eeprom_read_byte((uint8_t const *)EE_FATALCODE) != err) {
     eeprom_write_byte((uint8_t *)EE_FATALCODE, (unsigned char)err);
   }
-  DDRB |= (1<<PB0); /* set PB0 to output */
-  DDRD |= (1<<PD7); /* set PD7 to output */
   while (true)
   {
     if (err >= FATAL_TWI_ERROR_BASE) {
       /* just blink madly! */
-      PORTB |= (1<<PB0);  /* blink on */
-      PORTD |= (1<<PD7);
+      (*g_fatal_blink)(true);
       for (int volatile i = 0; i < 100; ++i) {
         for (globalctr = 0; globalctr < 300; ++globalctr) {
         }
       }
-      PORTB &= ~(1<<PB0); /* blink off */
-      PORTD &= ~(1<<PD7);
+      (*g_fatal_blink)(false);
       for (int volatile i = 0; i < 100; ++i) {
         for (globalctr = 0; globalctr < 300; ++globalctr) {
         }
@@ -33,14 +40,12 @@ void fatal(int err)
     }
     else {
       for (int k = 0; k < err; ++k) {
-        PORTB |= (1<<PB0);  /* blink on */
-        PORTD |= (1<<PD7);
+        (*g_fatal_blink)(true);
         for (int volatile i = 0; i < 100; ++i) {
           for (globalctr = 0; globalctr < 500; ++globalctr) {
           }
         }
-        PORTB &= ~(1<<PB0); /* blink off */
-        PORTD &= ~(1<<PD7);
+        (*g_fatal_blink)(false);
         for (int volatile i = 0; i < 100; ++i) {
           for (globalctr = 0; globalctr < 700; ++globalctr) {
           }
@@ -60,16 +65,15 @@ void fatal(int err)
 unsigned short g_timer_1ms;
 unsigned char g_timer_8us;
 
-//  I accumulate one ms and 24 us per interrupt, 
-//  because 250 ticks == 1 ms, and I run 256 ticks.
-//  Every 41.6 times, I've accumulated 1 full ms.
+//  I accumulate two ms and 48 us per interrupt, 
+//  because 250 ticks == 2 ms, and I run 256 ticks.
 //  This means that I can count 8 microsecond ticks 
 //  and keep a fully accurate clock.
 ISR(TIMER0_OVF_vect)
 {
-  /* tuned for 8 MHz */
-  if (g_timer_8us >= 124) {
-    g_timer_8us -= 124;
+  /* tuned for 8 MHz -- 125 ticks == 1 ms */
+  if (g_timer_8us >= 125-6) {
+    g_timer_8us -= 125-6;
     g_timer_1ms += 3;
   }
   else {
@@ -91,7 +95,7 @@ unsigned short uread_timer()
 {
   IntDisable idi;
   unsigned short l = g_timer_1ms;
-  unsigned short sh = TCNT0 * 8 + g_timer_8us * 8;
+  unsigned short sh = (unsigned short)TCNT0 * 8U + (unsigned short)g_timer_8us * 8U;
   return l * 1000 + sh;
 }
 
@@ -102,7 +106,7 @@ unsigned short read_timer()
     IntDisable idi;
     l = g_timer_1ms;
     /* tcnt0 is 8 nanoseconds at 8 MHz clock */
-    sh = TCNT0 * 8 + g_timer_8us * 8;
+    sh = (unsigned short)TCNT0 * 8U + (unsigned short)g_timer_8us * 8U;
   }
   if (sh >= 1000) {
     if (sh >= 2000) {
@@ -194,6 +198,7 @@ void schedule()
       unsigned short then = read_timer();
       if (then - now > MAX_TASK_TIME)
       {
+        eeprom_write_word((word *)EE_TOO_LONG_TASK_PTR, (word)func);
         fatal(FATAL_TASK_TOOK_TOO_LONG);
       }
       now = then;
@@ -242,9 +247,9 @@ void (*_twi_callback)(unsigned char, void const *);
 
 void setup_twi_slave()
 {
-  power_twi_enable();
-  TWAR = TWI_ADDRESS;
-  TWCR = (1 << TWEA) | (1 << TWEN) | (1 << TWIE);
+  //power_twi_enable();
+  //TWAR = TWI_ADDRESS;
+  //TWCR = (1 << TWEA) | (1 << TWEN) | (1 << TWIE);
 }
 
 void twi_set_callback(void (*func)(unsigned char, void const *))

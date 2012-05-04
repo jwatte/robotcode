@@ -17,10 +17,11 @@
 #define EE_RESETSOURCE 4
 #define EE_PREV_RESETSOURCE 5
 #define EE_NUM_BOOTS 6
+#define EE_TOO_LONG_TASK_PTR 8
 
 //  how many milliseconds are allowed per task?
 //  Note: the LCD is super slow!
-#define MAX_TASK_TIME 250
+#define MAX_TASK_TIME 2500
 
 #define TWI_ADDRESS 0x01
 #define TWI_MAX_SIZE 0x10
@@ -46,6 +47,7 @@ enum
 
 /* calling fatal stops the program cold, recording the reason code in eeprom  */
 void fatal(int err) __attribute__((noreturn));
+void fatal_set_blink(void (*func)(bool on));
 
 /* timer API */
 

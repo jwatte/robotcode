@@ -44,10 +44,6 @@ public:
       pinMode(IRQ, INPUT);
       //  you will need to arrange for pinchange2 interrupt to 
       //  call the irq() function here.
-      if (InstallIRQ) {
-        pcMaskReg(IRQ) = pcMaskBit(IRQ);
-        pcCtlReg(IRQ) = pcCtlBit(IRQ);
-      }
       initVars();
 
       setRegister(NRF_FEATURE, (1 << NRF_EN_DPL));
@@ -80,6 +76,12 @@ public:
 
     //  wait for crystal to stabilize
     delay(2);
+    sendCommand(NRF_FLUSH_TX);
+    sendCommand(NRF_FLUSH_RX);
+    if (InstallIRQ) {
+      pcMaskReg(IRQ) = pcMaskBit(IRQ);
+      pcCtlReg(IRQ) = pcCtlBit(IRQ);
+    }
 
     //  start receive
     enterReadMode();
@@ -100,12 +102,13 @@ public:
     debugBits_ |= 8;
     if (!digitalRead(IRQ)) {
       debugBits_ |= 0x80;
+      digitalWrite(CE, LOW);
       uint8_t ui = getRegister(NRF_STATUS) & 0x70;
       //  clear interrupts
       setRegister(NRF_STATUS, ui);
       //  schedule callback
       if ((ui & irqMask_) != ui) {
-        if (irqMask_ == 0) {
+        if (!irqMask_) {
           after(0, &irq_tramp, this);
         }
         irqMask_ |= ui;
@@ -132,6 +135,9 @@ public:
     hasData_ -= len;
     if (hasData_ > 0) {
       memmove(&packetBuf_[0], &packetBuf_[len], hasData_);
+    }
+    else {
+      enterReadMode();
     }
     return len;
   }
@@ -166,8 +172,8 @@ private:
     digitalWrite(CE, LOW);
   }
 
-  static void irq_tramp(void *that) {
-    ((nRF24L01 *)that)->irq_service();
+  static void irq_tramp(void *ptr) {
+    ((nRF24L01 *)ptr)->irq_service();
   }
 
   void irq_service() {
@@ -192,7 +198,6 @@ private:
     }
     if (irqBits & (1 << NRF_RX_DR)) {
       debugBits_ |= 0x40;
-      //  I received data -- turn off enable
       hasData_ = getRegister(NRF_RX_PW_P0);
       readPayload(hasData_, packetBuf_);
       if (newMode == ReadMode) {
@@ -267,21 +272,26 @@ private:
   }
 
   void enterReadMode() {
+    IntDisable idi;
+    digitalWrite(CE, LOW);
     debugBits_ |= 1;
     theMode_ = ReadMode;
-    digitalWrite(CE, LOW);
+    setRegister(NRF_RX_PW_P0, MAX_PAYLOAD);
     rCONFIG_ |= (1 << NRF_PRIM_RX) | (1 << NRF_PWR_UP);
     setRegister(NRF_CONFIG, rCONFIG_);
     digitalWrite(CE, HIGH);
   }
 
   void enterIdleMode() {
+    IntDisable idi;
+    digitalWrite(CE, LOW);
     debugBits_ |= 2;
     theMode_ = IdleMode;
-    digitalWrite(CE, LOW);
   }
 
   void enterWriteMode() {
+    IntDisable idi;
+    digitalWrite(CE, LOW);
     debugBits_ |= 4;
     digitalWrite(CE, LOW);
     rCONFIG_ &= ~(1 << NRF_PRIM_RX);
@@ -291,12 +301,11 @@ private:
   }
 
   void enterMode(ChipMode m) {
-    if (m != theMode_) {
-      switch (m) {
-        case ReadMode: enterReadMode(); break;
-        case WriteMode: enterWriteMode(); break;
-        case IdleMode: enterIdleMode(); break;
-      }
+    //  always enter mode -- because I get the CE line right there
+    switch (m) {
+      case ReadMode: enterReadMode(); break;
+      case WriteMode: enterWriteMode(); break;
+      case IdleMode: enterIdleMode(); break;
     }
   }
 

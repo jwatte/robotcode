@@ -4,6 +4,7 @@
 #include <UTFT.cpp>
 #include <nRF24L01.h>
 
+#include "cmds.h"
 
 
 
@@ -39,22 +40,72 @@ void phex(uint8_t val, uint8_t x, uint8_t y) {
 }
 
 uint8_t nWrite = 0;
+int oldMotorPower = 0;
+bool isOk = false;
+
+char mcbs[10] = { 0 };
+
+void display_motor_crash_bits(int n, char const *buf)
+{
+  if (n > sizeof(mcbs)) {
+    n = sizeof(mcbs);
+  }
+  lcd.setColor(192, 0, 192);
+  for (int i = 0; i < n; ++i) {
+    if (mcbs[i] != buf[i]) {
+      mcbs[i] = buf[i];
+      phex(buf[i], i * 18, 135);
+    }
+  }
+  lcd.setColor(0, 0, 192);
+}
+
 
 void transmit_value(void *v)
 {
+  uint8_t hd = rf.hasData();
+  if (hd) {
+    char buf[32];
+    rf.readData(hd, buf);
+    int curMotorPower = oldMotorPower;
+    switch (buf[0]) {
+      case CMD_MOTOR_POWER:
+        curMotorPower = (((int)buf[1] << 8) & 0xff00) | (buf[2] & 0xff);
+        break;
+      case CMD_MOTOR_CRASH_BITS:
+        display_motor_crash_bits(hd, &buf[1]);
+        break;
+      default:
+        lcd.setColor(192, 96, 0);
+        phex(buf[0], 40, 150);
+        break;
+    }
+    if (curMotorPower != oldMotorPower) {
+      phex(curMotorPower, 70, 150);
+      oldMotorPower = curMotorPower;
+    }
+  }
   if (rf.canWriteData()) {
     if (!rf.hasLostPacket()) {
       v = (char *)v + 1;
-      lcd.print("=", 1, 50, 0);
+      if (!isOk) {
+        lcd.setColor(0, 192, 0);
+        lcd.print("ok!", 1, 50, 0);
+        isOk = true;
+      }
     }
-    else {
-      lcd.print("!", 1, 50, 0);
+    else if (isOk) {
+      lcd.setColor(192, 0, 0);
+      lcd.print("n/c", 1, 50, 0);
+      isOk = false;
     }
     uint8_t val = (size_t)v & 0xff;
     ++nWrite;
+    lcd.setColor(128, 128, 128);
     phex(nWrite, 100, 100);
     rf.writeData(1, &val);
   }
+  lcd.setColor(0, 0, 192);
   after(100, &transmit_value, v);
 }
 
@@ -86,7 +137,7 @@ void setup()
   phex(w >> 8, 172, 46);
   phex(w, 188, 46);
 
-  rf.setup(50, 50);
+  rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);
 
   transmit_value(0);
 }

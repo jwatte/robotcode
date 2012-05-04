@@ -16,6 +16,7 @@
 #define EE_FATALCODE 2
 #define EE_RESETSOURCE 4
 #define EE_PREV_RESETSOURCE 5
+#define EE_NUM_BOOTS 6
 
 //  how many milliseconds are allowed per task?
 //  Note: the LCD is super slow!

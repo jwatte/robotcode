@@ -7,7 +7,12 @@
 #include "spi.h"
 #include "libavr.h"
 
-template<byte CSN = 16|5, byte CE = 16|4, byte IRQ = 16|6, byte MAX_PAYLOAD = 32>
+template<
+  bool InstallIRQ = true,
+  byte IRQ = 16|6,
+  byte CSN = 16|5,
+  byte CE = 16|4,
+  byte MAX_PAYLOAD = 32>
 class nRF24L01 {
 public:
   typedef enum {
@@ -19,6 +24,13 @@ public:
   nRF24L01() {
     initVars();
   }
+
+  inline bool getInstallIRQ() const { return InstallIRQ; }
+  inline byte getPinIRQ() const { return IRQ; }
+  inline byte getPinCSN() const { return CSN; }
+  inline byte getPinCE() const { return CE; }
+  inline byte getMaxPayload() const { return MAX_PAYLOAD; }
+  inline ChipMode getMode() const { return theMode_; }
 
   void setup(uint8_t chan, uint16_t addrRecv) {
     {
@@ -32,8 +44,10 @@ public:
       pinMode(IRQ, INPUT);
       //  you will need to arrange for pinchange2 interrupt to 
       //  call the irq() function here.
-      pcMaskReg(IRQ) = pcMaskBit(IRQ);
-      pcCtlReg(IRQ) = pcCtlBit(IRQ);
+      if (InstallIRQ) {
+        pcMaskReg(IRQ) = pcMaskBit(IRQ);
+        pcCtlReg(IRQ) = pcCtlBit(IRQ);
+      }
       initVars();
 
       setRegister(NRF_FEATURE, (1 << NRF_EN_DPL));
@@ -269,6 +283,7 @@ private:
 
   void enterWriteMode() {
     debugBits_ |= 4;
+    digitalWrite(CE, LOW);
     rCONFIG_ &= ~(1 << NRF_PRIM_RX);
     rCONFIG_ |= (1 << NRF_PWR_UP);
     setRegister(NRF_CONFIG, rCONFIG_);

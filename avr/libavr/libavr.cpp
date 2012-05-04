@@ -148,6 +148,7 @@ AfterRec g_afters[MAX_AFTERS];
 
 void at(unsigned short time, void (*func)(void *data), void *data)
 {
+  IntDisable idi;
   for (unsigned char ch = 0; ch != MAX_AFTERS; ++ch)
   {
     if (!g_afters[ch].func)
@@ -180,12 +181,14 @@ void schedule()
     {
       continue;
     }
+    uint8_t idi = disable_interrupts();
     if ((short)(now - g_afters[ch].at_time) >= 0)
     {
       void (*func)(void*) = g_afters[ch].func;
       void *data = g_afters[ch].data;
       g_afters[ch].func = 0;
       g_afters[ch].data = 0;
+      restore_interrupts(idi);
       (*func)(data);
       wdt_reset();
       unsigned short then = read_timer();
@@ -194,6 +197,9 @@ void schedule()
         fatal(FATAL_TASK_TOOK_TOO_LONG);
       }
       now = then;
+    }
+    else {
+      restore_interrupts(idi);
     }
   }
 }
@@ -217,7 +223,8 @@ void setup_watchdog()
   if ((curCode & ((1 << WDRF) | (1 << BORF))) && (curCode != prevCode)) {
     eeprom_write_byte((uint8_t *)EE_PREV_RESETSOURCE, curCode);
   }
-  // enable watchdog for system reset if timing out
+  unsigned short nboot = eeprom_read_word((uint16_t const *)EE_NUM_BOOTS);
+  eeprom_write_word((uint16_t *)EE_NUM_BOOTS, ++nboot);
   wdt_reset();
 }
 

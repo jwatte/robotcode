@@ -6,7 +6,7 @@ APPS:=$(patsubst mrpt/%/,%,$(sort $(dir $(SRCS))))
 AVR_SRCS:=$(wildcard avr/*/*.cpp)
 AVR_OBJS:=$(patsubst avr/%.cpp,bld/avrobj/%.o,$(AVR_SRCS))
 AVR_BINS:=$(patsubst avr/%/,%,$(sort $(filter-out avr/libavr/,$(dir $(AVR_SRCS)))))
-AVR_CFLAGS:=-Wall -Wno-switch -Os -mcall-prologues -mmcu=atmega328p -Iavr/libavr
+AVR_CFLAGS:=-Wall -Wno-switch -O3 -Os -mcall-prologues -mmcu=atmega328p -Iavr/libavr
 AVR_LFLAGS:=-mmcu=atmega328p -Lbld/avrbin -lavr
 
 

@@ -2101,9 +2101,9 @@ void UTFT<model>::printNumF(double num, byte dec, int x, int y, char divider, in
 }
 
 template<byte model>
-void UTFT<model>::setFont(uint8_t* font)
+void UTFT<model>::setFont(uint8_t const* font)
 {
-	cfont.font=font;
+	cfont.font=const_cast<uint8_t *>(font);
 	cfont.x_size=fontbyte(0);
 	cfont.y_size=fontbyte(1);
 	cfont.offset=fontbyte(2);

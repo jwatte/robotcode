@@ -38,25 +38,23 @@ void phex(uint8_t val, uint8_t x, uint8_t y) {
   lcd.print(buf, x, y, 0);
 }
 
-uint8_t totalBits = 0;
+uint8_t nWrite = 0;
 
 void transmit_value(void *v)
 {
   if (rf.canWriteData()) {
     if (!rf.hasLostPacket()) {
       v = (char *)v + 1;
-      phex((int)v, 10, 100);
+      lcd.print("=", 1, 50, 0);
+    }
+    else {
+      lcd.print("!", 1, 50, 0);
     }
     uint8_t val = (size_t)v & 0xff;
+    ++nWrite;
+    phex(nWrite, 100, 100);
     rf.writeData(1, &val);
   }
-  else {
-    lcd.print("! ", 10, 100, 0);
-  }
-  uint8_t bits = rf.readClearDebugBits();
-  totalBits |= bits;
-  phex(bits, 10, 120);
-  phex(totalBits, 50, 120);
   after(100, &transmit_value, v);
 }
 
@@ -73,21 +71,22 @@ void setup()
   lcd.setBackColor(0, 0, 0);
   lcd.setColor(0, 0, 0);
   lcd.fillRect(0, 0, lcd.getDisplayXSize(), lcd.getDisplayYSize());
-  lcd.setFont(BigFont);
+  lcd.setFont(SmallFont);
   lcd.setColor(192, 96, 0);
   lcd.print("E-Stop", 1, 1, 0);
-  lcd.setFont(SmallFont);
   lcd.setColor(0, 0, 192);
-  lcd.print("fatal 0x", 100, 25, 0);
-  phex(eeprom_read_byte((uint8_t const *)EE_FATALCODE), 162, 25);
-  lcd.print("reset 0x", 100, 40, 0);
-  phex(eeprom_read_byte((uint8_t const *)EE_RESETSOURCE), 162, 40);
-  lcd.print("prevr 0x", 100, 55, 0);
-  phex(eeprom_read_byte((uint8_t const *)EE_PREV_RESETSOURCE), 162, 55);
+  lcd.print("fatal 0x", 109, 1, 0);
+  phex(eeprom_read_byte((uint8_t const *)EE_FATALCODE), 172, 1);
+  lcd.print("reset 0x", 109, 16, 0);
+  phex(eeprom_read_byte((uint8_t const *)EE_RESETSOURCE), 172, 16);
+  lcd.print("prevr 0x", 109, 31, 0);
+  phex(eeprom_read_byte((uint8_t const *)EE_PREV_RESETSOURCE), 172, 31);
+  lcd.print("nboot 0x", 109, 46, 0);
+  word w = eeprom_read_word((uint16_t const *)EE_NUM_BOOTS);
+  phex(w >> 8, 172, 46);
+  phex(w, 188, 46);
 
-  lcd.print("radio", 10, 70, 0);
   rf.setup(50, 50);
-  lcd.print("start", 10, 85, 0);
 
   transmit_value(0);
 }

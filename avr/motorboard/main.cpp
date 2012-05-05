@@ -49,9 +49,9 @@ void read_tuning()
   eeprom_read_block(&g_tuning, (void const *)EE_TUNING, sizeof(g_tuning));
   if (g_tuning.cksum != calc_cksum(sizeof(g_tuning)-1, &g_tuning)) {
     memset(&g_tuning, 0, sizeof(g_tuning));
+    g_tuning.d_steer = -10;
+    write_tuning();
   }
-  g_tuning.d_steer = 20;
-  write_tuning();
 }
 
 
@@ -444,6 +444,7 @@ void slow_bits_update(void *v)
 
 void setup()
 {
+  read_tuning();
   setup_leds();
   setup_motors();
   setup_servo();

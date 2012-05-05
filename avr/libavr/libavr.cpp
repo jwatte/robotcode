@@ -71,7 +71,8 @@ unsigned short g_lastPhaseValue;
 //  1024 microseconds per millisecond... right? :-)
 unsigned short read_timer1_inner()
 {
-  unsigned short timer1Value = TCNT1;
+  unsigned short timer1Value = TCNT1L;
+  timer1Value += (unsigned int)TCNT1H << 8;
   g_lastPhaseValue += timer1Value - g_lastTimer1Value;
   g_lastTimer1Value = timer1Value;
   g_lastMillisecondValue += g_lastPhaseValue >> 10;
@@ -196,6 +197,8 @@ void schedule()
       if (then - now > MAX_TASK_TIME)
       {
         eeprom_write_word((word *)EE_TOO_LONG_TASK_PTR, (word)func);
+        eeprom_write_word((word *)EE_TOO_LONG_TASK_PRE, (word)now);
+        eeprom_write_word((word *)EE_TOO_LONG_TASK_POST, (word)then);
         fatal(FATAL_TASK_TOOK_TOO_LONG);
       }
       now = then;

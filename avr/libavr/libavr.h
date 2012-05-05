@@ -13,11 +13,13 @@
 #include <util/atomic.h>
 #include <util/twi.h>
 
-#define EE_FATALCODE 2
-#define EE_RESETSOURCE 4
-#define EE_PREV_RESETSOURCE 5
-#define EE_NUM_BOOTS 6
-#define EE_TOO_LONG_TASK_PTR 8
+#define EE_FATALCODE 0
+#define EE_RESETSOURCE 1
+#define EE_PREV_RESETSOURCE 2
+#define EE_NUM_BOOTS 4
+#define EE_TOO_LONG_TASK_PTR 6
+#define EE_TOO_LONG_TASK_PRE 8
+#define EE_TOO_LONG_TASK_POST 10
 
 //  how many milliseconds are allowed per task?
 //  Note: the LCD is super slow!
@@ -38,10 +40,11 @@ enum
   FATAL_OUT_OF_AFTERS = 1,
   FATAL_BAD_DELAY_TIME = 2,
   FATAL_TASK_TOOK_TOO_LONG = 3,
-  FATAL_TWI_NO_INFO = 4,
-  FATAL_TWI_SEND_TOO_BIG = 5,
-  FATAL_TOO_LONG_UDELAY = 6,
-  FATAL_BAD_PIN_ARG = 7,
+  FATAL_TOO_LONG_UDELAY = 4,
+  FATAL_BAD_PIN_ARG = 5,
+  FATAL_BAD_PARAM = 6,
+  FATAL_TWI_NO_INFO = 7,
+  FATAL_TWI_SEND_TOO_BIG = 8,
   FATAL_TWI_ERROR_BASE = 0x60
 };
 

@@ -67,7 +67,8 @@ public:
       //  clear any interrupts
       setRegister(NRF_STATUS, 0x70);
       //  setup rx addrs
-      unsigned char addr[5] = { 0x69, 0x09, 0x28, addrRecv >> 8, addrRecv & 0xff };
+      unsigned char addr[5] = { 0x69, 0x09, 0x28,
+        (unsigned char)(addrRecv >> 8), (unsigned char)addrRecv };
       setRegister(NRF_RX_ADDR_P0, 5, addr);
       setRegister(NRF_TX_ADDR, 5, addr);
       //  enable dynamic payload length for pipe 0

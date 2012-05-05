@@ -22,7 +22,9 @@ enum ParameterName {
   ParamGoAllowed,
   ParamMotorPower,
   ParamSteerAngle,
-  ParamEEDump
+  ParamEEDump,
+  ParamTuneSteering,
+  ParamMax
 };
 enum Node {
   NodeAny,

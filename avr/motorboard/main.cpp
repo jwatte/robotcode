@@ -21,6 +21,42 @@ ISR(PCINT0_vect)
 }
 uint8_t nRadioContact = 1;
 
+
+struct TuneStruct {
+  char d_steer;
+  unsigned char cksum;
+};
+TuneStruct g_tuning;
+
+unsigned char calc_cksum(unsigned char sz, void const *src)
+{
+  unsigned char cksum = 0x55;
+  unsigned char const *d = (unsigned char const *)src;
+  for (unsigned char ix = 0; ix != sz; ++ix) {
+    cksum = ((cksum << 1) + ix) ^ d[ix];
+  }
+  return cksum;
+}
+
+void write_tuning()
+{
+  g_tuning.cksum = calc_cksum(sizeof(g_tuning)-1, &g_tuning);
+  eeprom_write_block(&g_tuning, (void *)EE_TUNING, sizeof(g_tuning));
+}
+
+void read_tuning()
+{
+  eeprom_read_block(&g_tuning, (void const *)EE_TUNING, sizeof(g_tuning));
+  if (g_tuning.cksum != calc_cksum(sizeof(g_tuning)-1, &g_tuning)) {
+    memset(&g_tuning, 0, sizeof(g_tuning));
+  }
+  g_tuning.d_steer = 20;
+  write_tuning();
+}
+
+
+
+
 int g_led_timer;
 bool g_led_paused;
 bool g_led_go;
@@ -86,30 +122,6 @@ void set_led_state(bool paused, bool go, int blink)
 }
 
 
-enum {
-  ixGoAllowed,
-  ixMotorPower,
-  ixSteerAngle,
-  ixEEDump,
-  ixMax
-};
-unsigned char curSendParam = 0;
-cmd_parameter_value params[ixMax];
-void init_params() {
-  for (int i = 0; i < ixMax; ++i) {
-    params[i].cmd = CMD_PARAMETER_VALUE;
-    params[i].fromNode = NodeMotorPower;
-    params[i].toNode = NodeAny;
-    params[i].type = TypeByte;
-  }
-  params[0].parameter = ParamGoAllowed;
-  params[1].parameter = ParamMotorPower; params[1].type = TypeShort;
-  params[2].parameter = ParamSteerAngle;
-  params[3].parameter = ParamEEDump; params[3].type = TypeRaw; params[3].value[0] = 12;
-  //  init eedump param
-  eeprom_read_block(&params[ixEEDump].value[1], (void const *)0, params[ixEEDump].value[0]);
-}
-
 
 #define MOTOR_A_PCH_D (1 << PD5)
 #define MOTOR_A_NCH_D (1 << PD6)
@@ -119,7 +131,7 @@ void init_params() {
 int g_motor_actual_power;
 int g_motor_desired_power;
 unsigned char g_motor_allowed;
-unsigned char g_local_stop;
+unsigned char g_local_stop = true;
 
 void setup_motors()
 {
@@ -132,14 +144,8 @@ void setup_motors()
 void update_motor_power()
 {
   int power = g_motor_desired_power;
-  params[ixMotorPower].value[0] = power & 0xff;
-  params[ixMotorPower].value[1] = (power >> 8) & 0xff;
   if (!nRadioContact || !g_motor_allowed || g_local_stop) {
     power = 0;
-    params[ixGoAllowed].value[0] = false;
-  }
-  else {
-    params[ixGoAllowed].value[0] = true;
   }
   if ((power > 0 && g_motor_actual_power < 0) ||
       (power < 0 && g_motor_actual_power > 0)) {
@@ -203,13 +209,21 @@ void set_motor(void *v)
   after(3000, &set_motor, (void *)((int)v + 1));
 }
 
-unsigned char g_servo_angle = 90;
+unsigned char g_steering_angle = 90;
+
+unsigned char tuned_angle()
+{
+  int i = (int)g_steering_angle + g_tuning.d_steer;
+  if (i < 0) i = 0;
+  if (i > 180) i = 180;
+  return (unsigned char)i;
+}
 
 #if USE_SERVO_TIMER
 void set_servo_timer_angle(unsigned char a)
 {
   //  this is very approximately the angle
-  OCR2B = g_servo_angle / 3 + 16;
+  OCR2B = tuned_angle() / 3 + 16;
 }
 #endif
 
@@ -224,25 +238,25 @@ void setup_servo()
   TCCR2A = (1 << COM2B1) | (0 << COM2B0) | (1 << WGM21) | (1 << WGM20);
   //  120 Hz
   TCCR2B = (1 << CS22) | (1 << CS21) | (0 << CS20);
-  set_servo_timer_angle(g_servo_angle);
+  set_servo_timer_angle(g_steering_angle);
 #endif
 }
 
 void update_servo(void *v)
 {
-  params[ixSteerAngle].value[0] = g_servo_angle;
 #if USE_SERVO_TIMER
   //  this is very approximate
-  set_servo_timer_angle(g_servo_angle);
+  set_servo_timer_angle(g_steering_angle);
 #else
   {
     IntDisable idi;
     PORTD |= (1 << PD3);
-    udelay(g_servo_angle * 11U + 580U);
+    udelay(tuned_angle() * 11U + 580U);
     PORTD &= ~(1 << PD3);
   }
 #endif
-  after(20, &update_servo, 0);
+  //  2 ms spin delay every 40 ms is 5% of available CPU...
+  after(40, &update_servo, 0);
 }
 
 
@@ -272,12 +286,26 @@ void on_twi_data(unsigned char size, void const *ptr)
 {
 }
 
+void tune_steering(cmd_parameter_value const &cpv)
+{
+  g_tuning.d_steer = cpv.value[0];
+  write_tuning();
+}
+
 void dispatch_cmd(unsigned char n, char const *data)
 {
   cmd_hdr const &hdr = *(cmd_hdr const *)data;
   if (hdr.toNode == NodeMotorPower) {
     if (hdr.cmd == CMD_STOP_GO) {
       g_motor_allowed = ((cmd_stop_go const &)hdr).go;
+    }
+    else if (hdr.cmd == CMD_PARAMETER_VALUE) {
+      cmd_parameter_value const &cpv = (cmd_parameter_value const &)hdr;
+      switch (cpv.parameter) {
+      case ParamTuneSteering:
+        tune_steering(cpv);
+        break;
+      }
     }
   }
 }
@@ -316,12 +344,98 @@ void poll_radio(void *)
   after(50, &poll_radio, 0);
 }
 
+
+unsigned char curSendParam = 0;
+
+unsigned char param_size(cmd_parameter_value const &cpv)
+{
+  switch (cpv.type) {
+    case TypeNone:
+      return sizeof(cpv) - sizeof(cpv.value);
+    case TypeByte:
+      return sizeof(cpv) - sizeof(cpv.value) + 1;
+    case TypeShort:
+      return sizeof(cpv) - sizeof(cpv.value) + 2;
+    case TypeLong:
+      return sizeof(cpv) - sizeof(cpv.value) + 4;
+    default:  //  send everything
+      return sizeof(cpv);
+  }
+}
+
+void set_value(cmd_parameter_value &cpv, unsigned char ch)
+{
+  cpv.type = TypeByte;
+  cpv.value[0] = ch;
+}
+
+void set_value(cmd_parameter_value &cpv, char ch)
+{
+  cpv.type = TypeByte;
+  cpv.value[0] = ch;
+}
+
+void set_value(cmd_parameter_value &cpv, int ch)
+{
+  cpv.type = TypeShort;
+  cpv.value[0] = (unsigned char)(ch & 0xff);
+  cpv.value[1] = (unsigned char)((unsigned int)ch >> 8);
+}
+
+void set_value(cmd_parameter_value &cpv, unsigned int ch)
+{
+  cpv.type = TypeShort;
+  cpv.value[0] = (unsigned char)(ch & 0xff);
+  cpv.value[1] = (unsigned char)((unsigned int)ch >> 8);
+}
+
+void set_value(cmd_parameter_value &cpv, unsigned char len, void const *data)
+{
+  cpv.type = TypeRaw;
+  if (len > sizeof(cpv.value)) {
+    len = sizeof(cpv.value);
+  }
+  memcpy(cpv.value, data, len);
+}
+
+
+void send_param(unsigned char p)
+{
+  cmd_parameter_value cpv;
+  cpv.cmd = CMD_PARAMETER_VALUE;
+  cpv.fromNode = NodeMotorPower;
+  cpv.toNode = NodeAny;
+  cpv.parameter = p;
+
+  switch (p) {
+  case ParamGoAllowed:
+    set_value(cpv, (unsigned char)(g_motor_allowed && !g_local_stop));
+    break;
+  case ParamMotorPower:
+    set_value(cpv, (int)g_motor_desired_power);
+    break;
+  case ParamSteerAngle:
+    set_value(cpv, (unsigned char)g_steering_angle);
+    break;
+  case ParamEEDump:
+    eeprom_read_block(&cpv.value[1], (void const *)0, 12);
+    cpv.value[0] = 12;
+    cpv.type = TypeRaw;
+    break;
+  case ParamTuneSteering:
+    set_value(cpv, (unsigned char)g_tuning.d_steer);
+    break;
+  }
+
+  rf.writeData(param_size(cpv), &cpv);
+}
+
 void slow_bits_update(void *v)
 {
   if (rf.canWriteData()) {
-    rf.writeData(sizeof(cmd_parameter_value), &params[curSendParam]);
+    send_param(curSendParam);
     curSendParam++;
-    if (curSendParam == sizeof(params)/sizeof(params[0])) {
+    if (curSendParam == ParamMax) {
       curSendParam = 0;
     }
   }
@@ -330,8 +444,6 @@ void slow_bits_update(void *v)
 
 void setup()
 {
-  init_params();
-  /* status lights are outputs */
   setup_leds();
   setup_motors();
   setup_servo();

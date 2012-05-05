@@ -7,6 +7,7 @@ char const pnGoOK[] PROGMEM = "GoOK";
 char const pnMPower[] PROGMEM = "MPower";
 char const pnSteer[] PROGMEM = "Steer";
 char const pnEEDump[] PROGMEM = "EEDump";
+char const pnTuneSteering[] PROGMEM = "TSteer";
 
 void get_param_name(ParameterName pn, unsigned char bufsz, char *oData)
 {
@@ -16,6 +17,7 @@ void get_param_name(ParameterName pn, unsigned char bufsz, char *oData)
     case ParamMotorPower: p = pnMPower; break;
     case ParamSteerAngle: p = pnSteer; break;
     case ParamEEDump: p = pnEEDump; break;
+    case ParamTuneSteering: p = pnTuneSteering; break;
     default: fatal(FATAL_BAD_PARAM); break;
   }
   strncpy_P(oData, p, bufsz);

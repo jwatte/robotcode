@@ -21,6 +21,9 @@
 #define EE_TOO_LONG_TASK_PRE 8
 #define EE_TOO_LONG_TASK_POST 10
 
+/* user-defined tuning constants */
+#define EE_TUNING 32
+
 //  how many milliseconds are allowed per task?
 //  Note: the LCD is super slow!
 #define MAX_TASK_TIME 2500

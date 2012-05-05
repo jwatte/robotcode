@@ -201,7 +201,7 @@ void slow_bits_update(void *v)
     eeprom_read_block(&cmd[1], (void const *)0, sizeof(cmd)-1);
     rf.writeData(sizeof(cmd), cmd);
   }
-  after(4990, &slow_bits_update, 0);
+  after(4785, &slow_bits_update, 0);
 }
 
 void setup()

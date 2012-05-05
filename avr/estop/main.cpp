@@ -43,7 +43,7 @@ uint8_t nWrite = 0;
 int oldMotorPower = 0;
 bool isOk = false;
 
-char mcbs[10] = { 0 };
+char mcbs[10] = { 0xfd, 0xfd, 0xfd, 0xfd, 0xfd, 0xfd, 0xfd, 0xfd, 0xfd, 0xfd, };
 
 void display_motor_crash_bits(int n, char const *buf)
 {
@@ -110,6 +110,26 @@ void transmit_value(void *v)
 }
 
 
+unsigned short oldTimer;
+
+void write_timer(void *)
+{
+  unsigned short ms = read_timer();
+  lcd.setColor(128, 128, 128);
+  phex(ms >> 8, 10, 85);
+  phex(ms & 0xff, 26, 85);
+  after(0, &write_timer, 0);
+  if (ms - oldTimer > 2000 && oldTimer != 0) {
+    lcd.setColor(255, 255, 255);
+    phex(ms >> 8, 50, 85);
+    phex(ms & 0xff, 66, 85);
+    phex(oldTimer >> 8, 90, 85);
+    phex(oldTimer & 0xff, 106, 85);
+  }
+  lcd.setColor(0, 0, 192);
+  oldTimer = ms;
+}
+
 void setup()
 {
   twi_set_callback(on_twi_data);
@@ -140,6 +160,7 @@ void setup()
   rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);
 
   transmit_value(0);
+  write_timer(0);
 }
 
 

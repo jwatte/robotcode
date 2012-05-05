@@ -62,61 +62,58 @@ void fatal(int err)
 
 /* timer API */
 
-unsigned short g_timer_1ms;
-unsigned char g_timer_8us;
+unsigned short g_lastTimer1Value;
+unsigned short g_lastMillisecondValue;
+unsigned short g_lastPhaseValue;
 
-//  I accumulate two ms and 48 us per interrupt, 
-//  because 250 ticks == 2 ms, and I run 256 ticks.
-//  This means that I can count 8 microsecond ticks 
-//  and keep a fully accurate clock.
-ISR(TIMER0_OVF_vect)
+//  The timer runs at 65.536 milliseconds per lap,
+//  but we call it 64 milliseconds even. There are 
+//  1024 microseconds per millisecond... right? :-)
+unsigned short read_timer1_inner()
 {
-  /* tuned for 8 MHz -- 125 ticks == 1 ms */
-  if (g_timer_8us >= 125-6) {
-    g_timer_8us -= 125-6;
-    g_timer_1ms += 3;
-  }
-  else {
-    g_timer_1ms += 2;
-    g_timer_8us += 6;
-  }
+  unsigned short timer1Value = TCNT1;
+  g_lastPhaseValue += timer1Value - g_lastTimer1Value;
+  g_lastTimer1Value = timer1Value;
+  g_lastMillisecondValue += g_lastPhaseValue >> 10;
+  g_lastPhaseValue &= 0x3ff;
+  return timer1Value;
 }
 
-void setup_timers()
+ISR(TIMER1_OVF_vect)
 {
-  //  timer 0 at 1000 Hz
-  power_timer0_enable();
-  TCCR0A = 0;
-  TCCR0B = 3; //  system clock divided by 64 -- 125 kHz counter, so about 0.5 kHz clock
-  TIMSK0 = 1; //  interrupt on overflow
+  //  this will magically update the timer
+  read_timer1_inner();
+}
+
+ISR(TIMER1_COMPA_vect)
+{
+  read_timer1_inner();
 }
 
 unsigned short uread_timer()
 {
   IntDisable idi;
-  unsigned short l = g_timer_1ms;
-  unsigned short sh = (unsigned short)TCNT0 * 8U + (unsigned short)g_timer_8us * 8U;
-  return l * 1000 + sh;
+  return read_timer1_inner();
 }
 
 unsigned short read_timer()
 {
-  unsigned short l, sh;
-  {
-    IntDisable idi;
-    l = g_timer_1ms;
-    /* tcnt0 is 8 nanoseconds at 8 MHz clock */
-    sh = (unsigned short)TCNT0 * 8U + (unsigned short)g_timer_8us * 8U;
-  }
-  if (sh >= 1000) {
-    if (sh >= 2000) {
-      l += 2;
-    }
-    else {
-      l += 1;
-    }
-  }
-  return l;
+  IntDisable idi;
+  read_timer1_inner();
+  return g_lastMillisecondValue;
+}
+
+void setup_timers()
+{
+  power_timer1_enable();
+  OCR1AH = 128;   //  interrupt half-way to keep counting
+  OCR1AL = 0;
+  ICR1H = 255;   //  run to "64 ms" for base 1024
+  ICR1L = 255;
+  TCCR1A = 0;
+  //  timer 1 at 1 MHz
+  TCCR1B = 2;
+  TIMSK1 = (1 << OCIE1A) | (1 << TOIE0);
 }
 
 void udelay(unsigned short amt)

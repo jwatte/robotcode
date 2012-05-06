@@ -24,6 +24,8 @@ enum ParameterName {
   ParamSteerAngle,
   ParamEEDump,
   ParamTuneSteering,
+  ParamTunePower,
+  ParamVoltage,
   ParamMax
 };
 enum Node {
@@ -51,7 +53,13 @@ struct cmd_stop_go : cmd_hdr {
 
 void get_param_name(ParameterName pn, unsigned char bufsz, char *oData);
 void format_value(cmd_parameter_value const &pv, unsigned char bufsz, char *oData);
+unsigned char param_size(cmd_parameter_value const &cpv);
 char hexchar(unsigned char nybble);
+void set_value(cmd_parameter_value &cpv, unsigned char ch);
+void set_value(cmd_parameter_value &cpv, char ch);
+void set_value(cmd_parameter_value &cpv, int ch);
+void set_value(cmd_parameter_value &cpv, unsigned int ch);
+void set_value(cmd_parameter_value &cpv, unsigned char len, void const *data);
 
 #endif // libavr_cmds_h
 

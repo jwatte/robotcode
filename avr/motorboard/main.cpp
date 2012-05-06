@@ -5,6 +5,9 @@
 #include "cmds.h"
 
 
+/*  less than 6.5V in the battery pack, and I can't run. */
+#define THRESHOLD_VOLTAGE 0x68
+
 /* For some reason, running the servo on PWM is not very clean. */
 /* Perhaps an approach that uses timer1 interrupts for high resolution */
 /* would be better. But for now, I just schedule 50 Hz updates. */
@@ -24,6 +27,7 @@ uint8_t nRadioContact = 1;
 
 struct TuneStruct {
   char d_steer;
+  char m_power;
   unsigned char cksum;
 };
 TuneStruct g_tuning;
@@ -50,6 +54,7 @@ void read_tuning()
   if (g_tuning.cksum != calc_cksum(sizeof(g_tuning)-1, &g_tuning)) {
     memset(&g_tuning, 0, sizeof(g_tuning));
     g_tuning.d_steer = -10;
+    g_tuning.m_power = 128;
     write_tuning();
   }
 }
@@ -122,7 +127,6 @@ void set_led_state(bool paused, bool go, int blink)
 }
 
 
-
 #define MOTOR_A_PCH_D (1 << PD5)
 #define MOTOR_A_NCH_D (1 << PD6)
 #define MOTOR_B_PCH_B (1 << PB2)
@@ -130,15 +134,30 @@ void set_led_state(bool paused, bool go, int blink)
 
 int g_motor_actual_power;
 int g_motor_desired_power;
-unsigned char g_motor_allowed;
-unsigned char g_local_stop = true;
+unsigned char g_motor_allowed = false;
+unsigned char g_local_stop = false;
+
+//  0xcc == 7.93V
+//  0xb4 == 7.01V
+//  0x9f == 6.20V
+//  0x98 == 5.45V
+
+unsigned char g_voltage;
 
 void setup_motors()
 {
+  power_timer0_enable();
+  TIMSK0 = 0;
+  TIFR0 = 0x7;
+
   PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_A_NCH_D));
   PORTB = (PORTB & ~(MOTOR_B_PCH_B | MOTOR_B_NCH_B));
   DDRD |= (MOTOR_A_PCH_D | MOTOR_A_NCH_D);
   DDRB |= (MOTOR_B_PCH_B | MOTOR_B_NCH_B);
+  TCCR0A = 0x03;  //  Fast PWM, not yet turned on
+  TCCR0B = 0x3;   //  0.5 kHz (0x2 is 4 kHz)
+  OCR0A = 128;
+  OCR0B = 128;
 }
 
 void update_motor_power()
@@ -147,8 +166,10 @@ void update_motor_power()
   if (!nRadioContact || !g_motor_allowed || g_local_stop) {
     power = 0;
   }
-  if ((power > 0 && g_motor_actual_power < 0) ||
-      (power < 0 && g_motor_actual_power > 0)) {
+  if (!((power == 0 && g_motor_actual_power == 0) ||
+        (power > 0 && g_motor_actual_power > 0) ||
+        (power < 0 && g_motor_actual_power < 0))) {
+    TCCR0A = 0x03;  //  Fast PWM, not yet turned on
     PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_A_NCH_D));
     PORTB = (PORTB & ~(MOTOR_B_PCH_B | MOTOR_B_NCH_B));
     udelay(10); // prevent shooth-through
@@ -158,6 +179,7 @@ void update_motor_power()
     //  ground everything out
     PORTD = (PORTD & ~(MOTOR_A_PCH_D)) | MOTOR_A_NCH_D;
     PORTB = (PORTB & ~(MOTOR_B_PCH_B)) | MOTOR_B_NCH_B;
+    TCCR0A = 0x03;  //  Fast PWM, not yet turned on
     if (!nRadioContact) {
       set_led_state(true, false, 1200);
     }
@@ -170,15 +192,19 @@ void update_motor_power()
   }
   else if (power < 0) {
     //  negative A, positive B
-    PORTD = (PORTD & ~(MOTOR_A_PCH_D)) | MOTOR_A_NCH_D;
-    PORTB = (PORTB & ~(MOTOR_B_NCH_B)) | MOTOR_B_PCH_B;
     set_led_state(false, true, 200);
+    PORTB = (PORTB & ~(MOTOR_B_NCH_B)) | MOTOR_B_PCH_B;
+    //PORTD = (PORTD & ~(MOTOR_A_PCH_D)) | MOTOR_A_NCH_D;
+    OCR0A = (((power < -255) ? 255 : -power) * g_tuning.m_power) >> 8;
+    TCCR0A = (1 << COM0A1) | (1 << WGM01) | (1 << WGM00);  //  Fast PWM, channel A
   }
   else {
     //  positive A, negative B
-    PORTD = (PORTD & ~(MOTOR_A_NCH_D)) | MOTOR_A_PCH_D;
-    PORTB = (PORTB & ~(MOTOR_B_PCH_B)) | MOTOR_B_NCH_B;
     set_led_state(false, true, 0);
+    PORTB = (PORTB & ~(MOTOR_B_PCH_B)) | MOTOR_B_NCH_B;
+    //PORTD = (PORTD & ~(MOTOR_A_NCH_D)) | MOTOR_A_PCH_D;
+    OCR0B = (((power > 255) ? 255 : power) * g_tuning.m_power) >> 8;
+    TCCR0A = (1 << COM0B1) | (1 << WGM01) | (1 << WGM00);  //  Fast PWM, channel B
   }
 }
 
@@ -292,6 +318,12 @@ void tune_steering(cmd_parameter_value const &cpv)
   write_tuning();
 }
 
+void tune_power(cmd_parameter_value const &cpv)
+{
+  g_tuning.m_power = cpv.value[0];
+  write_tuning();
+}
+
 void dispatch_cmd(unsigned char n, char const *data)
 {
   cmd_hdr const &hdr = *(cmd_hdr const *)data;
@@ -304,6 +336,9 @@ void dispatch_cmd(unsigned char n, char const *data)
       switch (cpv.parameter) {
       case ParamTuneSteering:
         tune_steering(cpv);
+        break;
+      case ParamTunePower:
+        tune_power(cpv);
         break;
       }
     }
@@ -347,57 +382,6 @@ void poll_radio(void *)
 
 unsigned char curSendParam = 0;
 
-unsigned char param_size(cmd_parameter_value const &cpv)
-{
-  switch (cpv.type) {
-    case TypeNone:
-      return sizeof(cpv) - sizeof(cpv.value);
-    case TypeByte:
-      return sizeof(cpv) - sizeof(cpv.value) + 1;
-    case TypeShort:
-      return sizeof(cpv) - sizeof(cpv.value) + 2;
-    case TypeLong:
-      return sizeof(cpv) - sizeof(cpv.value) + 4;
-    default:  //  send everything
-      return sizeof(cpv);
-  }
-}
-
-void set_value(cmd_parameter_value &cpv, unsigned char ch)
-{
-  cpv.type = TypeByte;
-  cpv.value[0] = ch;
-}
-
-void set_value(cmd_parameter_value &cpv, char ch)
-{
-  cpv.type = TypeByte;
-  cpv.value[0] = ch;
-}
-
-void set_value(cmd_parameter_value &cpv, int ch)
-{
-  cpv.type = TypeShort;
-  cpv.value[0] = (unsigned char)(ch & 0xff);
-  cpv.value[1] = (unsigned char)((unsigned int)ch >> 8);
-}
-
-void set_value(cmd_parameter_value &cpv, unsigned int ch)
-{
-  cpv.type = TypeShort;
-  cpv.value[0] = (unsigned char)(ch & 0xff);
-  cpv.value[1] = (unsigned char)((unsigned int)ch >> 8);
-}
-
-void set_value(cmd_parameter_value &cpv, unsigned char len, void const *data)
-{
-  cpv.type = TypeRaw;
-  if (len > sizeof(cpv.value)) {
-    len = sizeof(cpv.value);
-  }
-  memcpy(cpv.value, data, len);
-}
-
 
 void send_param(unsigned char p)
 {
@@ -425,6 +409,12 @@ void send_param(unsigned char p)
   case ParamTuneSteering:
     set_value(cpv, (unsigned char)g_tuning.d_steer);
     break;
+  case ParamTunePower:
+    set_value(cpv, (unsigned char)g_tuning.m_power);
+    break;
+  case ParamVoltage:
+    set_value(cpv, g_voltage);
+    break;
   }
 
   rf.writeData(param_size(cpv), &cpv);
@@ -442,6 +432,32 @@ void slow_bits_update(void *v)
   after(175, &slow_bits_update, 0);
 }
 
+void setup_power()
+{
+  power_adc_enable();
+  ADCSRA |= (1 << ADEN) | (1 << ADPS1) | (1 << ADPS0);  //  enable, prescaler @ 125 kHz
+  ADMUX |= (1 << ADLAR) | (1 << MUX0);  //  ADC1
+  DIDR0 |= (1 << ADC1D);  //  disable ADC1 as digital
+}
+
+void poll_power(void *);
+
+void poll_power_result(void *)
+{
+  g_voltage = (unsigned short)ADCH * 64 / 103;
+  if (g_voltage < THRESHOLD_VOLTAGE) {
+    //  stopping locally -- out of juice!
+    g_local_stop = true;
+  }
+  after(500, &poll_power, 0);
+}
+
+void poll_power(void *)
+{
+  ADCSRA |= (1 << ADSC) | (1 << ADIF);  //  start conversion, clear interrupt flag
+  after(1, &poll_power_result, 0);
+}
+
 void setup()
 {
   read_tuning();
@@ -449,6 +465,7 @@ void setup()
   setup_motors();
   setup_servo();
   setup_buttons();
+  setup_power();
   delay(100); //  wait for radio to boot
   rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);
   twi_set_callback(on_twi_data);
@@ -458,6 +475,7 @@ void setup()
   poll_radio(0);
   slow_bits_update(0);
   poll_button(0);
+  poll_power(0);
 }
 
 

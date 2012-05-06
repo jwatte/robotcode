@@ -80,8 +80,8 @@ public:
     sendCommand(NRF_FLUSH_TX);
     sendCommand(NRF_FLUSH_RX);
     if (InstallIRQ) {
-      pcMaskReg(IRQ) = pcMaskBit(IRQ);
-      pcCtlReg(IRQ) = pcCtlBit(IRQ);
+      pcMaskReg(IRQ) |= pcMaskBit(IRQ);
+      pcCtlReg(IRQ) |= pcCtlBit(IRQ);
     }
 
     //  start receive

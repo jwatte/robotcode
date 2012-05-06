@@ -165,6 +165,7 @@ class UTFT
 		void fillCircle(int x, int y, int radius);
 		void setColor(byte r, byte g, byte b);
 		void setBackColor(byte r, byte g, byte b);
+		void printChar(byte c, int x, int y);
 		void print(char const *st, int x, int y, int deg=0);
     // HACK: avr-gcc support -- jwatte
 		//void print(String st, int x, int y, int deg=0);
@@ -195,7 +196,6 @@ class UTFT
 		void setPixel(byte r,byte g,byte b);
 		void drawHLine(int x, int y, int l);
 		void drawVLine(int x, int y, int l);
-		void printChar(byte c, int x, int y);
 		void setXY(word x1, word y1, word x2, word y2);
 		void clrXY();
 		void rotateChar(byte c, int x, int y, int pos, int deg);

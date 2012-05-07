@@ -73,8 +73,8 @@ ISR(PCINT0_vect)
     }
   }
 
-  unsigned char quad = ((pb & 4) ? 2 : 0) | ((pb & 2) ? 1 : 0);
-  if (pb & 4) quad ^= 1;
+  unsigned char quad = ((pb & 4) ? 1 : 0) | ((pb & 2) ? 2 : 0);
+  if (quad & 2) quad ^= 1;
 
   lastQuad = quad;
   if (((quad - 1) & 3) == prevQuad) {

@@ -9,6 +9,10 @@ AVR_BINS:=$(patsubst avr/%/,%,$(sort $(filter-out avr/libavr/,$(dir $(AVR_SRCS))
 AVR_CFLAGS:=-Wall -Wno-switch -O3 -Os -mcall-prologues -mmcu=atmega328p -Iavr/libavr -std=gnu++0x
 AVR_LFLAGS:=-mmcu=atmega328p -Lbld/avrbin -lavr
 
+fuses_motorboard:	fuses_8
+fuses_estop:	fuses_8
+fuses_usbboard:	fuses_16
+
 
 MRPT_LIBS:=opengl base hwdrivers gui obs slam
 MRPT_INCLUDES:=-I/usr/local/include/mrpt/mrpt-config -I/usr/local/include/mrpt/util \
@@ -50,16 +54,20 @@ bld/avrobj/%.o:	avr/%.cpp
 	mkdir -p `dirname $@`
 	avr-gcc $(AVR_CFLAGS) -c $< -o $@ -MMD -I/usr/lib/avr/include
 
-%:	bld/avrbin/%.hex fuses
-	avrdude -u -V -p m328p -b 115200 -B 0.5 -c usbtiny -U flash:w:$<:i
+%:	bld/avrbin/%.hex fuses_%
+	avrdude -u -V -p m328p -b 115200 -B 1 -c usbtiny -U flash:w:$<:i
 
 bld/avrbin/libavr.a:	$(filter bld/avrobj/libavr/%.o,$(AVR_OBJS))
 	mkdir -p `dirname $@`
 	ar cr $@ $^
 
-fuses:
+fuses_8:
 	# 8 MHz, internal osc, 2.7V brown-out, 65k + 4.1ms boot delay
-	avrdude -e -u -V -p m328p -b 115200 -B 1 -c usbtiny -U lfuse:w:0xD2:m -U hfuse:w:0xD9:m -U efuse:w:0xFD:m -U lock:w:0xFF:m
+	avrdude -e -u -V -p m328p -b 115200 -B 1000 -c usbtiny -U lfuse:w:0xD2:m -U hfuse:w:0xD9:m -U efuse:w:0xFD:m -U lock:w:0xFF:m
+
+fuses_16:
+	# 16 MHz, crystal osc, 2.7V brown-out, 16k + 4.1ms boot delay
+	avrdude -e -u -V -p m328p -b 115200 -B 1000 -c usbtiny -U lfuse:w:0xE7:m -U hfuse:w:0xDF:m -U efuse:w:0xFD:m -U lock:w:0xFF:m
 
 -include $(patsubst %.o,%.d,$(OBJS))
 -include $(patsubst %.o,%.d,$(AVR_OBJS))

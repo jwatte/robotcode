@@ -1,5 +1,6 @@
 #include "libavr.h"
 #include "pins_avr.h"
+#include <avr/pgmspace.h>
 
 /* global volatile int to avoid optimization of spinloop */
 int volatile globalctr;
@@ -29,12 +30,12 @@ void fatal(int err)
       /* just blink madly! */
       (*g_fatal_blink)(true);
       for (int volatile i = 0; i < 100; ++i) {
-        for (globalctr = 0; globalctr < 300; ++globalctr) {
+        for (globalctr = 0; globalctr < 500; ++globalctr) {
         }
       }
       (*g_fatal_blink)(false);
-      for (int volatile i = 0; i < 100; ++i) {
-        for (globalctr = 0; globalctr < 300; ++globalctr) {
+      for (int volatile i = 0; i < 200; ++i) {
+        for (globalctr = 0; globalctr < 500; ++globalctr) {
         }
       }
     }
@@ -42,11 +43,11 @@ void fatal(int err)
       for (int k = 0; k < err; ++k) {
         (*g_fatal_blink)(true);
         for (int volatile i = 0; i < 100; ++i) {
-          for (globalctr = 0; globalctr < 500; ++globalctr) {
+          for (globalctr = 0; globalctr < 700; ++globalctr) {
           }
         }
         (*g_fatal_blink)(false);
-        for (int volatile i = 0; i < 100; ++i) {
+        for (int volatile i = 0; i < 200; ++i) {
           for (globalctr = 0; globalctr < 700; ++globalctr) {
           }
         }
@@ -65,18 +66,31 @@ void fatal(int err)
 unsigned short g_lastTimer1Value;
 unsigned short g_lastMillisecondValue;
 unsigned short g_lastPhaseValue;
+//  PhaseScale is set so that multiplying timer top (65536) by the 
+//  scale ends up in (num mulliseconds << 24).
+//  Timer increments 1 per 8 clocks, this equals microseconds at 8 MHz.
+//  Thus, (65.536 milliseconds << 24) / 65536 which ends up in 
+//  (65.536 milliseconds << 8) or about 16777.
+//  Oops! This means I can't support 1 MHz clock :-(
+unsigned short phaseScale = 16777;
+unsigned long actual_f_cpu = F_CPU;
+unsigned long actual_f_cpu_1000 = F_CPU / 1000;
 
-//  The timer runs at 65.536 milliseconds per lap,
-//  but we call it 64 milliseconds even. There are 
-//  1024 microseconds per millisecond... right? :-)
+//  This should be called only with interrupts disabled!
 unsigned short read_timer1_inner()
 {
   unsigned short timer1Value = TCNT1L;
-  timer1Value += (unsigned int)TCNT1H << 8;
-  g_lastPhaseValue += timer1Value - g_lastTimer1Value;
+  timer1Value |= ((unsigned int)TCNT1H << 8u);
+  //  example timer1Value: 32000
+  g_lastPhaseValue += (((unsigned long)((timer1Value - g_lastTimer1Value) & 0xffff) *
+    (unsigned long)phaseScale) >> 16);  //  shift 16 means about 4 us per tick
+  //  example g_lastPhaseValue: 32000*16000/64000 == 8000
   g_lastTimer1Value = timer1Value;
-  g_lastMillisecondValue += g_lastPhaseValue >> 10;
-  g_lastPhaseValue &= 0x3ff;
+  //  example g_lastTimer1Value: 32000
+  g_lastMillisecondValue += (g_lastPhaseValue >> 8);  //  divide by 256
+  //  example g_lastMillisecondValue: 8000 / 256 == 31
+  g_lastPhaseValue &= 0xff;
+  //  example g_lastPhaseValue: 8000 & 0xff == 64
   return timer1Value;
 }
 
@@ -94,7 +108,7 @@ ISR(TIMER1_COMPA_vect)
 unsigned short uread_timer()
 {
   IntDisable idi;
-  return read_timer1_inner();
+  return (unsigned long)read_timer1_inner() * actual_f_cpu_1000 / 8000;
 }
 
 unsigned short read_timer()
@@ -104,35 +118,51 @@ unsigned short read_timer()
   return g_lastMillisecondValue;
 }
 
-void setup_timers()
+void setup_timers(unsigned long f_cpu)
 {
+  actual_f_cpu = f_cpu;
+  actual_f_cpu_1000 = f_cpu / 1000;
   power_timer1_enable();
-  OCR1AH = 128;   //  interrupt half-way to keep counting
-  OCR1AL = 0;
-  ICR1H = 255;   //  run to "64 ms" for base 1024
-  ICR1L = 255;
-  TCCR1A = 0;
-  //  timer 1 at 1 MHz
-  TCCR1B = 2;
-  TIMSK1 = (1 << OCIE1A) | (1 << TOIE0);
+  //  make sure to not run out of bits in the math...
+  phaseScale = (unsigned short)(16777UL * (8000000 >> 8) / (f_cpu >> 8));
+  OCR1AH = 0x7f;  //  midpoint interrupt
+  OCR1AL = 0xff;  //  midpoint interrupt
+  ICR1H = 0xff;
+  ICR1L = 0xff;
+  TCCR1A = 0;     //  normal mode
+  TCCR1B = 0 | (1 << CS11); //  normal mode, timer 1 at 1/8 clock
+  TIMSK1 = (1 << OCIE1A) | (1 << TOIE1);
 }
 
 void udelay(unsigned short amt)
 {
   if (amt > 8000) {
-    fatal(FATAL_TOO_LONG_UDELAY);
+    fatal(FATAL_TOO_LONG_DELAY);
   }
-  unsigned short now = uread_timer();
-  while (uread_timer() - now < amt) {
-    // do nothing
+  if (amt < 2) {
+    return;
+  }
+  amt -= 1; /* for the setup work */
+  amt = (unsigned long)amt * actual_f_cpu_1000 / 8000;
+  unsigned short start = TCNT1L;
+  start |= (TCNT1H << 8u);
+  while (true) {
+    unsigned short val = TCNT1L;
+    val |= (TCNT1H << 8u);
+    if (val - start >= amt) {
+      break;
+    }
   }
 }
 
 void delay(unsigned short ms)
 {
-  while (ms > 0) {
-    udelay(999);
-    --ms;
+  if (ms > 8000) {
+    fatal(FATAL_TOO_LONG_DELAY);
+  }
+  unsigned short now = read_timer();
+  while ((unsigned short)(read_timer() - now) < ms) {
+    /* do nothing */
   }
 }
 
@@ -341,6 +371,140 @@ void twi_send(unsigned char bytes, void const *data)
 
 
 
+/* UART serial API */
+
+/* The interrupt disables in read and write may not actually 
+   be needed, because writing advances the "head" and clearing 
+   out the write buffer (from interrupt) advances the "tail."
+   Similarly, reading advances the "tail" and receiving into 
+   the buffer (from interrupt) advances the "head."
+ */
+struct BrateSetup {
+  unsigned char rateKbps;
+  unsigned char UBRRn;
+};
+BrateSetup const rates[] PROGMEM = {
+  { 9, 207 },
+  { 19, 103 },
+  { 38, 51 },
+  { 57, 34 },
+  { 115, 16 }
+};
+
+unsigned char _uart_txbuf[32];
+char _uart_txptr;
+char _uart_txend;
+unsigned char _uart_rxbuf[32];
+char _uart_rxptr;
+char _uart_rxend;
+
+ISR(USART_RX_vect) {
+again:
+  while (UCSR0A & (1 << RXC0)) {
+    if ((_uart_rxend - _uart_rxptr) < (char)sizeof(_uart_rxbuf)) {
+      _uart_rxbuf[_uart_rxend & 0x1f] = UDR0;
+      ++_uart_rxend;
+      goto again;
+    }
+    else {
+      //  overrun! -- clear it out
+      (void)UDR0;
+    }
+  }
+}
+
+ISR(USART_UDRE_vect) {
+  if (UCSR0A & (1 << UDRE0)) {
+    if ((char)(_uart_txend - _uart_txptr) > 0) {
+      UDR0 = _uart_txbuf[_uart_txptr & 0x1f];
+      ++_uart_txptr;
+    }
+    else {
+      //  turn off interrupts -- nothing to send
+      UCSR0B &= ~(1 << UDRIE0);
+    }
+  }
+}
+
+void uart_setup(unsigned long brate, unsigned long f_cpu) {
+  IntDisable idi;
+  unsigned short scale = ((f_cpu / 10) << 8) / 1600000;
+  UCSR0B = 0;
+  if (brate == 0) {
+    return;
+  }
+  BrateSetup bsu;
+  unsigned char kbps = brate / 1000;
+  for (unsigned char ch = 0; ch != sizeof(rates)/sizeof(rates[0]); ++ch) {
+    memcpy_P(&bsu, &rates[ch], sizeof(bsu));
+    if (bsu.rateKbps == kbps) {
+      _uart_rxptr = 0;
+      _uart_rxend = 0;
+      _uart_txptr = 0;
+      _uart_txend = 0;
+      UBRR0H = 0;
+      UBRR0L = (bsu.UBRRn * scale) >> 8;
+      UCSR0A = (1 << U2X0);
+      UCSR0C = (3 << UCSZ00);
+      UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
+      return;
+    }
+  }
+  fatal(FATAL_BAD_SERIAL);
+}
+
+unsigned char uart_send(unsigned char n, void const *data) {
+  IntDisable idi; //  this may not be needed
+  unsigned char xmit = 0;
+  while ((char)(_uart_txend - _uart_txptr) < (char)sizeof(_uart_txbuf) && xmit < n) {
+    _uart_txbuf[_uart_txend & 0x1f] = ((char const *)data)[xmit];
+    ++xmit;
+    ++_uart_txend;
+  }
+  //  turn on interrupt handler (if not already on) -- will
+  //  start sending whatever is in the buffer
+  UCSR0B |= (1 << UDRIE0);
+  return xmit;
+}
+
+void uart_send_all(unsigned char ch, void const *data)
+{
+  while (ch > 0) {
+    unsigned char sent = uart_send(ch, data);
+    data = (char const *)data + sent;
+    ch -= sent;
+  }
+}
+
+unsigned char uart_available() {
+  IntDisable idi; //  this may not be needed
+  return (unsigned char)(_uart_rxend - _uart_rxptr);
+}
+
+char uart_getch() {
+  IntDisable idi; //  this may not be needed
+  char ret = 0;
+  if ((char)(_uart_rxend - _uart_rxptr) > 0) {
+    ret = _uart_rxbuf[_uart_rxptr & 0x1f];
+    ++_uart_rxptr;
+  }
+  return ret;
+}
+
+unsigned char uart_read(unsigned char n, void *data) {
+  IntDisable idi; //  this may not be needed
+  unsigned char avail = _uart_rxend - _uart_rxptr;
+  if (avail > n) {
+    avail = n;
+  }
+  for (unsigned char i = 0; i != avail; ++i) {
+    ((char *)data)[i] = _uart_rxbuf[(_uart_rxptr + i) & 0x1f];
+  }
+  _uart_rxptr += avail;
+  return avail;
+}
+
+
 /* boot stuff */
 
 void setup_boot_code() {
@@ -353,6 +517,11 @@ void setup_boot_code() {
 }
 
 
+void setup(void) __attribute__((weak));
+
+void setup(void) {}
+
+int main(void) __attribute__((weak));
 
 int main(void) {
   setup_boot_code();

@@ -1,7 +1,9 @@
 #if !defined(libavr_h)
 #define libavr_h
 
-#define F_CPU 8000000
+#if !defined(F_CPU)
+  #define F_CPU 8000000
+#endif
 
 #include <inttypes.h>
 #include <string.h>
@@ -43,10 +45,11 @@ enum
   FATAL_OUT_OF_AFTERS = 1,
   FATAL_BAD_DELAY_TIME = 2,
   FATAL_TASK_TOOK_TOO_LONG = 3,
-  FATAL_TOO_LONG_UDELAY = 4,
+  FATAL_TOO_LONG_DELAY = 4,
   FATAL_BAD_PIN_ARG = 5,
   FATAL_BAD_PARAM = 6,
   FATAL_TWI_NO_INFO = 7,
+  FATAL_BAD_SERIAL = 8,
   FATAL_TWI_SEND_TOO_BIG = 8,
   FATAL_TWI_ERROR_BASE = 0x60
 };
@@ -56,8 +59,8 @@ void fatal(int err) __attribute__((noreturn));
 void fatal_set_blink(void (*func)(bool on));
 
 /* timer API */
-
-void setup_timers();
+/* you can call this to re-initialize the timer with appropriate scaling factor for your CPU speed */
+void setup_timers(unsigned long f_cpu = F_CPU);
 unsigned short uread_timer();
 unsigned short read_timer();
 void udelay(unsigned short us);
@@ -79,6 +82,13 @@ void *twi_getbuf();
 bool twi_ready_to_send();
 void twi_send(unsigned char bytes, void const *data);
 
+/* use a serial port */
+void uart_setup(unsigned long brate, unsigned long f_cpu = F_CPU);
+unsigned char uart_send(unsigned char n, void const *data);
+void uart_send_all(unsigned char n, void const *data);
+unsigned char uart_available();
+char uart_getch();
+unsigned char uart_read(unsigned char n, void *data);
 
 /* your replacement for "main" */
 void setup();

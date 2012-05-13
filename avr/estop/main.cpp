@@ -20,11 +20,6 @@
 UTFT<HX8340B_S> lcd(8|1, 8|2, 8|3, 8|0);
 
 
-void on_twi_data(unsigned char size, void const *ptr)
-{
-}
-
-
 nRF24L01<> rf;
 
 unsigned char uiMode = 0x80;
@@ -325,8 +320,6 @@ void read_ui(void *)
 
 void setup()
 {
-  twi_set_callback(on_twi_data);
-
   DDRB |= (1 << PB5);
   PORTB &= ~(1 << PB5);
   DDRC |= 0xf;

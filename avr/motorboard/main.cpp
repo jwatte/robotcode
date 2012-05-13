@@ -1,6 +1,7 @@
 
 #include <libavr.h>
 #include <nRF24L01.h>
+#include <stdio.h>
 
 #include "cmds.h"
 
@@ -137,10 +138,12 @@ int g_motor_desired_power;
 unsigned char g_motor_allowed = false;
 unsigned char g_local_stop = false;
 
-//  0xcc == 7.93V
-//  0xb4 == 7.01V
-//  0x9f == 6.20V
-//  0x98 == 5.45V
+//  These were taken at 5.0V regulation.
+//  Now, there's a Schottky with 0.32V drop-out in the way.
+//  0xcc == 7.93V -> 8.47V
+//  0xb4 == 7.01V -> 7.49V
+//  0x9f == 6.20V -> 6.62V
+//  0x98 == 5.45V -> 5.82V
 
 unsigned char g_voltage;
 
@@ -195,7 +198,8 @@ void update_motor_power()
     set_led_state(false, true, 200);
     PORTB = (PORTB & ~(MOTOR_B_NCH_B)) | MOTOR_B_PCH_B;
     //PORTD = (PORTD & ~(MOTOR_A_PCH_D)) | MOTOR_A_NCH_D;
-    OCR0A = (((power < -255) ? 255 : -power) * g_tuning.m_power) >> 8;
+    //  Note: tuning 255 means "full power," 0 means "almost no power"
+    OCR0A = (((power < -255) ? 255 : -power) * (g_tuning.m_power + 1)) >> 8;
     TCCR0A = (1 << COM0A1) | (1 << WGM01) | (1 << WGM00);  //  Fast PWM, channel A
   }
   else {
@@ -308,10 +312,6 @@ void poll_button(void *)
 }
 
 
-void on_twi_data(unsigned char size, void const *ptr)
-{
-}
-
 void tune_steering(cmd_parameter_value const &cpv)
 {
   g_tuning.d_steer = cpv.value[0];
@@ -382,6 +382,8 @@ void poll_radio(void *)
 
 unsigned char curSendParam = 0;
 
+bool hasTWIData = false;
+unsigned char twiData[12];
 
 void send_param(unsigned char p)
 {
@@ -396,23 +398,34 @@ void send_param(unsigned char p)
     set_value(cpv, (unsigned char)(g_motor_allowed && !g_local_stop));
     break;
   case ParamMotorPower:
+    //  The range for motor power is "PWM duty cycle"
     set_value(cpv, (int)g_motor_desired_power);
     break;
   case ParamSteerAngle:
-    set_value(cpv, (unsigned char)g_steering_angle);
+    //  the range for steering is "128 in center"
+    set_value(cpv, (unsigned char)(g_steering_angle * 128 / 90));
     break;
   case ParamEEDump:
-    eeprom_read_block(&cpv.value[1], (void const *)0, 12);
+    //  For debugging, dump latest TWI packet
+    if (hasTWIData) {
+      memcpy(&cpv.value[1], twiData, 12);
+    }
+    else {
+      eeprom_read_block(&cpv.value[1], (void const *)0, 12);
+    }
     cpv.value[0] = 12;
     cpv.type = TypeRaw;
     break;
   case ParamTuneSteering:
+    //  the range for steering tuning is simply "degrees"
     set_value(cpv, (unsigned char)g_tuning.d_steer);
     break;
   case ParamTunePower:
+    //  The range for power is "PWM duty cycle multiplier"
     set_value(cpv, (unsigned char)g_tuning.m_power);
     break;
   case ParamVoltage:
+    //  The range for voltage is "4-bit fractional Volts"
     set_value(cpv, g_voltage);
     break;
   }
@@ -444,7 +457,9 @@ void poll_power(void *);
 
 void poll_power_result(void *)
 {
-  g_voltage = (unsigned short)ADCH * 64 / 103;
+  //  8 bits -- just read high half
+  unsigned short adcValue = (unsigned short)ADCH;
+  g_voltage = adcValue * 64 / 109;
   if (g_voltage < THRESHOLD_VOLTAGE) {
     //  stopping locally -- out of juice!
     g_local_stop = true;
@@ -458,6 +473,23 @@ void poll_power(void *)
   after(1, &poll_power_result, 0);
 }
 
+class MySlave : public ITWISlave {
+public:
+  virtual void data_from_master(unsigned char n, void const *data) {
+    if (n > sizeof(twiData)) {
+      n = sizeof(twiData);
+    }
+    memcpy(twiData, data, n);
+    hasTWIData = true;
+  }
+  virtual void request_from_master(void *o_buf, unsigned char &o_size) {
+    sprintf((char *)o_buf, "%02x %02x %02x", g_voltage, g_motor_desired_power,
+      g_motor_actual_power);
+    o_size = 8;
+  }
+};
+MySlave twiSlave;
+
 void setup()
 {
   read_tuning();
@@ -468,7 +500,7 @@ void setup()
   setup_power();
   delay(100); //  wait for radio to boot
   rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);
-  twi_set_callback(on_twi_data);
+  start_twi_slave(&twiSlave, NodeMotorPower);
   //  kick off the chain of tasks
   update_servo(0);
   set_motor(0);

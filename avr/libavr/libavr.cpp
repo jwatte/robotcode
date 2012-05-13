@@ -264,113 +264,6 @@ void setup_watchdog()
 }
 
 
-/* TWI interface */
-
-unsigned char _twi_recv_buf[TWI_MAX_SIZE];
-unsigned char _twi_recv_bufptr;
-unsigned char _twi_buf[TWI_MAX_SIZE];
-unsigned char _twi_ready;
-unsigned char _twi_send_buf[TWI_MAX_SIZE];
-unsigned char _twi_send_end;
-unsigned char _twi_send_cur;
-void (*_twi_callback)(unsigned char, void const *);
-
-void setup_twi_slave()
-{
-  //power_twi_enable();
-  //TWAR = TWI_ADDRESS;
-  //TWCR = (1 << TWEA) | (1 << TWEN) | (1 << TWIE);
-}
-
-void twi_set_callback(void (*func)(unsigned char, void const *))
-{
-  _twi_callback = func;
-}
-
-void twi_call_callback(void *)
-{
-  //  finally, acknowledge!
-  //  I'm outside of interrupt handler code here.
-  TWCR = (1 << TWINT) | (1 << TWEA);
-  if (_twi_callback) {
-    _twi_callback(_twi_ready, _twi_buf);
-  }
-}
-
-ISR(TWI_vect)
-{
-  //  what state am I in?
-  unsigned char status = TWSR & ~0x07;
-  switch (status) {
-  case TW_SR_SLA_ACK:
-  case TW_SR_GCALL_ACK: {
-      unsigned char code = (1 << TWINT);
-      if (_twi_recv_bufptr < sizeof(_twi_recv_buf)) {
-        code |= (1 << TWEA);
-      }
-      TWCR = code;  //  go ahead and send the byte
-    }
-    break;
-  case TW_SR_DATA_ACK:
-  case TW_SR_DATA_NACK: {
-      unsigned char code = (1 << TWINT);
-      if (_twi_recv_bufptr < sizeof(_twi_recv_buf)) {
-        _twi_recv_buf[_twi_recv_bufptr] = TWDR;
-        ++_twi_recv_bufptr;
-        code |= (1 << TWEA);
-      }
-      TWCR = code;
-    }
-    break;
-  case TW_SR_STOP: {
-      memcpy(_twi_buf, _twi_recv_buf, _twi_recv_bufptr);
-      _twi_ready = _twi_recv_bufptr;
-      _twi_recv_bufptr = 0;
-      after(0, twi_call_callback, 0);
-    }
-    break;
-  case TW_NO_INFO:
-    fatal(FATAL_TWI_NO_INFO);
-  default:
-  case TW_SR_GCALL_DATA_ACK:
-  case TW_SR_GCALL_DATA_NACK:
-  case TW_SR_ARB_LOST_SLA_ACK:
-  case TW_SR_ARB_LOST_GCALL_ACK:
-  case TW_BUS_ERROR:
-    /* these should not happen */
-    fatal(status);
-    break;
-  }
-}
-
-unsigned char twi_poll()
-{
-  return _twi_ready;
-}
-
-void *twi_getbuf()
-{
-  return _twi_buf;
-}
-
-bool twi_ready_to_send()
-{
-  return _twi_send_end == _twi_send_cur;
-}
-
-void twi_send(unsigned char bytes, void const *data)
-{
-  if (bytes > TWI_MAX_SIZE) {
-    fatal(FATAL_TWI_SEND_TOO_BIG);
-  }
-  memcpy(_twi_send_buf, data, bytes);
-  _twi_send_cur = 0;
-  _twi_send_end = bytes;
-  // todo: kick off a send here
-}
-
-
-
 /* UART serial API */
 
 /* The interrupt disables in read and write may not actually 
@@ -401,7 +294,7 @@ char _uart_rxend;
 ISR(USART_RX_vect) {
 again:
   while (UCSR0A & (1 << RXC0)) {
-    if ((_uart_rxend - _uart_rxptr) < (char)sizeof(_uart_rxbuf)) {
+    if ((unsigned char)(_uart_rxend - _uart_rxptr) < (char)sizeof(_uart_rxbuf)) {
       _uart_rxbuf[_uart_rxend & 0x1f] = UDR0;
       ++_uart_rxend;
       goto again;
@@ -511,7 +404,7 @@ void setup_boot_code() {
   disable_interrupts();
   setup_watchdog();
   setup_timers();
-  setup_twi_slave();
+  //setup_twi_slave();
   //  force interrupts on
   restore_interrupts(0x80);
 }
@@ -536,3 +429,8 @@ int main(void) {
   return 0;
 }
 
+extern "C" {
+void __cxa_pure_virtual() {
+  fatal(FATAL_PURE_VIRTUAL);
+}
+}

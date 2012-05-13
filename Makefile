@@ -9,10 +9,6 @@ AVR_BINS:=$(patsubst avr/%/,%,$(sort $(filter-out avr/libavr/,$(dir $(AVR_SRCS))
 AVR_CFLAGS:=-Wall -Wno-switch -O3 -Os -mcall-prologues -mmcu=atmega328p -Iavr/libavr -std=gnu++0x
 AVR_LFLAGS:=-mmcu=atmega328p -Lbld/avrbin -lavr
 
-fuses_motorboard:	fuses_8
-fuses_estop:	fuses_8
-fuses_usbboard:	fuses_16
-
 
 MRPT_LIBS:=opengl base hwdrivers gui obs slam
 MRPT_INCLUDES:=-I/usr/local/include/mrpt/mrpt-config -I/usr/local/include/mrpt/util \
@@ -53,6 +49,10 @@ bld/obj/%.o:	mrpt/%.cpp
 bld/avrobj/%.o:	avr/%.cpp
 	mkdir -p `dirname $@`
 	avr-gcc $(AVR_CFLAGS) -c $< -o $@ -MMD -I/usr/lib/avr/include
+
+fuses_motorboard:	fuses_8
+fuses_estop:	fuses_8
+fuses_usbboard:	fuses_16
 
 %:	bld/avrbin/%.hex fuses_%
 	avrdude -u -V -p m328p -b 115200 -B 1 -c usbtiny -U flash:w:$<:i

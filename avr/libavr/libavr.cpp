@@ -4,6 +4,9 @@
 
 /* global volatile int to avoid optimization of spinloop */
 int volatile globalctr;
+unsigned long actual_f_cpu = F_CPU;
+unsigned long actual_f_cpu_1000 = F_CPU / 1000;
+
 
 void fatal_no_blink(bool) {}
 void (*g_fatal_blink)(bool) = &fatal_no_blink;
@@ -24,36 +27,45 @@ void fatal(int err)
   if (eeprom_read_byte((uint8_t const *)EE_FATALCODE) != err) {
     eeprom_write_byte((uint8_t *)EE_FATALCODE, (unsigned char)err);
   }
+  uart_force_out('F');
+  uart_force_out(err);
+  unsigned int nIter = actual_f_cpu_1000 / 80;
+  if (nIter < 10) {
+    nIter = 10;
+  }
+  else if (nIter > 300) {
+    nIter = 300;
+  }
   while (true)
   {
     if (err >= FATAL_TWI_ERROR_BASE) {
       /* just blink madly! */
       (*g_fatal_blink)(true);
-      for (int volatile i = 0; i < 100; ++i) {
-        for (globalctr = 0; globalctr < 500; ++globalctr) {
+      for (unsigned int volatile i = 0; i < nIter; ++i) {
+        for (globalctr = 0; globalctr < 300; ++globalctr) {
         }
       }
       (*g_fatal_blink)(false);
-      for (int volatile i = 0; i < 200; ++i) {
-        for (globalctr = 0; globalctr < 500; ++globalctr) {
+      for (unsigned int volatile i = 0; i < nIter; ++i) {
+        for (globalctr = 0; globalctr < 300; ++globalctr) {
         }
       }
     }
     else {
       for (int k = 0; k < err; ++k) {
         (*g_fatal_blink)(true);
-        for (int volatile i = 0; i < 100; ++i) {
-          for (globalctr = 0; globalctr < 700; ++globalctr) {
+        for (unsigned int volatile i = 0; i < nIter; ++i) {
+          for (globalctr = 0; globalctr < 350; ++globalctr) {
           }
         }
         (*g_fatal_blink)(false);
-        for (int volatile i = 0; i < 200; ++i) {
-          for (globalctr = 0; globalctr < 700; ++globalctr) {
+        for (unsigned int volatile i = 0; i < 2 * nIter; ++i) {
+          for (globalctr = 0; globalctr < 350; ++globalctr) {
           }
         }
       }
-      for (int volatile i = 0; i < 500; ++i) {
-        for (globalctr = 0; globalctr < 800; ++globalctr) {
+      for (unsigned int volatile i = 0; i < 8 * nIter; ++i) {
+        for (globalctr = 0; globalctr < 350; ++globalctr) {
         }
       }
     }
@@ -73,8 +85,6 @@ unsigned short g_lastPhaseValue;
 //  (65.536 milliseconds << 8) or about 16777.
 //  Oops! This means I can't support 1 MHz clock :-(
 unsigned short phaseScale = 16777;
-unsigned long actual_f_cpu = F_CPU;
-unsigned long actual_f_cpu_1000 = F_CPU / 1000;
 
 //  This should be called only with interrupts disabled!
 unsigned short read_timer1_inner()
@@ -175,7 +185,7 @@ struct AfterRec
   void *data;
 };
 
-#define MAX_AFTERS 16
+#define MAX_AFTERS 20
 AfterRec g_afters[MAX_AFTERS];
 
 void at(unsigned short time, void (*func)(void *data), void *data)
@@ -198,7 +208,7 @@ void after(unsigned short delay, void (*func)(void *data), void *data)
 {
   if (delay > 32767)
   {
-    fatal(FATAL_BAD_DELAY_TIME);
+    fatal(FATAL_TOO_LONG_DELAY);
   }
   at(read_timer() + delay, func, data);
 }
@@ -360,6 +370,14 @@ unsigned char uart_send(unsigned char n, void const *data) {
   return xmit;
 }
 
+void uart_force_out(char ch) {
+  IntDisable idi;
+  while (!(UCSR0A & (1 << UDRE0))) {
+    //  wait
+  }
+  UDR0 = ch;
+}
+
 void uart_send_all(unsigned char ch, void const *data)
 {
   while (ch > 0) {
@@ -397,6 +415,45 @@ unsigned char uart_read(unsigned char n, void *data) {
   return avail;
 }
 
+void adc_setup() {
+  power_adc_enable();
+  ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS0);  //  enable, prescaler @ 0.5 MHz @ 16 MHz
+  ADMUX = (1 << ADLAR);
+}
+
+void (*_adc_cb)(unsigned char val) = 0;
+
+void _adc_result(void *cb) {
+  void (*comp)(unsigned char) = _adc_cb;
+  _adc_cb = 0;
+  (*comp)(ADCH);
+}
+
+ISR(ADC_vect) {
+  if (!_adc_cb) {
+    fatal(FATAL_BAD_USAGE);
+  }
+  after(0, _adc_result, 0);
+  ADCSRA = ADCSRA & ~((1 << ADSC) | (1 << ADATE) | (1 << ADIE));
+}
+
+bool adc_busy() {
+  unsigned char adcsra = ADCSRA;
+  return (_adc_cb != 0) || ((adcsra & (1 << ADSC)) != 0);
+}
+
+void adc_read(unsigned char channel, void (*cb)(unsigned char val)) {
+  if (adc_busy()) {
+    fatal(FATAL_ADC_BUSY);
+  }
+  if (channel > 5) {
+    fatal(FATAL_BAD_USAGE);
+  }
+  _adc_cb = cb;
+  ADMUX = (ADMUX & 0xf0) | channel;
+  DIDR0 |= (1 << channel);  //  disable ADC input as digital
+  ADCSRA = ADCSRA | (1 << ADSC) | (1 << ADIF) | (1 << ADIE);  //  start conversion, clear interrupt flag, enable interrupt
+}
 
 /* boot stuff */
 
@@ -404,7 +461,6 @@ void setup_boot_code() {
   disable_interrupts();
   setup_watchdog();
   setup_timers();
-  //setup_twi_slave();
   //  force interrupts on
   restore_interrupts(0x80);
 }

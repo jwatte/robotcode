@@ -10,14 +10,15 @@ ITWISlave *_twi_slave;
 
 #define READY_SLAVE ((1 << TWEN) | (1 << TWEA) | (1 << TWIE) | (1 << TWINT))
 #define UNREADY_SLAVE ((1 << TWEN) | (1 << TWIE) | (1 << TWINT))
-#define READY_MASTER ((1 << TWEN) | (1 << TWIE) | (1 << TWINT))
+#define READY_MASTER ((1 << TWEN) | (1 << TWEA) | (1 << TWIE) | (1 << TWINT))
+#define UNREADY_MASTER ((1 << TWEN) | (1 << TWIE) | (1 << TWINT))
 
 
 class TWI : public TWIMaster {
 public:
   bool is_busy()
   {
-    return pending_op || (bufend > bufptr);
+    return pending_op;
   }
 
   void send_to(unsigned char n, void const *data, unsigned char addr)
@@ -122,7 +123,7 @@ void _twi_call_request(void *)
   _twi.bufend = n;
   IntDisable idi;
   TWDR = _twi.buf[_twi.bufptr++];
-  TWCR = (_twi.bufend == _twi.bufend) ? UNREADY_SLAVE : READY_SLAVE;
+  TWCR = (_twi.bufptr == _twi.bufend) ? UNREADY_SLAVE : READY_SLAVE;
 }
 
 void _twi_call_nack(void *)
@@ -171,11 +172,13 @@ ISR(TWI_vect)
   case TW_ST_SLA_ACK: {
       _twi.pending_op = true;
       after(0, _twi_call_request, 0);
+      //  turn off interrupts, but don't ack yet
+      TWCR = TWCR & ~((1 << TWINT) | (1 << TWIE));
     }
     break;
   case TW_ST_DATA_ACK: {
       TWDR = _twi.buf[_twi.bufptr++];
-      TWCR = (_twi.bufptr == _twi.bufend) ? UNREADY_SLAVE : READY_SLAVE;
+      TWCR = (_twi.bufptr >= _twi.bufend) ? UNREADY_SLAVE : READY_SLAVE;
     }
     break;
   case TW_ST_LAST_DATA:
@@ -193,6 +196,7 @@ ISR(TWI_vect)
     _twi.bufptr = 0;
     _twi.bufend = 0;
     after(0, _twi_call_nack, 0);
+    TWCR = READY_MASTER;
     break;
   case TW_MT_DATA_ACK:
   case TW_MT_SLA_ACK: {
@@ -214,14 +218,21 @@ ISR(TWI_vect)
   case TW_MR_DATA_ACK:
     if (_twi.bufend < sizeof(_twi.buf)) {
       _twi.buf[_twi.bufend++] = TWDR;
+      TWCR = (_twi.bufend == sizeof(_twi.buf)) ? UNREADY_MASTER : READY_MASTER;
     }
-    TWCR = READY_MASTER;
+    else {
+      (void)TWDR;
+      TWCR = UNREADY_MASTER;
+    }
     break;
   case TW_MR_DATA_NACK:
     if (_twi.bufend < sizeof(_twi.buf)) {
       _twi.buf[_twi.bufend++] = TWDR;
     }
-    TWCR = READY_MASTER | (1 << TWSTO);
+    else {
+      (void)TWDR;
+    }
+    TWCR = UNREADY_MASTER | (1 << TWSTO);
     //  I am done!
     after(0, _twi_call_response, 0);
     break;

@@ -44,8 +44,8 @@ enum
   FATAL_OUT_OF_AFTERS = 1,
   FATAL_TASK_TOOK_TOO_LONG = 2,
   FATAL_BAD_PIN_ARG = 3,
-  FATAL_BAD_DELAY_TIME = 4,
-  FATAL_TOO_LONG_DELAY = 5,
+  FATAL_TOO_LONG_DELAY = 4,
+  FATAL_ADC_BUSY = 5,
   FATAL_BAD_SERIAL = 6,
   FATAL_BAD_PARAM = 7,
   FATAL_BAD_USAGE = 8,
@@ -108,8 +108,15 @@ void uart_send_all(unsigned char n, void const *data);
 unsigned char uart_available();
 char uart_getch();
 unsigned char uart_read(unsigned char n, void *data);
+void uart_force_out(char ch);
 
-/* your replacement for "main" */
+/* ADC support */
+void adc_setup();
+bool adc_busy();
+void adc_read(unsigned char channel, void (*cb)(unsigned char val));
+
+/* your replacement for "main" -- you implement this, and typically 
+   set up tasks to run using after(). */
 void setup();
 
 #endif  //  libavr_h

@@ -483,8 +483,8 @@ public:
     hasTWIData = true;
   }
   virtual void request_from_master(void *o_buf, unsigned char &o_size) {
-    sprintf((char *)o_buf, "%02x %02x %02x", g_voltage, g_motor_desired_power,
-      g_motor_actual_power);
+    sprintf((char *)o_buf, "%02x %02x %02x", g_voltage,
+      (unsigned char)(g_motor_desired_power >> 1), g_motor_actual_power);
     o_size = 8;
   }
 };
@@ -498,6 +498,7 @@ void setup()
   setup_servo();
   setup_buttons();
   setup_power();
+  uart_setup(115200, F_CPU);
   delay(100); //  wait for radio to boot
   rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);
   start_twi_slave(&twiSlave, NodeMotorPower);

@@ -6,3 +6,4 @@ core
 *.d
 *.a
 *.so
+bin

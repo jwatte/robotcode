@@ -39,6 +39,11 @@
     <Compile Include="RoboUSBLinkForm.cs" />
     <Compile Include="RoboDataModel.cs" />
     <Compile Include="RoboBoardModel.cs" />
+    <Compile Include="RoboBoardTile.cs" />
+    <Compile Include="ISerialPort.cs" />
+    <Compile Include="SerialPortWrapper.cs" />
+    <Compile Include="FileWritingWrapper.cs" />
+    <Compile Include="FileReadingWrapper.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />

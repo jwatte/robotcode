@@ -1,24 +1,34 @@
 ﻿<Properties>
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="RoboUSBLink/RoboUSBLinkForm.cs">
+  <MonoDevelop.Ide.Workbench ActiveDocument="RoboUSBLink/FileReadingWrapper.cs">
     <Files>
-      <File FileName="RoboUSBLink/RoboUSBLinkApp.cs" Line="80" Column="16" />
-      <File FileName="RoboUSBLink/RoboUSBLinkComm.cs" Line="204" Column="3" />
-      <File FileName="RoboUSBLink/RoboUSBLinkForm.cs" Line="62" Column="34" />
+      <File FileName="RoboUSBLink/RoboUSBLinkApp.cs" Line="87" Column="3" />
+      <File FileName="RoboUSBLink/RoboUSBLinkComm.cs" Line="34" Column="1" />
+      <File FileName="RoboUSBLink/RoboUSBLinkForm.cs" Line="58" Column="1" />
       <File FileName="RoboUSBLink/RoboDataModel.cs" Line="74" Column="4" />
       <File FileName="RoboUSBLink/RoboBoardModel.cs" Line="19" Column="8" />
+      <File FileName="RoboUSBLink/RoboBoardTile.cs" Line="70" Column="25" />
+      <File FileName="RoboUSBLink/ISerialPort.cs" Line="12" Column="3" />
+      <File FileName="RoboUSBLink/SerialPortWrapper.cs" Line="18" Column="4" />
+      <File FileName="RoboUSBLink/FileWritingWrapper.cs" Line="124" Column="1" />
+      <File FileName="RoboUSBLink/FileReadingWrapper.cs" Line="1" Column="1" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
         <State expanded="True">
           <Node name="RoboUSBLink" expanded="True">
             <Node name="References" expanded="True" />
-            <Node name="RoboUSBLinkForm.cs" selected="True" />
+            <Node name="FileReadingWrapper.cs" selected="True" />
           </Node>
         </State>
       </Pad>
       <Pad Id="ClassPad">
-        <State expanded="True" selected="True" />
+        <State expanded="True" selected="True">
+          <Node name="RoboUSBLink" expanded="True">
+            <Node name="References" expanded="True" />
+            <Node name="RoboUSBLink" expanded="True" />
+          </Node>
+        </State>
       </Pad>
     </Pads>
   </MonoDevelop.Ide.Workbench>

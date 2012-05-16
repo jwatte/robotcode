@@ -14,9 +14,7 @@ namespace RoboUSBLink
 			buffer = new byte[256];
 			bufPtr = 0;
 			commands = new Dictionary<byte, CmdDesc>();
-			port = new System.IO.Ports.SerialPort(devName, 115200, Parity.None, 8, StopBits.One);
-			port.Open();
-			port.DiscardInBuffer();
+			port = new SerialPortWrapper(new System.IO.Ports.SerialPort(devName, 115200, Parity.None, 8, StopBits.One));
 		}
 		
 		protected readonly MarshalFuncFunc MarshalToMainThread;
@@ -27,6 +25,8 @@ namespace RoboUSBLink
 			{
 				throw new InvalidOperationException("Can't start a running RoboUSBLinkComm");
 			}
+			port.Open();
+			port.DiscardInBuffer();
 			running = true;
 			thread = new Thread(new ThreadStart(this.PortThread));
 			thread.Start();
@@ -37,6 +37,7 @@ namespace RoboUSBLink
 			running = false;
 			thread.Join();
 			thread = null;
+			port.Close();
 		}
 		
 		private void PortThread()
@@ -94,7 +95,7 @@ namespace RoboUSBLink
 		}
 		
 		public readonly string DevName;
-		private readonly SerialPort port;
+		private readonly ISerialPort port;
 
 		private Thread thread;
 

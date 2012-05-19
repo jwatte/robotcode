@@ -1,0 +1,4 @@
+This simple set of tools allows you to capture a movie stream from a webcam 
+and dump it to disk as a sequence of images in a single file. Then you can 
+split this file into multiple separate jpg images. The webcam must support 
+MJPEG format for frame rates to be good (all modern webcams do.)

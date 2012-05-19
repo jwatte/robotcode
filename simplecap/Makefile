@@ -1,6 +1,9 @@
 
 all:	bld bld/testgrab bld/capdump
 
+clean:
+	rm -rf bld *.jpg *.cap
+
 bld/%:	bld/%.o
 	g++ -o $@ $^ -g -lv4l2
 

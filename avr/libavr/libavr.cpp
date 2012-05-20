@@ -415,10 +415,10 @@ unsigned char uart_read(unsigned char n, void *data) {
   return avail;
 }
 
-void adc_setup() {
+void adc_setup(bool use_aref) {
   power_adc_enable();
-  ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS0);  //  enable, prescaler @ 0.5 MHz @ 16 MHz
-  ADMUX = (1 << ADLAR);
+  ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1);  //  enable, prescaler @ 0.25 MHz @ 16 MHz
+  ADMUX = (use_aref ? 0 : (1 << REFS0)) | (1 << ADLAR);
 }
 
 void (*_adc_cb)(unsigned char val) = 0;

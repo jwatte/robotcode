@@ -111,7 +111,7 @@ unsigned char uart_read(unsigned char n, void *data);
 void uart_force_out(char ch);
 
 /* ADC support */
-void adc_setup();
+void adc_setup(bool use_aref = true);
 bool adc_busy();
 void adc_read(unsigned char channel, void (*cb)(unsigned char val));
 

@@ -21,6 +21,8 @@ namespace RoboUSBLink
 			comm.AddCommand((byte)'D', 3, 2, new RoboUSBLinkComm.CmdFunc(this.Cmd_Data));
 			comm.AddCommand((byte)'N', 2, 0, new RoboUSBLinkComm.CmdFunc(this.Cmd_Nak));
 			comm.AddCommand((byte)'R', 3, 0, new RoboUSBLinkComm.CmdFunc(this.Cmd_Range));
+			comm.AddCommand((byte)'V', 2, 0, new RoboUSBLinkComm.CmdFunc(this.Cmd_Voltage));
+			comm.AddCommand((byte)'X', 2, 1, new RoboUSBLinkComm.CmdFunc(this.Cmd_Debug));
 		}
 		
 		protected void Cmd_Online(RoboUSBLinkComm.CmdDesc desc, byte[] data)
@@ -61,6 +63,21 @@ namespace RoboUSBLink
 				Ranges[data[1]] = data[2];
 			}
 			OnRangeChanged(data[1], data[2]);
+		}
+		
+		protected void Cmd_Voltage(RoboUSBLinkComm.CmdDesc desc, byte[] data)
+		{
+			OnVoltage(data[1] / 16.0f);
+		}
+		
+		protected void Cmd_Debug(RoboUSBLinkComm.CmdDesc desc, byte[] data)
+		{
+			char[] ch = new char[data.Length - 1];
+			for (int i = 2, n = data.Length; i != n; ++i)
+			{
+				ch[i - 2] = (char)data[i];
+			}
+			OnDebugMessage(new String(ch));
 		}
 		
 		public readonly RoboUSBLinkComm Comm;
@@ -128,16 +145,35 @@ namespace RoboUSBLink
 				RangeChanged(sensor, range);
 			}
 		}
+
+		protected void OnVoltage(float volts)
+		{
+			if (VoltageChanged != null)
+			{
+				VoltageChanged(volts);
+			}
+		}
+		
+		protected void OnDebugMessage(string s)
+		{
+			if (DebugMessage != null)
+			{
+				DebugMessage(s);
+			}
+		}
 		
 		public delegate void ChangeFunc();
 		public delegate void BoardFunc(byte board);
 		public delegate void RangeFunc(byte sensor, byte range);
+		public delegate void DebugFunc(string text);
+		public delegate void ValueFunc(float val);
 		
 		public event ChangeFunc CommOnline;
 		public event ChangeFunc CommOffline;
 		public event BoardFunc BoardData;
 		public event BoardFunc BoardOffline;
 		public event RangeFunc RangeChanged;
+		public event ValueFunc VoltageChanged;
+		public event DebugFunc DebugMessage;
 	}
 }
-

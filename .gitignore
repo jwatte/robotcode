@@ -7,3 +7,6 @@ core
 *.a
 *.so
 bin
+*.swp
+*.cap
+*#

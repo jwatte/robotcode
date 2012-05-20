@@ -11,6 +11,7 @@ namespace RoboUSBLink
 			Comm = comm;
 			this.Size = new Size(800, 600);
 			this.DoubleBuffered = true;
+			this.Text = "Robot Status";
 			InitFonts();
 			InitControls();
 			Data = new RoboDataModel(comm);
@@ -19,6 +20,8 @@ namespace RoboUSBLink
 			Data.CommOffline += HandleCommOffline;
 			Data.CommOnline += HandleCommOnline;
 			Data.RangeChanged += HandleRangeChanged;
+			Data.VoltageChanged += HandleVoltageChanged;
+			Data.DebugMessage += HandleDebugMessage;
 		}
 		
 		void InitFonts()
@@ -62,11 +65,19 @@ namespace RoboUSBLink
 			commStatus.Size = new Size(394, 20);
 			commStatus.Text = "Offline";
 			Controls.Add(commStatus);
+			
+			voltageStatus = new Label();
+			voltageStatus.Font = largeFont;
+			voltageStatus.Location = new Point(400, 2);
+			voltageStatus.Size = new Size(100, 20);
+			voltageStatus.Text = "???";
+			Controls.Add(voltageStatus);
 		}
 		
 		private FlowLayoutPanel rangeLayout;
 		private FlowLayoutPanel boardLayout;
 		private Label commStatus;
+		private Label voltageStatus;
 		private Font smallFont;
 		private Font largeFont;
 		
@@ -99,6 +110,16 @@ namespace RoboUSBLink
 		void HandleRangeChanged(byte sensor, byte range)
 		{
 			AddToEventLog(String.Format("Range changed: sensor {0}: {1}", sensor, range));
+		}
+		
+		void HandleVoltageChanged(float val)
+		{
+			voltageStatus.Text = val.ToString("0.0") + " V";
+		}
+		
+		void HandleDebugMessage(string txt)
+		{
+			AddToEventLog("Debug message: " + txt);
 		}
 		
 		void AddToEventLog(string text)

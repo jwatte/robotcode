@@ -16,6 +16,8 @@
  D <node> <len> <data>  Data polled from node
  N <node>               Nak from node when polling
  R <sensor> <distance>  Distance reading from ranging sensor
+ V <value>              Local voltage value, ff == 16V, 00 == 8V
+ X <len> <text>         Debug text
 
  Host->Usbboard
 
@@ -26,6 +28,17 @@ extern void setup_timers(unsigned long l);
 void blink(bool on) {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, on ? HIGH : LOW);
+}
+
+void debug_text(char const *txt)
+{
+  int l = strlen(txt);
+  if (l > 32) {
+    l = 32;
+  }
+  char buf[2] = { 'X', (char)l };
+  uart_send_all(2, buf);
+  uart_send_all(l, txt);
 }
 
 unsigned char requestFrom;
@@ -50,7 +63,7 @@ TWIMaster *twi;
 void request_from_motor(void *)
 {
   unsigned int d = 500;
-  if (twi->is_busy()) {
+  if (requestFrom || twi->is_busy()) {
     d = 1;
   }
   else {
@@ -63,7 +76,7 @@ void request_from_motor(void *)
 void request_from_sensor(void *)
 {
   unsigned int d = 100;
-  if (twi->is_busy()) {
+  if (requestFrom || twi->is_busy()) {
     d = 1;
   }
   else {
@@ -73,15 +86,39 @@ void request_from_sensor(void *)
   after(d, request_from_sensor, 0);
 }
 
+unsigned char map_voltage(unsigned char val)
+{
+  if (val == 255) {
+    return 255;
+  }
+  unsigned short us = (unsigned short)val * 37 / 40;
+  return (unsigned char)us;
+}
+
+void voltage_cb(unsigned char val)
+{
+  char data[2] = { 'V', map_voltage(val) };
+  uart_send_all(2, data);
+}
+
+void poll_voltage(void *)
+{
+  if (!adc_busy()) {
+    adc_read(0, &voltage_cb);
+  }
+  after(500, &poll_voltage, 0);
+}
+
 void setup(void) {
   fatal_set_blink(&blink);
   setup_timers(F_CPU);
   pinMode(LED_PIN, OUTPUT);
   twi = start_twi_master(&twiMaster);
-  adc_setup();
+  adc_setup(false);
   uart_setup(115200, F_CPU);
   uart_send_all(1, "O");
-  after(0, request_from_motor, 0);
-  after(0, request_from_sensor, 0);
+  //after(0, request_from_motor, 0);
+  //after(0, request_from_sensor, 0);
+  after(0, poll_voltage, 0);
 }
 

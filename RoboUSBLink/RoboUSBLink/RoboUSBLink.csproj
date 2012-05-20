@@ -44,10 +44,16 @@
     <Compile Include="SerialPortWrapper.cs" />
     <Compile Include="FileWritingWrapper.cs" />
     <Compile Include="FileReadingWrapper.cs" />
+    <Compile Include="VoltMeterControl.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="vumeter-196-57.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 </Project>

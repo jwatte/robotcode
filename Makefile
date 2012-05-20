@@ -53,6 +53,7 @@ bld/avrobj/%.o:	avr/%.cpp
 fuses_motorboard:	fuses_8
 fuses_estop:	fuses_8
 fuses_usbboard:	fuses_16
+fuses_sensorboard:	fuses_8
 
 %:	bld/avrbin/%.hex fuses_%
 	avrdude -u -V -p m328p -b 115200 -B 1 -c usbtiny -U flash:w:$<:i

@@ -66,10 +66,9 @@ namespace RoboUSBLink
 			commStatus.Text = "Offline";
 			Controls.Add(commStatus);
 			
-			voltageStatus = new Label();
+			voltageStatus = new VoltMeterControl();
 			voltageStatus.Font = largeFont;
 			voltageStatus.Location = new Point(400, 2);
-			voltageStatus.Size = new Size(100, 20);
 			voltageStatus.Text = "???";
 			Controls.Add(voltageStatus);
 		}
@@ -77,7 +76,7 @@ namespace RoboUSBLink
 		private FlowLayoutPanel rangeLayout;
 		private FlowLayoutPanel boardLayout;
 		private Label commStatus;
-		private Label voltageStatus;
+		private VoltMeterControl voltageStatus;
 		private Font smallFont;
 		private Font largeFont;
 		
@@ -114,7 +113,7 @@ namespace RoboUSBLink
 		
 		void HandleVoltageChanged(float val)
 		{
-			voltageStatus.Text = val.ToString("0.0") + " V";
+			voltageStatus.Value = val;
 		}
 		
 		void HandleDebugMessage(string txt)

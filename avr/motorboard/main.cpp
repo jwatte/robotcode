@@ -17,12 +17,15 @@
 #define LED_GO_B (1 << PB0)
 #define LED_PAUSE_D (1 << PD7)
 
-nRF24L01<true, 0|7, 16|4, 0|6> rf;
+nRF24L01<false, 0|7, 16|4, 0|6> rf;
 
-ISR(PCINT0_vect)
-{
-  rf.onIRQ();
-}
+class RfInt : public IPinChangeNotify {
+  void pin_change(unsigned char) {
+    rf.onIRQ();
+  }
+};
+RfInt rf_int;
+
 uint8_t nRadioContact = 1;
 
 
@@ -501,6 +504,7 @@ void setup()
   uart_setup(115200, F_CPU);
   delay(100); //  wait for radio to boot
   rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);
+  on_pinchange(rf.getPinIRQ(), &rf_int);
   start_twi_slave(&twiSlave, NodeMotorPower);
   //  kick off the chain of tasks
   update_servo(0);

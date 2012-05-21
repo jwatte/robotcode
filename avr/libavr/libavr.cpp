@@ -455,6 +455,80 @@ void adc_read(unsigned char channel, void (*cb)(unsigned char val)) {
   ADCSRA = ADCSRA | (1 << ADSC) | (1 << ADIF) | (1 << ADIE);  //  start conversion, clear interrupt flag, enable interrupt
 }
 
+
+/* pinchange interrupts */
+
+IPinChangeNotify *_pcn[24] = { 0 };
+unsigned char _pcint_last[3] = { 0 };
+
+#define DISPATCH(x) \
+  if (((last ^ val) & (1 << ((x) & 7))) && _pcn[(x)]) { \
+    _pcn[(x)]->pin_change(val & (1 << ((x) & 7))); \
+  }
+ISR(PCINT0_vect) {
+  unsigned char val = PINB;
+  unsigned char last = _pcint_last[0];
+  _pcint_last[0] = val;
+  DISPATCH(0);
+  DISPATCH(1);
+  DISPATCH(2);
+  DISPATCH(3);
+  DISPATCH(4);
+  DISPATCH(5);
+  DISPATCH(6);
+  DISPATCH(7);
+}
+
+ISR(PCINT1_vect) {
+  unsigned char val = PINC;
+  unsigned char last = _pcint_last[1];
+  _pcint_last[1] = val;
+  DISPATCH(8);
+  DISPATCH(9);
+  DISPATCH(10);
+  DISPATCH(11);
+  DISPATCH(12);
+  DISPATCH(13);
+  DISPATCH(14);
+  DISPATCH(15);
+}
+
+ISR(PCINT2_vect) {
+  unsigned char val = PIND;
+  unsigned char last = _pcint_last[2];
+  _pcint_last[2] = val;
+  DISPATCH(16);
+  DISPATCH(17);
+  DISPATCH(18);
+  DISPATCH(19);
+  DISPATCH(20);
+  DISPATCH(21);
+  DISPATCH(22);
+  DISPATCH(23);
+}
+
+void on_pinchange(unsigned char pin, IPinChangeNotify *pcn)
+{
+  if (pin > 23) {
+    fatal(FATAL_BAD_PIN_ARG);
+  }
+  IntDisable idi;
+  _pcn[pin] = pcn;
+  if (pcn) {
+    pcMaskReg(pin) |= (1 << (pin & 7));
+  }
+  else {
+    pcMaskReg(pin) &= ~(1 << (pin & 7));
+  }
+  if (pcMaskReg(pin)) {
+    PCICR |= (1 << (pin >> 3));
+  }
+  else {
+    PCICR &= (1 << (pin >> 3));
+  }
+}
+
+
 /* boot stuff */
 
 void setup_boot_code() {

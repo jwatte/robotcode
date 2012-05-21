@@ -13,7 +13,7 @@ namespace RoboUSBLink
 			this.Size = new Size(196, 57);
 			this.Max = 16.0f;
 			this.Min = 9.5f;
-			this.Value = 16.0f;
+			this.Value = 0;
 			this.ForeColor = Color.DarkRed;
 		}
 		

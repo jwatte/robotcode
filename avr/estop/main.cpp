@@ -40,47 +40,54 @@ volatile bool g_go_pressed = false;
 volatile unsigned char selectorValue = 0;
 volatile unsigned char prevQuad = 0;
 volatile unsigned char lastQuad = 0;
-volatile char nInt = 0;
 
-ISR(PCINT2_vect)
-{
-  rf.onIRQ();
-
-  if (digitalRead(PIN_BUTTON_STOP) == LOW) {
-    g_go_allowed = false;
-    //  reset UI back to defaults
-    g_select_mode = false;
-    uiMode = 0;
+class RfIsr : public IPinChangeNotify {
+public:
+  void pin_change(unsigned char) {
+    rf.onIRQ();
   }
-}
+};
+RfIsr rf_isr;
 
-ISR(PCINT0_vect)
-{
-  ++nInt;
-
-  unsigned char pb = PINB;
-  if (!(pb & 1)) {
-    if (uiMode == 0) {
-      g_go_allowed = true;
-    }
-    else {
-      g_go_pressed = true;
+class StopIsr : public IPinChangeNotify {
+  void pin_change(unsigned char val) {
+    if (val == 0) {
+      g_go_allowed = false;
+      //  reset UI back to defaults
+      g_select_mode = false;
+      uiMode = 0;
     }
   }
+};
+StopIsr stop_isr;
 
-  unsigned char quad = ((pb & 4) ? 1 : 0) | ((pb & 2) ? 2 : 0);
-  if (quad & 2) quad ^= 1;
+class UiIsr : public IPinChangeNotify {
+  void pin_change(unsigned char bitValue) {
+    unsigned char pb = PINB;
+    if (!(pb & 1)) {
+      if (uiMode == 0) {
+        g_go_allowed = true;
+      }
+      else {
+        g_go_pressed = true;
+      }
+    }
 
-  lastQuad = quad;
-  if (((quad - 1) & 3) == prevQuad) {
-    prevQuad = quad;
-    ++selectorValue;
+    unsigned char quad = ((pb & 4) ? 1 : 0) | ((pb & 2) ? 2 : 0);
+    if (quad & 2) quad ^= 1;
+
+    lastQuad = quad;
+    if (((quad - 1) & 3) == prevQuad) {
+      prevQuad = quad;
+      ++selectorValue;
+    }
+    else if (((quad + 1) & 3) == prevQuad) {
+      prevQuad = quad;
+      --selectorValue;
+    }
   }
-  else if (((quad + 1) & 3) == prevQuad) {
-    prevQuad = quad;
-    --selectorValue;
-  }
-}
+};
+UiIsr ui_isr;
 
 #define N_ROWS 12
 #define N_COLS 27
@@ -341,6 +348,12 @@ void setup()
   lcd.setColor(0, 255, 0);
 
   rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);
+
+  on_pinchange(rf.getPinIRQ(), &rf_isr);
+  on_pinchange(PIN_BUTTON_STOP, &stop_isr);
+  on_pinchange(0, &ui_isr);
+  on_pinchange(1, &ui_isr);
+  on_pinchange(2, &ui_isr);
 
   transmit_value(0);
   read_ui(0);

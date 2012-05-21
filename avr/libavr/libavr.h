@@ -115,6 +115,13 @@ void adc_setup(bool use_aref = true);
 bool adc_busy();
 void adc_read(unsigned char channel, void (*cb)(unsigned char val));
 
+/* Pinchange interrupts */
+class IPinChangeNotify {
+public:
+  virtual void pin_change(unsigned char bitValue) = 0;
+};
+void on_pinchange(unsigned char pin, IPinChangeNotify *pcn);
+
 /* your replacement for "main" -- you implement this, and typically 
    set up tasks to run using after(). */
 void setup();

@@ -45,6 +45,7 @@
     <Compile Include="FileWritingWrapper.cs" />
     <Compile Include="FileReadingWrapper.cs" />
     <Compile Include="VoltMeterControl.cs" />
+    <Compile Include="NativeVideoCapture.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -55,5 +56,11 @@
     <Content Include="vumeter-196-57.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NativeVideoCapture\NativeVideoCapture.cproj">
+      <Project>{C7C8D4B2-82A1-44F6-AA95-A8B8637AC752}</Project>
+      <Name>NativeVideoCapture</Name>
+    </ProjectReference>
   </ItemGroup>
 </Project>

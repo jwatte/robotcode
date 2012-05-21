@@ -51,6 +51,11 @@ struct cmd_stop_go : cmd_hdr {
   unsigned char go;
 };
 
+struct SensorOutput {
+  unsigned char irDistance[3];
+  unsigned char usDistance[3];
+};
+
 void get_param_name(ParameterName pn, unsigned char bufsz, char *oData);
 void format_value(cmd_parameter_value const &pv, unsigned char bufsz, char *oData);
 unsigned char param_size(cmd_parameter_value const &cpv);

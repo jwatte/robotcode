@@ -71,6 +71,12 @@ namespace RoboUSBLink
 			voltageStatus.Location = new Point(400, 2);
 			voltageStatus.Text = "???";
 			Controls.Add(voltageStatus);
+
+      testLowVoltage = new Button();
+      testLowVoltage.Location = new Point(600, 2);
+      testLowVoltage.Text = "Simulate Low Voltage";
+      testLowVoltage.Click += (sender, e) => SimulateVoltage(9.4f);
+      Controls.Add(testLowVoltage);
 		}
 		
 		private FlowLayoutPanel rangeLayout;
@@ -79,7 +85,8 @@ namespace RoboUSBLink
 		private VoltMeterControl voltageStatus;
 		private Font smallFont;
 		private Font largeFont;
-		
+		private Button testLowVoltage;
+
 		void HandleDataBoardData (byte board)
 		{
 			AddToEventLog(String.Format("Board Data: {0}", board));
@@ -110,10 +117,48 @@ namespace RoboUSBLink
 		{
 			AddToEventLog(String.Format("Range changed: sensor {0}: {1}", sensor, range));
 		}
-		
+
+    bool hasShutdownWarned;
+    bool isShuttingDown;
+    DateTime shutdownTime;
+
+    void SimulateVoltage(float val)
+    {
+      shutdownTime = DateTime.Now.Subtract(new TimeSpan(0, 2, 0));
+      HandleVoltageChanged(val);
+    }
+
 		void HandleVoltageChanged(float val)
 		{
 			voltageStatus.Value = val;
+      if (val <= 9.5f) {
+        if (!hasShutdownWarned) {
+          AddToEventLog("Voltage too low -- will shut down in 60 seconds!");
+          hasShutdownWarned = true;
+          shutdownTime = DateTime.Now;
+        }
+        else if (!isShuttingDown) {
+          if (DateTime.Now.Subtract(shutdownTime).TotalSeconds >= 60) {
+            AddToEventLog("Voltage too low -- shutting down!");
+            isShuttingDown = true;
+            shutdownTime = DateTime.Now;
+            System.Diagnostics.Process p = new System.Diagnostics.Process();
+            p.EnableRaisingEvents = false;
+            p.StartInfo.FileName = "/usr/local/bin/poweroff";
+            p.Start();
+          }
+        }
+        else if (DateTime.Now.Subtract(shutdownTime).TotalSeconds > 60) {
+          AddToEventLog("Nice shutdown didn't work -- do it the hard way!");
+          hasShutdownWarned = false;
+          isShuttingDown = false;
+            System.Diagnostics.Process p = new System.Diagnostics.Process();
+            p.EnableRaisingEvents = false;
+            p.StartInfo.FileName = "/usr/local/bin/poweroff";
+            p.StartInfo.Arguments = "-f";
+            p.Start();
+        }
+      }
 		}
 		
 		void HandleDebugMessage(string txt)

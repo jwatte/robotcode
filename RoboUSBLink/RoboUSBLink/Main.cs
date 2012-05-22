@@ -5,20 +5,31 @@ using System.Windows.Forms;
 namespace RoboUSBLink {
 	
 	public class RoboUSBLinkMain {
-		public static void Main(string[] args) {
+		public static int Main(string[] args) {
       try {
-        NativeVideoCapture nvc = new NativeVideoCapture("/dev/video0");
-        nvc.Start();
-        nvc.Frame();
-        nvc.Stop();
-        nvc.Dispose();
+        nvc = new NativeVideoCapture("/dev/video0");
       }
       catch (System.Exception x) {
-        MessageBox.Show(x.Message);
+        MessageBox.Show(String.Format("Loading video exception:\n{0}\n{1}", x.GetType().ToString(), x.Message), "Exception");
+        return 1;
       }
 			RoboUSBLinkApp app = new RoboUSBLinkApp();
-			Application.Run(app.MainForm);
+      using (nvc) {
+        Application.Idle += HandleApplicationIdle;
+        nvc.Start();
+  			Application.Run(app.MainForm);
+        nvc.Stop();
+      }
+      return 0;
 		}
+
+    static void HandleApplicationIdle (object sender, EventArgs e)
+    {
+      nvc.Frame();
+    }
+
+    static NativeVideoCapture nvc = null;
+
 	}
 
 }

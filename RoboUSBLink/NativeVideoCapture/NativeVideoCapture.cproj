@@ -20,6 +20,12 @@
     <OutputName>NativeVideoCapture.so</OutputName>
     <CompileTarget>SharedLibrary</CompileTarget>
     <WarningsAsErrors>true</WarningsAsErrors>
+    <Libs>
+      <Libs>
+        <Lib>v4l2</Lib>
+      </Libs>
+    </Libs>
+    <ExtraCompilerArguments>-fPIC</ExtraCompilerArguments>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <OutputPath>bin\Release</OutputPath>

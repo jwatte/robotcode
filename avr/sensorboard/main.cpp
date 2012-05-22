@@ -36,13 +36,11 @@ public:
   unsigned short value_;
   unsigned short readTimer_;
   void startRead() {
-    PORTB |= 0x2;
     //  trigger read signal
     IntDisable idi;
     digitalWrite(pinTrigger_, HIGH);
     udelay(11);
     digitalWrite(pinTrigger_, LOW);
-    PORTB &= ~0x2;
   }
   void pin_change(unsigned char level) {
     if (level) {

@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RoboUSBLink", "RoboUSBLink\RoboUSBLink.csproj", "{D5C78EB6-8B3B-425A-A07C-A0A51B378A67}"
 EndProject
-Project("{2857B73E-F847-4B02-9238-064979017E93}") = "NativeVideoCapture", "NativeVideoCapture\NativeVideoCapture.cproj", "{C7C8D4B2-82A1-44F6-AA95-A8B8637AC752}"
+Project("{2857B73E-F847-4B02-9238-064979017E93}") = "NativeVideoCapture.so", "NativeVideoCapture\NativeVideoCapture.so.cproj", "{C7C8D4B2-82A1-44F6-AA95-A8B8637AC752}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

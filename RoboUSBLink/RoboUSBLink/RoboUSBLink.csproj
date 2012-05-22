@@ -59,9 +59,9 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\NativeVideoCapture\NativeVideoCapture.cproj">
+    <ProjectReference Include="..\NativeVideoCapture\NativeVideoCapture.so.cproj">
       <Project>{C7C8D4B2-82A1-44F6-AA95-A8B8637AC752}</Project>
-      <Name>NativeVideoCapture</Name>
+      <Name>NativeVideoCapture.so</Name>
     </ProjectReference>
   </ItemGroup>
 </Project>

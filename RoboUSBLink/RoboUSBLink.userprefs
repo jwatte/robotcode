@@ -1,14 +1,16 @@
 ﻿<Properties>
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="RoboUSBLink/VoltMeterControl.cs">
+  <MonoDevelop.Ide.Workbench ActiveDocument="RoboUSBLink/LibC.cs">
     <Files>
-      <File FileName="NativeVideoCapture/NativeVideoCapture.cpp" Line="27" Column="25" />
+      <File FileName="NativeVideoCapture/NativeVideoCapture.cpp" Line="231" Column="1" />
       <File FileName="RoboUSBLink/NativeVideoCapture.cs" Line="59" Column="1" />
       <File FileName="RoboUSBLink/SerialPortWrapper.cs" Line="57" Column="1" />
       <File FileName="RoboUSBLink/Main.cs" Line="24" Column="4" />
       <File FileName="RoboUSBLink/RoboBoardModel.cs" Line="1" Column="1" />
       <File FileName="RoboUSBLink/RoboDataModel.cs" Line="153" Column="19" />
       <File FileName="RoboUSBLink/VoltMeterControl.cs" Line="21" Column="33" />
+      <File FileName="RoboUSBLink/LibC.cs" Line="9" Column="19" />
+      <File FileName="RoboUSBLink/RoboUSBLinkForm.cs" Line="153" Column="1" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
@@ -16,7 +18,7 @@
           <Node name="NativeVideoCapture" expanded="True" />
           <Node name="RoboUSBLink" expanded="True">
             <Node name="References" expanded="True" />
-            <Node name="VoltMeterControl.cs" selected="True" />
+            <Node name="LibC.cs" selected="True" />
           </Node>
         </State>
       </Pad>

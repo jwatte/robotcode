@@ -46,6 +46,7 @@
     <Compile Include="FileReadingWrapper.cs" />
     <Compile Include="VoltMeterControl.cs" />
     <Compile Include="NativeVideoCapture.cs" />
+    <Compile Include="LibC.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />

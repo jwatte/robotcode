@@ -142,21 +142,14 @@ namespace RoboUSBLink
             AddToEventLog("Voltage too low -- shutting down!");
             isShuttingDown = true;
             shutdownTime = DateTime.Now;
-            System.Diagnostics.Process p = new System.Diagnostics.Process();
-            p.EnableRaisingEvents = false;
-            p.StartInfo.FileName = "/usr/local/bin/poweroff";
-            p.Start();
+            LibC.system("/usr/local/bin/poweroff");
           }
         }
         else if (DateTime.Now.Subtract(shutdownTime).TotalSeconds > 60) {
           AddToEventLog("Nice shutdown didn't work -- do it the hard way!");
           hasShutdownWarned = false;
           isShuttingDown = false;
-            System.Diagnostics.Process p = new System.Diagnostics.Process();
-            p.EnableRaisingEvents = false;
-            p.StartInfo.FileName = "/usr/local/bin/poweroff";
-            p.StartInfo.Arguments = "-f";
-            p.Start();
+          LibC.system("/usr/local/bin/poweroff -f");
         }
       }
 		}

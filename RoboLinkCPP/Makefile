@@ -1,8 +1,8 @@
 
 CPPFILES:=$(wildcard src/*.cpp)
 OFILES:=$(patsubst %.cpp,bld/%.o,$(CPPFILES))
-CFLAGS:=-g -O1
-LIBS:=-lv4l2
+CFLAGS:=-g -O1 `wx-config --cflags`
+LIBS:=-lv4l2 `wx-config --libs`
 
 bld/RoboLinkCPP:	$(OFILES)
 	g++ -o $@ $(OFILES) $(LIBS)

@@ -1,0 +1,66 @@
+v 20110115 2
+C 40000 40000 0 0 0 title-B.sym
+C 48200 44100 1 0 0 ATmega8-1.sym
+{
+T 48300 48900 5 10 0 0 0 0 1
+footprint=DIP28N
+T 50500 48700 5 10 1 1 0 6 1
+refdes=U?
+T 48300 49700 5 10 0 0 0 0 1
+device=ATmega8
+}
+C 43000 48100 1 0 0 lm317-1.sym
+{
+T 43300 49800 5 10 0 0 0 0 1
+device=LM317
+T 44700 49500 5 10 1 1 0 6 1
+refdes=U?
+}
+C 42300 48400 1 270 0 capacitor-4.sym
+{
+T 43400 48200 5 10 0 0 270 0 1
+device=POLARIZED_CAPACITOR
+T 42800 48100 5 10 1 1 0 0 1
+refdes=C?
+T 43000 48200 5 10 0 0 270 0 1
+symversion=0.1
+}
+C 44900 48400 1 270 0 capacitor-4.sym
+{
+T 46000 48200 5 10 0 0 270 0 1
+device=POLARIZED_CAPACITOR
+T 45400 48100 5 10 1 1 0 0 1
+refdes=C?
+T 45600 48200 5 10 0 0 270 0 1
+symversion=0.1
+}
+C 40600 49300 1 0 0 connector2-1.sym
+{
+T 40800 50300 5 10 0 0 0 0 1
+device=CONNECTOR_2
+T 40600 50100 5 10 1 1 0 0 1
+refdes=CONN?
+}
+C 52800 47100 1 0 0 diode-1.sym
+{
+T 53200 47700 5 10 0 0 0 0 1
+device=DIODE
+T 53100 47600 5 10 1 1 0 0 1
+refdes=D?
+}
+C 54300 46700 1 0 0 header3-1.sym
+{
+T 55300 47350 5 10 0 0 0 0 1
+device=HEADER3
+T 54700 48000 5 10 1 1 0 0 1
+refdes=J?
+}
+C 54300 44500 1 0 0 connector2-2.sym
+{
+T 55000 45800 5 10 1 1 0 6 1
+refdes=CONN?
+T 54600 45750 5 10 0 0 0 0 1
+device=CONNECTOR_2
+T 54600 45950 5 10 0 0 0 0 1
+footprint=SIP2N
+}

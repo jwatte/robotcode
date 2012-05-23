@@ -1,0 +1,5 @@
+Name: NativeVideoCapture.so
+Description: 
+Version: 0.1
+Libs: -L"/usr/local/src/robotcode/RoboUSBLink/NativeVideoCapture/bin/Debug" -lNativeVideoCapture.so
+Cflags: -I""

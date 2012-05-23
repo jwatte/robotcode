@@ -1,6 +1,7 @@
 using System;
 using System.Windows.Forms;
 using System.Drawing;
+using System.Collections.Generic;
 
 namespace RoboUSBLink
 {
@@ -10,7 +11,7 @@ namespace RoboUSBLink
 		{
 			Comm = comm;
 			this.Size = new Size(800, 600);
-			this.DoubleBuffered = true;
+			//this.DoubleBuffered = true;
 			this.Text = "Robot Status";
 			InitFonts();
 			InitControls();
@@ -87,14 +88,41 @@ namespace RoboUSBLink
 		private Font largeFont;
 		private Button testLowVoltage;
 
+    Dictionary<byte, RoboBoardTile> boardTiles = new Dictionary<byte, RoboBoardTile>();
+    Dictionary<byte, RoboBoardModel> boardModels = new Dictionary<byte, RoboBoardModel>();
+
+    RoboBoardModel BoardModel(byte board)
+    {
+      RoboBoardModel ret;
+      if (!boardModels.TryGetValue(board, out ret))
+      {
+        ret = new RoboBoardModel(board);
+        boardModels.Add(board, ret);
+      }
+      return ret;
+    }
+
+    RoboBoardTile BoardTile(byte board)
+    {
+      RoboBoardTile ret;
+      if (!boardTiles.TryGetValue(board, out ret))
+      {
+        ret = new RoboBoardTile(BoardModel(board));
+        boardLayout.Controls.Add(ret);
+        boardTiles.Add(board, ret);
+      }
+      return ret;
+    }
+
 		void HandleDataBoardData (byte board)
 		{
-			AddToEventLog(String.Format("Board Data: {0}", board));
+      RoboBoardModel bm = BoardTile(board).Model;
+      bm.SetOnline(true);
 		}
 
 		void HandleDataBoardOffline (byte board)
 		{
-			AddToEventLog(String.Format("Board Offline: {0}", board));
+      BoardTile(board).Model.SetOnline(false);
 		}
 		
 		void HandleCommOffline()

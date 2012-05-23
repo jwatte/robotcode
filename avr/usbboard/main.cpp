@@ -117,8 +117,10 @@ void setup(void) {
   adc_setup(false);
   uart_setup(115200, F_CPU);
   uart_send_all(1, "O");
-  //after(0, request_from_motor, 0);
-  //after(0, request_from_sensor, 0);
+  after(0, request_from_motor, 0);
+  after(0, request_from_sensor, 0);
+  after(0, request_from_compass_a, 0);
+  after(0, request_from_compass_b, 0);
   after(0, poll_voltage, 0);
 }
 

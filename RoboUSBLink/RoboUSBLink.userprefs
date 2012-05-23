@@ -1,9 +1,14 @@
 ﻿<Properties>
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug|x86" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="RoboUSBLink/SerialPortWrapper.cs">
+  <MonoDevelop.Ide.Workbench ActiveDocument="RoboUSBLink/RoboUSBLinkApp.cs">
     <Files>
-      <File FileName="RoboUSBLink/SerialPortWrapper.cs" Line="47" Column="1" />
+      <File FileName="RoboUSBLink/SerialPortWrapper.cs" Line="1" Column="1" />
       <File FileName="RoboUSBLink/Main.cs" Line="14" Column="42" />
+      <File FileName="RoboUSBLink/RoboBoardModel.cs" Line="1" Column="1" />
+      <File FileName="RoboUSBLink/RoboBoardTile.cs" Line="68" Column="1" />
+      <File FileName="RoboUSBLink/RoboUSBLinkForm.cs" Line="14" Column="6" />
+      <File FileName="RoboUSBLink/RoboUSBLinkApp.cs" Line="70" Column="24" />
+      <File FileName="RoboUSBLink/RoboUSBLinkComm.cs" Line="62" Column="20" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
@@ -11,7 +16,7 @@
           <Node name="NativeVideoCapture.so" expanded="True" />
           <Node name="RoboUSBLink" expanded="True">
             <Node name="References" expanded="True" />
-            <Node name="SerialPortWrapper.cs" selected="True" />
+            <Node name="RoboUSBLinkApp.cs" selected="True" />
           </Node>
         </State>
       </Pad>

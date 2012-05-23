@@ -15,9 +15,8 @@ namespace RoboUSBLink
 			Comm = new RoboUSBLinkComm("/dev/ttyACM0", this.MarshalToMainThread);
 			MainForm = new RoboUSBLinkForm(Comm);
 			MainForm.FormClosing += HandleMainFormFormClosing;
+      MainForm.Load += (sender, e) => Comm.Start();
 			MainForm.Show(null);
-			System.Threading.Thread.Sleep(100);	/* without this, the framework crashes with an invocation exception! */
-			Comm.Start();
 		}
 
 		void HandleMainFormFormClosing (object sender, FormClosingEventArgs e)

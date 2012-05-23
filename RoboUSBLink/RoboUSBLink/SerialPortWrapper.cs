@@ -42,6 +42,8 @@ namespace RoboUSBLink
           return Port.BytesToRead;
         } catch (System.IO.IOException x) {
           Console.WriteLine ("Re-opening port {0}: {1}", Port.PortName, x.Message);
+          //  wait for the port to come back
+          System.Threading.Thread.Sleep(new TimeSpan(100 * 10000L));
           if (open) {
             Port.Close ();
             Port.Open ();

@@ -6,6 +6,7 @@
 
 #include "cmds.h"
 
+#include "../libavr/DefaultFonts.cpp"
 
 
 #define PIN_BUTTON_STOP (16|7)
@@ -105,13 +106,6 @@ inline unsigned char color_b(unsigned char y) {
 
 void lcdDrawChars(char *ptr, unsigned char n, unsigned char y, unsigned char x)
 {
-  unsigned char cix = 0;
-  if (y > 50) {
-    cix = 1;
-  }
-  if (y > 100) {
-    cix = 2;
-  }
   lcd.setColor(color_r(y), color_g(y), color_b(y));
   char buf[N_COLS+1];
   memcpy(buf, ptr, n);

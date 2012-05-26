@@ -1,6 +1,6 @@
 #if defined(__AVR__)
 	#include <avr/pgmspace.h>
-	#define fontdatatype uint8_t
+	#define fontdatatype uint8_t const
 #else
 	#define PROGMEM
 	#define fontdatatype const unsigned char
@@ -240,4 +240,5 @@ fontdatatype SevenSegNumFont[2004] PROGMEM = {
 };
 
 #endif
+
 

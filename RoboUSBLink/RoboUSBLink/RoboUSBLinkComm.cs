@@ -25,7 +25,15 @@ namespace RoboUSBLink
 			{
 				throw new InvalidOperationException("Can't start a running RoboUSBLinkComm");
 			}
-			port.Open();
+			try {
+				port.Open();
+			}
+			catch (System.IO.IOException x) {
+				System.Windows.Forms.MessageBox.Show(String.Format (
+					"Could not open port {0}\n{1}", port.Name(), x.Message));
+				System.Windows.Forms.Application.Exit();
+				return;
+			}
 			port.DiscardInBuffer();
 			running = true;
 			thread = new Thread(new ThreadStart(this.PortThread));

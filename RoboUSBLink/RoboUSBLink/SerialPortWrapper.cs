@@ -52,6 +52,10 @@ namespace RoboUSBLink
         }
       }
     }
+	
+	public string Name() {
+		return Port.PortName;
+	}
 		#endregion
   }
 }

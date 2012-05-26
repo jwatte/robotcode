@@ -92,6 +92,10 @@ namespace RoboUSBLink
                 return bufCount - bufBase;
             }
         }
+		
+		public string Name() {
+			return this.FileName;
+		}
 
      #endregion
 

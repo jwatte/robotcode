@@ -111,16 +111,19 @@ void poll_voltage(void *)
 
 void setup(void) {
   fatal_set_blink(&blink);
-  setup_timers(F_CPU);
   pinMode(LED_PIN, OUTPUT);
-  twi = start_twi_master(&twiMaster);
-  adc_setup(false);
+  digitalWrite(LED_PIN, HIGH);
+  setup_timers(F_CPU);
   uart_setup(115200, F_CPU);
   uart_send_all(1, "O");
+  delay(200);
+  digitalWrite(LED_PIN, LOW);
+  twi = start_twi_master(&twiMaster);
+  adc_setup(false);
   after(0, request_from_motor, 0);
   after(0, request_from_sensor, 0);
-  after(0, request_from_compass_a, 0);
-  after(0, request_from_compass_b, 0);
+  //after(0, request_from_compass_a, 0);
+  //after(0, request_from_compass_b, 0);
   after(0, poll_voltage, 0);
 }
 

@@ -9,6 +9,7 @@ namespace RoboUSBLink
 		int BytesToRead { get; }
 		int Read(byte[] dst, int offset, int count);
 		void Close();
+		string Name();
 	}
 }
 

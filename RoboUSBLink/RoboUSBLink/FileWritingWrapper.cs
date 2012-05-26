@@ -57,6 +57,9 @@ namespace RoboUSBLink
 			}
 		}
 
+	public string Name() {
+		return this.FileName;
+	}
 		#endregion
 
 		protected void WriteHeader()

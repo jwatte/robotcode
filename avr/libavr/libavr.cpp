@@ -36,8 +36,7 @@ void fatal(int err)
   else if (nIter > 300) {
     nIter = 300;
   }
-  while (true)
-  {
+  while (true) {
     if (err >= FATAL_TWI_ERROR_BASE) {
       /* just blink madly! */
       (*g_fatal_blink)(true);

@@ -1,8 +1,8 @@
 
 APPS:=robolink
 
-CPP_CFLAGS:=$(sort -O0 -g $(shell fltk-config --cxxflags))
-CPP_LFLAGS:=$(sort $(shell fltk-config --ldflags))
+CPP_CFLAGS:=$(sort -O0 -g $(filter-out -O%,$(shell fltk-config --use-images --cxxflags)))
+CPP_LFLAGS:=$(sort $(shell fltk-config --use-images --ldflags))
 CPP_SRCS:=$(foreach app,$(APPS),$(wildcard $(app)/*.cpp))
 CPP_OBJS:=$(patsubst %.cpp,bld/obj/%.o,$(CPP_SRCS))
 
@@ -41,7 +41,7 @@ endef
 $(foreach avrbin,$(AVR_BINS),$(eval $(call mkavrbin,$(avrbin))))
 
 define filter_avr_cflags
-$(if $(findstring DefaultFonts,$(1)),$(filter-out -Os,$(2)),$(2))
+$(if $(findstring DefaultFonts,$(1)),$(filter-out -O3,$(2)),$(2))
 endef
 
 bld/avrobj/%.o:	avr/%.cpp

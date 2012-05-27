@@ -45,12 +45,16 @@ public:
       bufend = n;
     }
     bufptr = 0;
+    long l = 0;
     while (!(TWCR & (1 << TWINT))) {
       // wait for the bus
+      if (++l > 100000) {
+        fatal(FATAL_BUS_ERROR);
+      }
     }
     unsigned char twsr = (TWSR & 0xf8);
     if ((twsr != TW_START) && (twsr != TW_REP_START)) {
-      fatal(TW_BUS_ERROR);
+      fatal(FATAL_BUS_ERROR);
     }
     TWDR = (addr << 1) | TW_WRITE;
     TWCR = READY_MASTER;
@@ -70,12 +74,16 @@ public:
     TWCR = (1 << TWINT) | (1 << TWSTA) | (1 << TWEN);
     bufptr = 0;
     bufend = 0;
+    long l = 0;
     while (!(TWCR & (1 << TWINT))) {
       // wait for the bus
+      if (++l > 100000) {
+        fatal(FATAL_BUS_ERROR);
+      }
     }
     unsigned char twsr = (TWSR & 0xf8);
     if ((twsr != TW_START) && (twsr != TW_REP_START)) {
-      fatal(TW_BUS_ERROR);
+      fatal(FATAL_BUS_ERROR);
     }
     TWDR = (addr << 1) | TW_READ;
     TWCR = READY_MASTER;
@@ -251,7 +259,7 @@ ISR(TWI_vect)
 */
   default:
     /* these should not happen */
-    fatal(status);
+    fatal(status ? status : FATAL_BUS_ERROR);
     break;
   }
 }

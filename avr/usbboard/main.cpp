@@ -86,6 +86,14 @@ void request_from_sensor(void *)
   after(d, request_from_sensor, 0);
 }
 
+void request_from_usbboard(void *)
+{
+    char data[3] = { 'D', NodeUSBInterface, 0 };
+    uart_send_all(3, data);
+    after(1000, request_from_usbboard, 0);
+}
+
+
 unsigned char map_voltage(unsigned char val)
 {
   if (val == 255) {
@@ -122,6 +130,7 @@ void setup(void) {
   adc_setup(false);
   after(0, request_from_motor, 0);
   after(0, request_from_sensor, 0);
+  after(0, request_from_usbboard, 0);
   //after(0, request_from_compass_a, 0);
   //after(0, request_from_compass_b, 0);
   after(0, poll_voltage, 0);

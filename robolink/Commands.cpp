@@ -3,6 +3,7 @@
 
 #include "Commands.h"
 #include "Board.h"
+#include "Voltage.h"
 
 
 /* UART protocol:
@@ -36,12 +37,14 @@ void do_online(char const *buf, int nsize)
 void do_fatal(char const *buf, int nsize)
 {
     fprintf(stderr, "fatal 0x%02x\n", (unsigned char)buf[1]);
+    Board *b = Board::board_by_id((BoardId)bidUsbLink);
+    b->dead((unsigned char)buf[1]);
 }
 
 void do_nodedata(char const *buf, int nsize)
 {
     Board *b = Board::board_by_id((BoardId)buf[1]);
-    b->on_data(buf + 2, nsize - 2);
+    b->on_data(buf + 3, nsize - 3);
 }
 
 void do_nodenak(char const *buf, int nsize)
@@ -56,7 +59,9 @@ void do_range(char const *buf, int nsize)
 
 void do_voltage(char const *buf, int nsize)
 {
-    fprintf(stderr, "voltage %.2f\n", (unsigned char)buf[1] / 16.0f);
+    float v = (unsigned char)buf[1] / 16.0f;
+    fprintf(stderr, "voltage %.2f\n", v);
+    voltage.on_voltage(v);
 }
 
 void do_debug(char const *buf, int nsize)
@@ -69,7 +74,7 @@ void do_debug(char const *buf, int nsize)
 format codes[] = {
     { 'O', 1, 0, do_online },
     { 'F', 2, 0, do_fatal },
-    { 'D', 2, 2, do_nodedata },
+    { 'D', 3, 2, do_nodedata },
     { 'N', 2, 0, do_nodenak },
     { 'R', 3, 0, do_range },
     { 'V', 2, 0, do_voltage },

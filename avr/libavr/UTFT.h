@@ -120,7 +120,7 @@ struct _current_font
 	uint8_t offset;
 	uint8_t numchars;
 };
-extern uint8_t const SmallFont[] PROGMEM;
+extern unsigned char const SmallFont[] PROGMEM;
 
 template<byte model> struct typemodes;
 template<> struct typemodes<HX8347A> {

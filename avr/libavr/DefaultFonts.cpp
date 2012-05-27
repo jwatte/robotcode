@@ -1,10 +1,10 @@
 #if defined(__AVR__)
 	#include <avr/pgmspace.h>
-	#define fontdatatype uint8_t const
 #else
 	#define PROGMEM
-	#define fontdatatype const unsigned char
 #endif
+
+#define fontdatatype const unsigned char
 
 // SmallFont.c 
 // Font Size	: 8x12

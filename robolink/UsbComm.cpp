@@ -25,7 +25,7 @@ bool UsbComm::open()
 {
     if (fd_ < 0)
     {
-        fd_ = ::open(name_, O_RDWR);
+        fd_ = ::open(name_, O_RDWR | O_NONBLOCK);
         if (fd_ < 0)
         {
             perror("open()");

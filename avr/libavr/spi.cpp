@@ -20,16 +20,16 @@ void enable_spi()
 
 void disable_spi()
 {
-  SPCR &= ~(1 << SPE);
-  PRR |= (1 << PRSPI);
+    SPCR &= ~(1 << SPE);
+    PRR |= (1 << PRSPI);
 }
 
 uint8_t shift_spi(uint8_t val)
 {
-  SPDR = val;
-  while (!(SPSR & (1 << SPIF))) {
-    /* busy wait */;
-  }
-  return SPDR;
+    SPDR = val;
+    while (!(SPSR & (1 << SPIF))) {
+        /* busy wait */;
+    }
+    return SPDR;
 }
 

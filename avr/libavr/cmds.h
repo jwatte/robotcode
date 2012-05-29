@@ -11,49 +11,49 @@
 #define CMD_STOP_GO 2
 
 enum ParameterType {
-  TypeNone,
-  TypeByte,
-  TypeShort,
-  TypeString,
-  TypeLong,
-  TypeRaw
+    TypeNone,
+    TypeByte,
+    TypeShort,
+    TypeString,
+    TypeLong,
+    TypeRaw
 };
 enum ParameterName {
-  ParamGoAllowed,
-  ParamMotorPower,
-  ParamSteerAngle,
-  ParamEEDump,
-  ParamTuneSteering,
-  ParamTunePower,
-  ParamVoltage,
-  ParamMax
+    ParamGoAllowed,
+    ParamMotorPower,
+    ParamSteerAngle,
+    ParamEEDump,
+    ParamTuneSteering,
+    ParamTunePower,
+    ParamVoltage,
+    ParamMax
 };
 enum Node {
-  NodeAny,
-  NodeMotorPower,
-  NodeEstop,
-  NodeSensorInput,
-  NodeUSBInterface
+    NodeAny,
+    NodeMotorPower,
+    NodeEstop,
+    NodeSensorInput,
+    NodeUSBInterface
 };
 
 struct cmd_hdr {
-  unsigned char cmd;
-  unsigned char fromNode;
-  unsigned char toNode;
+    unsigned char cmd;
+    unsigned char fromNode;
+    unsigned char toNode;
 };
 struct cmd_parameter_value : cmd_hdr {
-  unsigned char parameter;
-  unsigned char type;
-  unsigned char value[27];
+    unsigned char parameter;
+    unsigned char type;
+    unsigned char value[27];
 };
 
 struct cmd_stop_go : cmd_hdr {
-  unsigned char go;
+    unsigned char go;
 };
 
 struct SensorOutput {
-  unsigned char irDistance[3];
-  unsigned char usDistance[3];
+    unsigned char irDistance[3];
+    unsigned char usDistance[3];
 };
 
 void get_param_name(ParameterName pn, unsigned char bufsz, char *oData);

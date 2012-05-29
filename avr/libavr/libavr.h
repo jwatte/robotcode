@@ -2,7 +2,7 @@
 #define libavr_h
 
 #if !defined(F_CPU)
-  #define F_CPU 8000000
+#define F_CPU 8000000
 #endif
 
 #include <inttypes.h>
@@ -41,20 +41,20 @@ typedef bool boolean;
 
 enum
 {
-  FATAL_OUT_OF_AFTERS = 1,
-  FATAL_TASK_TOOK_TOO_LONG = 2,
-  FATAL_BAD_PIN_ARG = 3,
-  FATAL_TOO_LONG_DELAY = 4,
-  FATAL_ADC_BUSY = 5,
-  FATAL_BAD_SERIAL = 6,
-  FATAL_BAD_PARAM = 7,
-  FATAL_BAD_USAGE = 8,
-  FATAL_TWI_NO_INFO = 9,
-  FATAL_TWI_SEND_TOO_BIG = 10,
-  FATAL_TWI_NO_USER = 11,
-  FATAL_PURE_VIRTUAL = 12,
-  FATAL_BUS_ERROR = 13,
-  FATAL_TWI_ERROR_BASE = 0x18
+    FATAL_OUT_OF_AFTERS = 1,
+    FATAL_TASK_TOOK_TOO_LONG = 2,
+    FATAL_BAD_PIN_ARG = 3,
+    FATAL_TOO_LONG_DELAY = 4,
+    FATAL_ADC_BUSY = 5,
+    FATAL_BAD_SERIAL = 6,
+    FATAL_BAD_PARAM = 7,
+    FATAL_BAD_USAGE = 8,
+    FATAL_TWI_NO_INFO = 9,
+    FATAL_TWI_SEND_TOO_BIG = 10,
+    FATAL_TWI_NO_USER = 11,
+    FATAL_PURE_VIRTUAL = 12,
+    FATAL_BUS_ERROR = 13,
+    FATAL_TWI_ERROR_BASE = 0x18
 };
 
 /* calling fatal stops the program cold, recording the reason code in eeprom  */
@@ -80,20 +80,20 @@ extern int volatile globalctr;
 /* TWI interface */
 
 class ITWIMaster {
-public:
-  virtual void data_from_slave(unsigned char n, void const *data) = 0;
-  virtual void nack() = 0;
+    public:
+        virtual void data_from_slave(unsigned char n, void const *data) = 0;
+        virtual void nack() = 0;
 };
 class ITWISlave {
-public:
-  virtual void data_from_master(unsigned char n, void const *data) = 0;
-  virtual void request_from_master(void *o_buf, unsigned char &o_size) = 0;
+    public:
+        virtual void data_from_master(unsigned char n, void const *data) = 0;
+        virtual void request_from_master(void *o_buf, unsigned char &o_size) = 0;
 };
 class TWIMaster {
-public:
-  virtual bool is_busy() = 0;
-  virtual void send_to(unsigned char n, void const *data, unsigned char addr) = 0;
-  virtual void request_from(unsigned char addr) = 0;
+    public:
+        virtual bool is_busy() = 0;
+        virtual void send_to(unsigned char n, void const *data, unsigned char addr) = 0;
+        virtual void request_from(unsigned char addr) = 0;
 };
 /*  Call start_twi_master() to become a master. If you were a slave, that's shut down. */
 TWIMaster *start_twi_master(ITWIMaster *m);
@@ -118,8 +118,8 @@ void adc_read(unsigned char channel, void (*cb)(unsigned char val));
 
 /* Pinchange interrupts */
 class IPinChangeNotify {
-public:
-  virtual void pin_change(unsigned char bitValue) = 0;
+    public:
+        virtual void pin_change(unsigned char bitValue) = 0;
 };
 void on_pinchange(unsigned char pin, IPinChangeNotify *pcn);
 

@@ -24,7 +24,7 @@
 
 
 
-Board &motorPower = *new Board(bidMotorPower);
+MotorPowerBoard &motorPower = *new MotorPowerBoard();
 Board &estop = *new Board(bidEstop);
 Board &sensors = *new Board(bidSensors);
 Board &usbLink = *new Board(bidUsbLink);
@@ -44,13 +44,13 @@ void on_uc(int fd, void *ucp)
 
 int main(int argc, char const *argv[])
 {
-    Fl::visual(FL_RGB);
+    Fl::visual(FL_RGB|FL_DOUBLE);
     fl_register_images();
     Fl_Window *win = new Fl_Window(1280, 720);
     Fl_Pack *pack = new Fl_Pack(5, 20, 1270, 200);
     pack->type(Fl_Pack::HORIZONTAL);
     pack->spacing(5);
-    (new BoardTile(&motorPower))->make_widgets();
+    (new MotorPowerBoardTile(&motorPower))->make_widgets();
     (new BoardTile(&estop))->make_widgets();
     (new BoardTile(&sensors))->make_widgets();
     (new BoardTile(&usbLink))->make_widgets();

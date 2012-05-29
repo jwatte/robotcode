@@ -55,7 +55,27 @@ void BoardTile::make_widgets()
     data_->box(FL_BORDER_FRAME);
     dataBuf_ = new Fl_Text_Buffer();
     data_->buffer(dataBuf_);
+
+    make_widgets_inner();
+
     group_->end();
 }
 
+void BoardTile::make_widgets_inner()
+{
+}
+
+
+
+
+
+
+MotorPowerBoardTile::MotorPowerBoardTile(MotorPowerBoard *mpb) :
+    BoardTile(mpb)
+{
+}
+
+void MotorPowerBoardTile::make_widgets_inner()
+{
+}
 

@@ -8,6 +8,7 @@
 
 /*  less than 6.5V in the battery pack, and I can't run. */
 #define THRESHOLD_VOLTAGE 0x68
+#define VOLTAGE_SCALER 102  //  was 109
 
 /* For some reason, running the servo on PWM is not very clean. */
 /* Perhaps an approach that uses timer1 interrupts for high resolution */
@@ -57,7 +58,7 @@ void read_tuning()
   eeprom_read_block(&g_tuning, (void const *)EE_TUNING, sizeof(g_tuning));
   if (g_tuning.cksum != calc_cksum(sizeof(g_tuning)-1, &g_tuning)) {
     memset(&g_tuning, 0, sizeof(g_tuning));
-    g_tuning.d_steer = -10;
+    g_tuning.d_steer = -20;
     g_tuning.m_power = 128;
     write_tuning();
   }
@@ -221,27 +222,6 @@ void set_motor_power(int power)
   update_motor_power();
 }
 
-void set_motor(void *v)
-{
-  switch ((int)v) {
-  default:
-    v = 0;
-  case 0:
-    set_motor_power(0);
-    break;
-  case 1:
-    set_motor_power(192);
-    break;
-  case 2:
-    set_motor_power(-255);
-    break;
-  case 3:
-    set_motor_power(255);
-    break;
-  }
-  after(3000, &set_motor, (void *)((int)v + 1));
-}
-
 unsigned char g_steering_angle = 90;
 
 unsigned char tuned_angle()
@@ -303,13 +283,16 @@ void poll_button(void *)
 {
   if (!(PIND & (1 << PD2))) {
     g_local_stop++;
+    update_motor_power();
   }
   else if (g_local_stop > 20) {
     //  start again by holding for 2 seconds
     g_local_stop = 0;
+    update_motor_power();
   }
   else if (g_local_stop > 0) {
     g_local_stop = 1;
+    update_motor_power();
   }
   after(100, &poll_button, 0);
 }
@@ -345,6 +328,7 @@ void dispatch_cmd(unsigned char n, char const *data)
         break;
       }
     }
+    update_motor_power();
   }
 }
 
@@ -461,12 +445,13 @@ void poll_power(void *);
 void poll_power_result(void *)
 {
   //  8 bits -- just read high half
-  unsigned short adcValue = (unsigned short)ADCH;
-  g_voltage = adcValue * 64 / 109;
+  unsigned short adcValue = (unsigned short)(unsigned char)ADCH;
+  g_voltage = (adcValue << 6) / VOLTAGE_SCALER;
   if (g_voltage < THRESHOLD_VOLTAGE) {
     //  stopping locally -- out of juice!
     g_local_stop = true;
   }
+  update_motor_power();
   after(500, &poll_power, 0);
 }
 
@@ -486,9 +471,10 @@ public:
     hasTWIData = true;
   }
   virtual void request_from_master(void *o_buf, unsigned char &o_size) {
-    sprintf((char *)o_buf, "%02x %02x %02x", g_voltage,
-      (unsigned char)(g_motor_desired_power >> 1), g_motor_actual_power);
-    o_size = 8;
+    ((char *)o_buf)[0] = g_voltage;
+    ((char *)o_buf)[1] = (unsigned char)(g_motor_desired_power >> 1);
+    ((char *)o_buf)[2] = g_motor_actual_power;
+    o_size = 3;
   }
 };
 MySlave twiSlave;
@@ -508,7 +494,6 @@ void setup()
   start_twi_slave(&twiSlave, NodeMotorPower);
   //  kick off the chain of tasks
   update_servo(0);
-  set_motor(0);
   poll_radio(0);
   slow_bits_update(0);
   poll_button(0);

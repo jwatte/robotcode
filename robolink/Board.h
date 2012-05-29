@@ -2,6 +2,7 @@
 #define Board_h
 
 #include "Talker.h"
+#include "Value.h"
 
 enum BoardId
 {
@@ -31,6 +32,18 @@ public:
 
     static Board *board_by_id(BoardId id);
 };
+
+class MotorPowerBoard : public Board
+{
+public:
+    MotorPowerBoard();
+    virtual void on_data(char const *data, int nsize);
+
+    Value<unsigned char> voltage_;
+    Value<char> power_;
+    Value<char> steering_;
+};
+
 
 #endif  //  Board_h
 

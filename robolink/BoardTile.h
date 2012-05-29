@@ -9,6 +9,7 @@
 #include <FL/Fl_Text_Buffer.H>
 
 class Board;
+class MotorPowerBoard;
 
 class BoardTile : public Listener
 {
@@ -25,8 +26,22 @@ public:
     Fl_Text_Buffer *dataBuf_;
     char codeText_[10];
     char dataText_[64 * 3 + 1];
+
     static Fl_Image *online_;
     static Fl_Image *offline_;
+
+protected:
+    virtual void make_widgets_inner();
+};
+
+
+class MotorPowerBoardTile : public BoardTile
+{
+public:
+    MotorPowerBoardTile(MotorPowerBoard *board);
+
+protected:
+    void make_widgets_inner();
 };
 
 #endif  //  BoardTile_h

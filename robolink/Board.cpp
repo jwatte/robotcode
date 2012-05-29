@@ -70,3 +70,24 @@ char const *Board::label()
     return boardLabels_[id_];
 }
 
+
+
+
+
+
+MotorPowerBoard::MotorPowerBoard() :
+    Board(bidMotorPower),
+    voltage_(0),
+    power_(1),
+    steering_(2)
+{
+}
+
+void MotorPowerBoard::on_data(char const *data, int nsize)
+{
+    Board::on_data(data, nsize);
+    voltage_.step(data_);
+    power_.step(data_);
+    steering_.step(data_);
+}
+

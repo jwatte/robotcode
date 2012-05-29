@@ -8,13 +8,17 @@
 class Voltage
 {
 public:
-    void on_voltage(float v);
+    void on_main_voltage(float v);
+    void on_motor_voltage(float v);
     void make_widgets();
 
     Fl_Group *group_;
-    Fl_Dial *dial_;
-    Fl_Box *text_;
-    char volts_[8];
+    Fl_Dial *dialMainPower_;
+    Fl_Box *textMainPower_;
+    Fl_Dial *dialMotorPower_;
+    Fl_Box *textMotorPower_;
+    char voltsMain_[8];
+    char voltsMotor_[8];
     bool timer_;
 };
 

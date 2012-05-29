@@ -96,15 +96,15 @@ unsigned char state = 0;
 
 void blink_laser(void *p)
 {
-    static unsigned char pins[8] = {
-        0, 1, 3, 7, 7, 6, 4, 0
+    static unsigned char pins[4] = {
+        7, 6, 5, 3, 
     };
     unsigned char val = pins[state];
-    state = (state + 1) & 7;
+    state = (state + 1) & 3;
     digitalWrite(0, (val & 1) ? HIGH : LOW);
     digitalWrite(6, (val & 2) ? HIGH : LOW);
     digitalWrite(7, (val & 4) ? HIGH : LOW);
-    after(200, blink_laser, 0);
+    after(100, blink_laser, 0);
 }
 
 class Slave : public ITWISlave {

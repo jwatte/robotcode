@@ -19,6 +19,8 @@
 #include "Parser.h"
 #include "BoardTile.h"
 #include "Voltage.h"
+#include "VideoCapture.h"
+#include "ImageDisplay.h"
 
 
 
@@ -42,6 +44,16 @@ void on_uc(int fd, void *ucp)
     }
 }
 
+VideoCapture *vcap0;
+VideoCapture *vcap1;
+
+void cap_callback(void *)
+{
+    vcap0->step();
+    vcap1->step();
+    Fl::add_timeout(0.025, &cap_callback, 0);
+}
+
 int main(int argc, char const *argv[])
 {
     Fl::visual(FL_RGB|FL_DOUBLE);
@@ -56,6 +68,10 @@ int main(int argc, char const *argv[])
     (new BoardTile(&usbLink))->make_widgets();
     voltage.make_widgets();
     pack->end();
+    ImageDisplay *id0 = new ImageDisplay();
+    id0->box_->resize(10, 232, 1280/4, 720/4);
+    ImageDisplay *id1 = new ImageDisplay();
+    id1->box_->resize(340, 232, 1280/4, 720/4);
     win->end();
     win->show();
     UsbComm uc("/dev/ttyACM0");
@@ -63,7 +79,12 @@ int main(int argc, char const *argv[])
     {
         return 1;
     }
+    vcap0 = new VideoCapture("/dev/video0");
+    id0->set_source(vcap0);
+    vcap1 = new VideoCapture("/dev/video1");
+    id1->set_source(vcap1);
     Fl::add_fd(uc.fd_, on_uc, &uc);
+    Fl::add_timeout(0.025, &cap_callback, 0);
     return Fl::run();
 }
 

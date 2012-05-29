@@ -8,7 +8,8 @@
 
 /*  less than 6.5V in the battery pack, and I can't run. */
 #define THRESHOLD_VOLTAGE 0x68
-#define VOLTAGE_SCALER 102  //  was 109
+#define OFF_VOLTAGE 0x65
+#define VOLTAGE_SCALER 105  //  was 109
 
 /* For some reason, running the servo on PWM is not very clean. */
 /* Perhaps an approach that uses timer1 interrupts for high resolution */
@@ -17,6 +18,8 @@
 
 #define LED_GO_B (1 << PB0)
 #define LED_PAUSE_D (1 << PD7)
+
+#define POWEROFF_PIN (8|0)
 
 nRF24L01<false, 0|7, 16|4, 0|6> rf;
 
@@ -451,6 +454,9 @@ void poll_power_result(void *)
         //  stopping locally -- out of juice!
         g_local_stop = true;
     }
+    if (g_voltage < OFF_VOLTAGE) { //   don't over-discharge
+        digitalWrite(POWEROFF_PIN, HIGH);
+    }
     update_motor_power();
     after(500, &poll_power, 0);
 }
@@ -488,6 +494,8 @@ void setup()
     setup_buttons();
     setup_power();
     uart_setup(115200, F_CPU);
+    digitalWrite(POWEROFF_PIN, LOW);
+    pinMode(POWEROFF_PIN, OUTPUT);
     delay(100); //  wait for radio to boot
     rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);
     on_pinchange(rf.getPinIRQ(), &rf_int);

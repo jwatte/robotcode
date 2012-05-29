@@ -2,7 +2,7 @@
 APPS:=robolink
 
 CPP_CFLAGS:=$(sort -O0 -g $(filter-out -O%,$(shell fltk-config --use-images --cxxflags)))
-CPP_LFLAGS:=$(sort $(shell fltk-config --use-images --ldflags)) -lv4l2
+CPP_LFLAGS:=-ljpeg $(sort $(shell fltk-config --use-images --ldflags)) -lv4l2
 CPP_SRCS:=$(foreach app,$(APPS),$(wildcard $(app)/*.cpp))
 CPP_OBJS:=$(patsubst %.cpp,bld/obj/%.o,$(CPP_SRCS))
 

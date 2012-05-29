@@ -33,6 +33,7 @@ void BoardTile::invalidate()
     image_->image(board_->online_ ? online_ : offline_);
     sprintf(codeText_, "0x%02x", board_->code_);
     code_->label(codeText_);
+    code_->labelcolor(board_->code_ ? FL_RED : FL_BLACK);
     for (size_t i = 0; i != board_->dataSize_; ++i)
     {
         sprintf(&dataText_[i * 3], "%02x%c", (unsigned char)board_->data_[i],
@@ -52,6 +53,7 @@ void BoardTile::make_widgets()
     data_ = new Fl_Text_Display(75, 1, TILE_WIDTH - 76, 30);
     data_->textsize(10);
     data_->textfont(FL_COURIER);
+    data_->color(FL_GRAY);
     data_->box(FL_BORDER_FRAME);
     dataBuf_ = new Fl_Text_Buffer();
     data_->buffer(dataBuf_);

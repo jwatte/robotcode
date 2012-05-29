@@ -10,7 +10,7 @@
 
 void shutdown(void *)
 {
-    system("killall lxsession");
+    system("killall -9 lxsession");
 }
 
 
@@ -39,10 +39,15 @@ void Voltage::on_motor_voltage(float v)
     dialMotorPower_->value(v);
     if (v <= MOTOR_VOLTAGE_THRESHOLD)
     {
-        textMotorPower_->label("DEAD!");
         textMotorPower_->labelcolor(0xff000000);
-        dialMotorPower_->color(0xffff0000);
-        dialMotorPower_->color2(0x00ffff00);
+        dialMotorPower_->color(FL_YELLOW);
+        dialMotorPower_->color2(FL_CYAN);
+    }
+    else
+    {
+        textMotorPower_->labelcolor(0x00000000);
+        dialMotorPower_->color(FL_BLUE);
+        dialMotorPower_->color2(FL_YELLOW);
     }
 }
 

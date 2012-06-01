@@ -47,6 +47,7 @@ void Board::on_data(char const *data, int nsize)
 
 void Board::on_nak()
 {
+    fprintf(stderr, "Board %d: nak\n", id_);
     online_ = false;
     invalidate();
 }

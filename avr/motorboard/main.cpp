@@ -444,6 +444,7 @@ void setup_power()
 }
 
 void poll_power(void *);
+unsigned char n_badVoltage = 0;
 
 void poll_power_result(void *)
 {
@@ -454,8 +455,14 @@ void poll_power_result(void *)
         //  stopping locally -- out of juice!
         g_local_stop = true;
     }
+    else {
+        n_badVoltage = 0;
+    }
     if (g_voltage < OFF_VOLTAGE) { //   don't over-discharge
-        digitalWrite(POWEROFF_PIN, HIGH);
+        ++n_badVoltage;
+        if (n_badVoltage > 4) {
+            digitalWrite(POWEROFF_PIN, HIGH);
+        }
     }
     update_motor_power();
     after(500, &poll_power, 0);

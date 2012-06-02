@@ -7,6 +7,12 @@
 #include "spi.h"
 #include "libavr.h"
 
+typedef enum {
+    IdleMode,
+    ReadMode,
+    WriteMode
+} ChipMode;
+
 template<
   bool InstallIRQ = true,
   byte IRQ = 16|6,
@@ -15,12 +21,6 @@ template<
   byte MAX_PAYLOAD = 32>
 class nRF24L01 {
 public:
-  typedef enum {
-    IdleMode,
-    ReadMode,
-    WriteMode
-  } ChipMode;
-
   nRF24L01() {
     initVars();
   }
@@ -64,8 +64,6 @@ public:
       //  max power!
       setRegister(NRF_RF_SETUP, (3 << NRF_RF_PWR) | (1 << NRF_LNA_HCURR));
 
-      //  clear any interrupts
-      setRegister(NRF_STATUS, 0x70);
       //  setup rx addrs
       unsigned char addr[5] = { 0x69, 0x09, 0x28,
         (unsigned char)(addrRecv >> 8), (unsigned char)addrRecv };
@@ -73,6 +71,8 @@ public:
       setRegister(NRF_TX_ADDR, 5, addr);
       //  enable dynamic payload length for pipe 0
       setRegister(NRF_DYNPD, (1 << NRF_DPL_P0));
+      //  clear any interrupts
+      setRegister(NRF_STATUS, 0x70);
     }
 
     //  wait for crystal to stabilize
@@ -102,7 +102,7 @@ public:
   void onIRQ() {
     debugBits_ |= 8;
     if (!digitalRead(IRQ)) {
-      debugBits_ |= 0x80;
+      debugBits_ |= 0x10;
       digitalWrite(CE, LOW);
       uint8_t ui = getRegister(NRF_STATUS) & 0x70;
       //  clear interrupts
@@ -187,7 +187,7 @@ private:
 
     ChipMode newMode = theMode_;
     if (irqBits & (1 << NRF_MAX_RT)) {
-      debugBits_ |= 0x10;
+      debugBits_ |= 0x80;
       lostPacket_ = true;
       newMode = ReadMode;
       sendCommand(NRF_FLUSH_TX);
@@ -294,7 +294,6 @@ private:
     IntDisable idi;
     digitalWrite(CE, LOW);
     debugBits_ |= 4;
-    digitalWrite(CE, LOW);
     rCONFIG_ &= ~(1 << NRF_PRIM_RX);
     rCONFIG_ |= (1 << NRF_PWR_UP);
     setRegister(NRF_CONFIG, rCONFIG_);

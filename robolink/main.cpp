@@ -74,7 +74,7 @@ int main(int argc, char const *argv[])
     id1->box_->resize(340, 232, 1280/4, 720/4);
     win->end();
     win->show();
-    UsbComm uc("/dev/ttyACM0");
+    UsbComm uc("/dev/ttyACM2");
     if (!uc.open())
     {
         return 1;

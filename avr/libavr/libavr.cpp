@@ -451,6 +451,8 @@ void adc_read(unsigned char channel, void (*cb)(unsigned char val)) {
     _adc_cb = cb;
     ADMUX = (ADMUX & 0xf0) | channel;
     DIDR0 |= (1 << channel);  //  disable ADC input as digital
+    DDRC &= ~(1 << channel);
+    PORTC &= ~(1 << channel);
     ADCSRA = ADCSRA | (1 << ADSC) | (1 << ADIF) | (1 << ADIE);  //  start conversion, clear interrupt flag, enable interrupt
 }
 

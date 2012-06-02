@@ -3,31 +3,6 @@
 #include "cmds.h"
 #include "libavr.h"
 
-char const pnGoOK[] PROGMEM = "GoOK";
-char const pnMPower[] PROGMEM = "MPower";
-char const pnSteer[] PROGMEM = "Steer";
-char const pnEEDump[] PROGMEM = "EEDump";
-char const pnTuneSteering[] PROGMEM = "TSteer";
-char const pnTunePower[] PROGMEM = "TPower";
-char const pnVoltage[] PROGMEM = "Voltage";
-
-void get_param_name(ParameterName pn, unsigned char bufsz, char *oData)
-{
-    char const *p = 0;
-    switch (pn) {
-        case ParamGoAllowed: p = pnGoOK; break;
-        case ParamMotorPower: p = pnMPower; break;
-        case ParamSteerAngle: p = pnSteer; break;
-        case ParamEEDump: p = pnEEDump; break;
-        case ParamTuneSteering: p = pnTuneSteering; break;
-        case ParamTunePower: p = pnTunePower; break;
-        case ParamVoltage: p = pnVoltage; break;
-        default: fatal(FATAL_BAD_PARAM); break;
-    }
-    strncpy_P(oData, p, bufsz);
-    oData[bufsz-1] = 0;
-}
-
 char hexchar(unsigned char nybble)
 {
     nybble = nybble & 0xf;
@@ -49,67 +24,44 @@ void nybbles(char *oData, unsigned char bsz, unsigned char const *value, unsigne
     *oData = 0;
 }
 
-void format_value(cmd_parameter_value const &pv, unsigned char bufsz, char *oData)
+void format_value(void const *src, RegType type, unsigned char bufsz, char *oData)
 {
     *oData = 0;
-    switch (pv.type) {
-        case TypeNone: return;
-        case TypeString: strncpy(oData, (char const *)pv.value, bufsz); break;
-        case TypeRaw: nybbles(oData, bufsz, &pv.value[1], pv.value[0]); break;
-        default: nybbles(oData, bufsz, pv.value, pv.type); break;
+    unsigned char v = *(unsigned char *)src;
+    switch (type) {
+    default:
+        fatal(FATAL_BAD_USAGE);
+    case RegTypeUnknown:
+        return;
+    case RegTypeUchar:
+        if (bufsz < 3) return;
+        oData[0] = hexchar(v >> 4);
+        oData[1] = hexchar(v & 0xf);
+        oData[2] = 0;
+        return;
+    case RegTypeUchar16:
+        if (bufsz < 4) return;
+        oData[0] = hexchar(v >> 4);
+        oData[1] = '.';
+        oData[2] = hexchar(v & 0xf);
+        oData[3] = 0;
+        return;
+    case RegTypeSchar:
+        if (bufsz < 4) return;
+        if (v & 0x80) {
+            v = (v ^ ~0) + 1;
+            *oData++ = '-';
+        }
+        *oData++ = hexchar(v >> 4);
+        *oData++ = hexchar(v & 0xf);
+        *oData = 0;
+        return;
+    case RegTypeSshort:
+    case RegTypeUshort:
+        if (bufsz < 5) return;
+        nybbles(oData, 5, (unsigned char const *)src, 2);
+        return;
     }
-    oData[bufsz-1] = 0;
-}
-
-unsigned char param_size(cmd_parameter_value const &cpv)
-{
-    switch (cpv.type) {
-        case TypeNone:
-            return sizeof(cpv) - sizeof(cpv.value);
-        case TypeByte:
-            return sizeof(cpv) - sizeof(cpv.value) + 1;
-        case TypeShort:
-            return sizeof(cpv) - sizeof(cpv.value) + 2;
-        case TypeLong:
-            return sizeof(cpv) - sizeof(cpv.value) + 4;
-        default:  //  send everything
-            return sizeof(cpv);
-    }
-}
-
-void set_value(cmd_parameter_value &cpv, unsigned char ch)
-{
-    cpv.type = TypeByte;
-    cpv.value[0] = ch;
-}
-
-void set_value(cmd_parameter_value &cpv, char ch)
-{
-    cpv.type = TypeByte;
-    cpv.value[0] = ch;
-}
-
-void set_value(cmd_parameter_value &cpv, int ch)
-{
-    cpv.type = TypeShort;
-    cpv.value[0] = (unsigned char)(ch & 0xff);
-    cpv.value[1] = (unsigned char)((unsigned int)ch >> 8);
-}
-
-void set_value(cmd_parameter_value &cpv, unsigned int ch)
-{
-    cpv.type = TypeShort;
-    cpv.value[0] = (unsigned char)(ch & 0xff);
-    cpv.value[1] = (unsigned char)((unsigned int)ch >> 8);
-}
-
-void set_value(cmd_parameter_value &cpv, unsigned char len, void const *data)
-{
-    cpv.type = TypeRaw;
-    if (len > sizeof(cpv.value)) {
-        len = sizeof(cpv.value);
-    }
-    memcpy(cpv.value, data, len);
 }
 
 

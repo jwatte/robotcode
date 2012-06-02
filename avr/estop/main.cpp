@@ -1,5 +1,6 @@
 
 #include <libavr.h>
+#include <stddef.h>
 #include <UTFT.h>
 #include <UTFT.cpp>
 #include <nRF24L01.h>
@@ -20,22 +21,29 @@
 //  UTFT class specifies RS(==SDA), WR(==SCL), CS, RST
 UTFT<HX8340B_S> lcd(8|1, 8|2, 8|3, 8|0);
 
+void debug_blink(bool b)
+{
+    if (b) {
+        lcd.setColor(255, 0, 0);
+    }
+    else {
+        lcd.setColor(0, 0, 0);
+    }
+    lcd.drawLine(1, 1, 8, 8);
+    lcd.drawLine(1, 8, 8, 1);
+}
 
 nRF24L01<> rf;
 
+info_MotorPower g_info;
+unsigned char g_steer_adjust;
+unsigned char g_power_adjust;
+unsigned char *adjust_ptr[3] = { 0, &g_steer_adjust, &g_power_adjust };
+
 unsigned char uiMode = 0x80;
-volatile unsigned char g_go_allowed = false;
-char g_steer_adjust = 0;
-char g_power_adjust = 0x80;
-bool g_select_mode = false;
-
-unsigned char volatile *adjust_ptr[] = {
-    &uiMode,
-    (unsigned char volatile *)&g_steer_adjust,
-    (unsigned char volatile *)&g_power_adjust
-};
-
 unsigned char nIsConnected;
+volatile bool g_go_allowed = false;
+volatile bool g_adjust_mode = false;
 
 volatile bool g_go_pressed = false;
 volatile unsigned char selectorValue = 0;
@@ -55,7 +63,7 @@ class StopIsr : public IPinChangeNotify {
         if (val == 0) {
             g_go_allowed = false;
             //  reset UI back to defaults
-            g_select_mode = false;
+            g_adjust_mode = false;
             uiMode = 0;
         }
     }
@@ -145,21 +153,45 @@ void lcdPrint(unsigned char row, unsigned char col, char const *data)
     }
 }
 
-void update_param(cmd_parameter_value const &cpv)
+char fmtBuf[24];
+
+char const *fmt(char const *text, void const *val, RegType type)
 {
-    char buf[N_COLS];
-    get_param_name((ParameterName)cpv.parameter, N_COLS, buf);
-    buf[8] = 0;
-    lcdPrint(cpv.parameter, 0, buf);
-    format_value(cpv, N_COLS, buf);
-    buf[N_COLS-1] = 0;
-    lcdPrint(cpv.parameter, 8, buf);
-    if (cpv.parameter == ParamTuneSteering) {
-        g_steer_adjust = cpv.value[0];
+    strcpy_P(fmtBuf, text);
+    size_t l = strlen(fmtBuf);
+    format_value(val, type, 24-l, &fmtBuf[l]);
+    return fmtBuf;
+}
+
+char const pCmdPower[] PROGMEM =    "Cmd Power  ";
+char const pCmdSteer[] PROGMEM =    "Cmd Steer  ";
+char const pEAllow[] PROGMEM =      "Allowed    ";
+char const pTrimPower[] PROGMEM =   "Trim Power ";
+char const pTrimSteer[] PROGMEM =   "Trim Steer ";
+char const pActualPower[] PROGMEM = "Act Power  ";
+char const pSelfStop[] PROGMEM =    "Self Stop  ";
+char const pVoltage[] PROGMEM =     "M Batt (V) ";
+
+void render_info()
+{
+    lcdPrint(0, 0, fmt(pCmdPower, &g_info.w_cmd_power, RegTypeSchar));
+    lcdPrint(1, 0, fmt(pCmdSteer, &g_info.w_cmd_steer, RegTypeSchar));
+    lcdPrint(2, 0, fmt(pEAllow, &g_info.w_e_allow, RegTypeUchar));
+    lcdPrint(3, 0, fmt(pTrimPower, &g_info.w_trim_power, RegTypeUchar));
+    lcdPrint(4, 0, fmt(pTrimSteer, &g_info.w_trim_steer, RegTypeUchar));
+    lcdPrint(5, 0, fmt(pActualPower, &g_info.r_actual_power, RegTypeSchar));
+    lcdPrint(6, 0, fmt(pSelfStop, &g_info.r_self_stop, RegTypeUchar));
+    //  e_conn is a little dumb to waste space on...
+    lcdPrint(7, 0, fmt(pVoltage, &g_info.r_voltage, RegTypeUchar16));
+}
+
+void dispatch_cmd(unsigned char sz, unsigned char const *n)
+{
+    if (sz > sizeof(g_info)) {
+        sz = sizeof(g_info);
     }
-    else if (cpv.parameter == ParamTunePower) {
-        g_power_adjust = cpv.value[0];
-    }
+    memcpy(&g_info, n, sz);
+    render_info();
 }
 
 bool wasConnected = true;
@@ -179,57 +211,59 @@ void update_is_connected()
     }
 }
 
-void dispatch_cmd(cmd_hdr const &hdr)
-{
-    if (hdr.toNode != NodeAny && hdr.toNode != NodeEstop) {
-        return;
-    }
-    switch (hdr.cmd) {
-        case CMD_PARAMETER_VALUE:
-            update_param((cmd_parameter_value const &)hdr);
-            nIsConnected = 10;
-            break;
-    }
-}
+unsigned char n_xmit = 0;
+unsigned char n_tried = 0;
 
 void transmit_value(void *v)
 {
+    unsigned char val = ((size_t)v) & 0xff;
+    ++n_tried;
+    lcd.setColor(val, n_tried, n_xmit);
+    lcd.drawPixel(0, 0);
+    unsigned char db = rf.readClearDebugBits();
+    nybbles(fmtBuf, 3, &db, 1);
+    lcdPrint(1, 25, fmtBuf);   //  have had an interrupt
     uint8_t hd = rf.hasData();
-    if (nIsConnected > 0) {
+    if (hd > 0) {
+        nIsConnected = 20;
+    }
+    else if (nIsConnected > 0) {
         --nIsConnected;
     }
     if (hd) {
-        union {
-            char buf[32];
-            cmd_hdr hdr;
-        } u;
-        rf.readData(hd, u.buf);
-        dispatch_cmd(u.hdr);
+        char buf[32];
+        rf.readData(hd, buf);
+        dispatch_cmd(hd, (unsigned char const *)buf);
     }
     if (rf.canWriteData()) {
+        ++n_xmit;
         if (!rf.hasLostPacket()) {
             v = (char *)v + 1;
         }
-        cmd_stop_go csg;
-        csg.cmd = CMD_STOP_GO;
-        csg.fromNode = NodeEstop;
-        csg.toNode = NodeMotorPower;
-        csg.go = g_go_allowed;
-        rf.writeData(sizeof(csg), &csg);
+        char cmd[3];
+        cmd[0] = offsetof(info_MotorPower, w_e_allow);
+        cmd[1] = 1;
+        cmd[2] = g_go_allowed;
+        rf.writeData(3, cmd);
     }
     after(100, &transmit_value, v);
     update_is_connected();
 }
 
-char const *uiModeNames[] = {
-    "Monitor Bot ",
-    "Adjust Steer",
-    "Adjust Power"
+char const pMonitorBot[] PROGMEM = "Monitor Bot";
+
+char const * uiModeNames[] = {
+    pMonitorBot,
+    pTrimSteer,
+    pTrimPower
 };
+
+char const pCanGo[] PROGMEM =    "Can Go   ";
+char const pMustStop[] PROGMEM = "Must Stop";
 
 void read_ui(void *)
 {
-    lcdPrint(9, 0, g_go_allowed ? "Can Go   " : "Must Stop");
+    lcdPrint(9, 0, strcpy_P(fmtBuf, g_go_allowed ? pCanGo : pMustStop));
     unsigned char oldUiMode = uiMode;
     {
         IntDisable idi;
@@ -238,7 +272,7 @@ void read_ui(void *)
             if (selectorValue < 0x80) {
                 d = 1;
             }
-            if (!g_select_mode) {
+            if (!g_adjust_mode) {
                 uiMode += d;
             }
             else {
@@ -254,62 +288,41 @@ void read_ui(void *)
         uiMode = 0;
     }
     if (uiMode != oldUiMode) {
-        g_select_mode = false;
-        lcdPrint(10, 0, uiModeNames[uiMode]);
+        g_adjust_mode = false;
+        lcdPrint(10, 0, strcpy_P(fmtBuf, uiModeNames[uiMode]));
         oldUiMode = uiMode;
     }
     if (g_go_pressed) {
         g_go_pressed = false;
-        g_select_mode = !g_select_mode;
+        g_adjust_mode = !g_adjust_mode;
     }
     if (uiMode == 1) {
-        char hex[16] = {
-            hexchar(g_steer_adjust >> 4),
-            hexchar(g_steer_adjust & 0xf),
-            0
-        };
-        lcdPrint(11, 8, hex);
-        get_param_name(ParamTuneSteering, 16, hex);
-        lcdPrint(11, 0, hex);
-        if (rf.canWriteData()) {
-            cmd_parameter_value *cpv = (cmd_parameter_value *)hex;
-            cpv->cmd = CMD_PARAMETER_VALUE;
-            cpv->fromNode = NodeEstop;
-            cpv->toNode = NodeMotorPower;
-            cpv->parameter = ParamTuneSteering;
-            cpv->type = TypeByte;
-            cpv->value[0] = g_steer_adjust;
-            rf.writeData(param_size(*cpv), cpv);
+        lcdPrint(11, 0, fmt(pTrimSteer, &g_steer_adjust, RegTypeSchar));
+        if (g_adjust_mode && rf.canWriteData()) {
+            fmtBuf[0] = offsetof(info_MotorPower, w_trim_steer);
+            fmtBuf[1] = 1;
+            fmtBuf[2] = g_steer_adjust;
+            rf.writeData(3, fmtBuf);
         }
     }
     else if (uiMode == 2) {
-        char hex[16] = {
-            hexchar(g_power_adjust >> 4),
-            hexchar(g_power_adjust & 0xf),
-            0
-        };
-        lcdPrint(11, 8, hex);
-        get_param_name(ParamTunePower, 16, hex);
-        lcdPrint(11, 0, hex);
-        if (rf.canWriteData()) {
-            cmd_parameter_value *cpv = (cmd_parameter_value *)hex;
-            cpv->cmd = CMD_PARAMETER_VALUE;
-            cpv->fromNode = NodeEstop;
-            cpv->toNode = NodeMotorPower;
-            cpv->parameter = ParamTunePower;
-            cpv->type = TypeByte;
-            cpv->value[0] = g_power_adjust;
-            rf.writeData(param_size(*cpv), cpv);
+        lcdPrint(11, 0, fmt(pTrimPower, &g_power_adjust, RegTypeUchar));
+        if (g_adjust_mode && rf.canWriteData()) {
+            fmtBuf[0] = offsetof(info_MotorPower, w_trim_power);
+            fmtBuf[1] = 1;
+            fmtBuf[2] = g_power_adjust;
+            rf.writeData(3, fmtBuf);
         }
     }
     else {
-        char empty[16];
-        memset(empty, 32, 15);
-        empty[15] = 0;
-        lcdPrint(11, 0, empty);
-        g_select_mode = false;
+        memset(fmtBuf, 32, 15);
+        fmtBuf[15] = 0;
+        lcdPrint(11, 0, fmtBuf);
+        g_adjust_mode = false;
+        g_power_adjust = g_info.w_trim_power;
+        g_steer_adjust = g_info.w_trim_steer;
     }
-    if (g_select_mode) {
+    if (g_adjust_mode) {
         lcdPrint(11, 15, "<->");
     }
     else {
@@ -317,6 +330,31 @@ void read_ui(void *)
     }
     g_go_pressed = false;
     after(30, &read_ui, 0);
+}
+
+bool wasRadioConnected = true;
+
+void reset_radio(void *)
+{
+    if (!nIsConnected) {
+        if (!wasRadioConnected) {
+            lcdPrint(0, 0, "Reset Radio");
+            rf.teardown();
+            delay(150);
+            rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);
+            memset(fmtBuf, 32, 23);
+            fmtBuf[23] = 0;
+            lcdPrint(0, 0, fmtBuf);
+            lcdPrint(1, 20, fmtBuf);
+        }
+        else {
+            wasRadioConnected = false;
+        }
+    }
+    else {
+        wasRadioConnected = true;
+    }
+    after(10000, &reset_radio, 0);
 }
 
 void setup()
@@ -335,22 +373,25 @@ void setup()
     PCICR |= 0x1;   //  port B pin change
 
     lcd.InitLCD(LANDSCAPE);
+    fatal_set_blink(debug_blink);
     lcd.setBackColor(0, 0, 0);
     lcd.setColor(0, 0, 0);
     lcd.fillRect(0, 0, lcd.getDisplayXSize(), lcd.getDisplayYSize());
     lcd.setFont(SmallFont);
     lcd.setColor(0, 255, 0);
-
-    rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);
+    lcdPrint(0, 0, __DATE__ " " __TIME__);
 
     on_pinchange(rf.getPinIRQ(), &rf_isr);
     on_pinchange(PIN_BUTTON_STOP, &stop_isr);
     on_pinchange(0, &ui_isr);
     on_pinchange(1, &ui_isr);
     on_pinchange(2, &ui_isr);
+    delay(100); //  wait for radio to boot
+    rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);
 
     transmit_value(0);
     read_ui(0);
+    after(10000, &reset_radio, 0);
 }
 
 

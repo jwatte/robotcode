@@ -7,64 +7,67 @@
 #define ESTOP_RF_CHANNEL 48
 #define ESTOP_RF_ADDRESS 1228
 
-#define CMD_PARAMETER_VALUE 1
-#define CMD_STOP_GO 2
-
-enum ParameterType {
-    TypeNone,
-    TypeByte,
-    TypeShort,
-    TypeString,
-    TypeLong,
-    TypeRaw
-};
-enum ParameterName {
-    ParamGoAllowed,
-    ParamMotorPower,
-    ParamSteerAngle,
-    ParamEEDump,
-    ParamTuneSteering,
-    ParamTunePower,
-    ParamVoltage,
-    ParamMax
-};
 enum Node {
     NodeAny,
     NodeMotorPower,
     NodeEstop,
     NodeSensorInput,
-    NodeUSBInterface
+    NodeUSBInterface,
+    NodeIMU
 };
 
-struct cmd_hdr {
-    unsigned char cmd;
-    unsigned char fromNode;
-    unsigned char toNode;
-};
-struct cmd_parameter_value : cmd_hdr {
-    unsigned char parameter;
-    unsigned char type;
-    unsigned char value[27];
+enum RegType {
+    RegTypeUnknown,
+    RegTypeUchar,
+    RegTypeUchar16,
+    RegTypeSchar,
+    RegTypeUshort,
+    RegTypeSshort
 };
 
-struct cmd_stop_go : cmd_hdr {
-    unsigned char go;
+struct Cmd {
+    unsigned char reg_start;
+    unsigned char reg_count;
 };
 
-struct SensorOutput {
-    unsigned char irDistance[3];
-    unsigned char usDistance[3];
+struct info_MotorPower {
+    unsigned char w_cmd_power;  //  -127 back, 127 forward
+    unsigned char w_cmd_steer;  //  -90 left, 90 right
+    unsigned char w_e_allow;    //  0 stop, !0 go
+    unsigned char w_trim_power; //  PWM modulator
+    unsigned char w_trim_steer; //  -90 .. 90 add to steer
+
+    unsigned char r_actual_power;
+    unsigned char r_self_stop;
+    unsigned char r_e_conn;
+    unsigned char r_voltage;
+    unsigned char r_debug_bits;
 };
 
-void get_param_name(ParameterName pn, unsigned char bufsz, char *oData);
-void format_value(cmd_parameter_value const &pv, unsigned char bufsz, char *oData);
-unsigned char param_size(cmd_parameter_value const &cpv);
+/*
+Nobody really asks for this
+struct info_Estop {
+    unsigned char r_m_conn;
+};
+*/
+
+struct info_SensorInput {
+    unsigned char w_laser[3];
+    unsigned char r_ir[3];
+    unsigned char r_us[3];
+};
+
+struct info_USBInterface {
+    unsigned char r_voltage;
+};
+
+struct info_IMU {
+    unsigned short r_regs[9];
+};
+
 char hexchar(unsigned char nybble);
-void set_value(cmd_parameter_value &cpv, unsigned char ch);
-void set_value(cmd_parameter_value &cpv, char ch);
-void set_value(cmd_parameter_value &cpv, int ch);
-void set_value(cmd_parameter_value &cpv, unsigned int ch);
-void set_value(cmd_parameter_value &cpv, unsigned char len, void const *data);
+void nybbles(char *oData, unsigned char bsz, unsigned char const *value, unsigned char vsz);
+void format_value(void const *src, RegType type, unsigned char bufsz, char *oData);
 
 #endif // libavr_cmds_h
 

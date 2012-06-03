@@ -12,7 +12,7 @@ AVR_BINS:=$(patsubst avr/%/,%,$(sort $(filter-out avr/libavr/,$(dir $(AVR_SRCS))
 AVR_CFLAGS:=-Wall -Wno-switch -Os -mcall-prologues -mmcu=atmega328p -Iavr/libavr -std=gnu++0x
 AVR_LFLAGS:=-mmcu=atmega328p -Lbld/avrbin -lavr -lc
 
-AVR_PROG:=-c stk500 -P /dev/ttyACM0
+AVR_PROG:=-c stk500 -P /dev/ttyACM1
 
 
 OPENCV_LFLAGS:=-lopencv_highgui -lopencv_core -lopencv_imgproc -lopencv_calib3d -lopencv_features2d -lopencv_video -lwebcam

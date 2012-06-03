@@ -9,7 +9,7 @@
 /*  less than 6.5V in the battery pack, and I can't run. */
 #define VOLTAGE_PIN 2
 #define THRESHOLD_VOLTAGE 0x68
-#define OFF_VOLTAGE 0x65
+#define OFF_VOLTAGE 0x67    //  3.2V*2
 #define VOLTAGE_SCALER 105  //  was 109
 
 /* For some reason, running the servo on PWM is not very clean. */
@@ -59,6 +59,23 @@ void write_tuning()
     g_tuning.m_power = g_actual_state.w_trim_power;
     g_tuning.cksum = calc_cksum(sizeof(g_tuning)-1, &g_tuning);
     eeprom_write_block(&g_tuning, (void *)EE_TUNING, sizeof(g_tuning));
+}
+
+bool g_tuningWriteScheduled = false;
+
+void on_write_tuning(void *)
+{
+    g_tuningWriteScheduled = false;
+    write_tuning();
+}
+
+void schedule_write_tuning()
+{
+    if (!g_tuningWriteScheduled)
+    {
+        g_tuningWriteScheduled = true;
+        after(5000, on_write_tuning, 0);
+    }
 }
 
 void read_tuning()
@@ -256,19 +273,28 @@ void setup_servo()
 #endif
 }
 
+void actually_write_servo()
+{
+#if USE_SERVO_TIMER
+    set_servo_timer_angle(tuned_angle());
+#else
+    IntDisable idi;
+    PORTD |= (1 << PD3);
+    udelay(tuned_angle() * 11U + 580U);
+    PORTD &= ~(1 << PD3);
+#endif
+}
+
 void update_servo(void *v)
 {
 #if USE_SERVO_TIMER
     //  this is very approximate
-    set_servo_timer_angle(tuned_angle());
+    actually_write_servo();
 #else
     //  if killed from button, also kill servo
     if (!g_actual_state.r_self_stop)
     {
-        IntDisable idi;
-        PORTD |= (1 << PD3);
-        udelay(tuned_angle() * 11U + 580U);
-        PORTD &= ~(1 << PD3);
+        actually_write_servo();
     }
 #endif
     //  2 ms spin delay every 40 ms is 5% of available CPU...
@@ -339,11 +365,11 @@ void apply_state()
     }
     if (steering)
     {
-        update_servo(0);
+        actually_write_servo();
     }
     if (tuning)
     {
-        write_tuning();
+        schedule_write_tuning();
     }
 }
 
@@ -355,7 +381,7 @@ void dispatch_cmd(unsigned char sz, unsigned char const *d)
         if (p > sizeof(info_MotorPower)) {
             fatal(FATAL_BAD_PARAM);
         }
-        ((unsigned char *)&g_write_state)[off] = d[2 + off];
+        ((unsigned char *)&g_write_state)[p] = d[2 + off];
     }
     apply_state();
 }

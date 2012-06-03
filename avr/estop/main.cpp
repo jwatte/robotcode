@@ -211,18 +211,8 @@ void update_is_connected()
     }
 }
 
-unsigned char n_xmit = 0;
-unsigned char n_tried = 0;
-
 void transmit_value(void *v)
 {
-    unsigned char val = ((size_t)v) & 0xff;
-    ++n_tried;
-    lcd.setColor(val, n_tried, n_xmit);
-    lcd.drawPixel(0, 0);
-    unsigned char db = rf.readClearDebugBits();
-    nybbles(fmtBuf, 3, &db, 1);
-    lcdPrint(1, 25, fmtBuf);   //  have had an interrupt
     uint8_t hd = rf.hasData();
     if (hd > 0) {
         nIsConnected = 20;
@@ -235,8 +225,7 @@ void transmit_value(void *v)
         rf.readData(hd, buf);
         dispatch_cmd(hd, (unsigned char const *)buf);
     }
-    if (rf.canWriteData()) {
-        ++n_xmit;
+    if (!g_adjust_mode && rf.canWriteData()) {
         if (!rf.hasLostPacket()) {
             v = (char *)v + 1;
         }
@@ -296,9 +285,13 @@ void read_ui(void *)
         g_go_pressed = false;
         g_adjust_mode = !g_adjust_mode;
     }
+    //  in case the trim value was negative, clear the trailing digit
     if (uiMode == 1) {
         lcdPrint(11, 0, fmt(pTrimSteer, &g_steer_adjust, RegTypeSchar));
         if (g_adjust_mode && rf.canWriteData()) {
+            if (g_steer_adjust >= 0) {
+                lcdPrint(11, 13, " ");
+            }
             fmtBuf[0] = offsetof(info_MotorPower, w_trim_steer);
             fmtBuf[1] = 1;
             fmtBuf[2] = g_steer_adjust;
@@ -308,6 +301,9 @@ void read_ui(void *)
     else if (uiMode == 2) {
         lcdPrint(11, 0, fmt(pTrimPower, &g_power_adjust, RegTypeUchar));
         if (g_adjust_mode && rf.canWriteData()) {
+            if (g_power_adjust >= 0) {
+                lcdPrint(11, 13, " ");
+            }
             fmtBuf[0] = offsetof(info_MotorPower, w_trim_power);
             fmtBuf[1] = 1;
             fmtBuf[2] = g_power_adjust;
@@ -323,10 +319,10 @@ void read_ui(void *)
         g_steer_adjust = g_info.w_trim_steer;
     }
     if (g_adjust_mode) {
-        lcdPrint(11, 15, "<->");
+        lcdPrint(11, 14, " <->");
     }
     else {
-        lcdPrint(11, 15, "   ");
+        lcdPrint(11, 14, "    ");
     }
     g_go_pressed = false;
     after(30, &read_ui, 0);

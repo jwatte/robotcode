@@ -12,7 +12,8 @@ AVR_BINS:=$(patsubst avr/%/,%,$(sort $(filter-out avr/libavr/,$(dir $(AVR_SRCS))
 AVR_CFLAGS:=-Wall -Wno-switch -Os -mcall-prologues -mmcu=atmega328p -Iavr/libavr -std=gnu++0x
 AVR_LFLAGS:=-mmcu=atmega328p -Lbld/avrbin -lavr -lc
 
-AVR_PROG:=-c stk500 -P /dev/ttyACM1
+AVR_PROG_PORT?=/dev/ttyACM0
+AVR_PROG:=-c stk500 -P $(AVR_PROG_PORT)
 
 
 OPENCV_LFLAGS:=-lopencv_highgui -lopencv_core -lopencv_imgproc -lopencv_calib3d -lopencv_features2d -lopencv_video -lwebcam
@@ -58,6 +59,7 @@ fuses_motorboard:	fuses_8
 fuses_estop:	fuses_8
 fuses_usbboard:	fuses_16
 fuses_sensorboard:	fuses_8
+fuses_blink:	fuses_8
 
 %:	bld/avrbin/%.hex fuses_%
 	avrdude -u -V -p m328p -b 115200 -B 1 $(AVR_PROG) -U flash:w:$<:i

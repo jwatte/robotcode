@@ -200,6 +200,9 @@ void update_is_connected()
 {
     bool isConnected = nIsConnected > 0;
     if (isConnected != wasConnected) {
+        memset(fmtBuf, 32, sizeof(fmtBuf));
+        fmtBuf[sizeof(fmtBuf)-1] = 0;
+        lcdPrint(0, 0, fmtBuf);
         if (isConnected) {
             lcd.setColor(0, 255, 128);
         }

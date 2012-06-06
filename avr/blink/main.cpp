@@ -2,7 +2,7 @@
 #include <libavr.h>
 #include <pins_avr.h>
 
-#define BLINK_PIN (0|1)
+#define BLINK_PIN (16|5)
 
 void blink(void *p)
 {

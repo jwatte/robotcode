@@ -21,6 +21,8 @@
 //  UTFT class specifies RS(==SDA), WR(==SCL), CS, RST
 UTFT<HX8340B_S> lcd(8|1, 8|2, 8|3, 8|0);
 
+unsigned char b_val = 0;
+
 void debug_blink(bool b)
 {
     if (b) {
@@ -252,9 +254,11 @@ char const * uiModeNames[] = {
 
 char const pCanGo[] PROGMEM =    "Can Go   ";
 char const pMustStop[] PROGMEM = "Must Stop";
+char const pBat[] PROGMEM = "Bat ";
 
 void read_ui(void *)
 {
+    lcdPrint(9, 19, fmt(pBat, &b_val, RegTypeUchar));
     lcdPrint(9, 0, strcpy_P(fmtBuf, g_go_allowed ? pCanGo : pMustStop));
     unsigned char oldUiMode = uiMode;
     {
@@ -353,7 +357,24 @@ void reset_radio(void *)
     else {
         wasRadioConnected = true;
     }
-    after(10000, &reset_radio, 0);
+    after(2000, &reset_radio, 0);
+}
+
+void read_battery(void *);
+
+void on_battery_read(unsigned char val)
+{
+    b_val = ((int)val * 14 / 17) & 0xff;
+    after(999, read_battery, 0);
+}
+
+void read_battery(void *)
+{
+    if (adc_busy()) {
+        after(50, read_battery, 0);
+        return;
+    }
+    adc_read(5, on_battery_read);
 }
 
 void setup()
@@ -388,9 +409,12 @@ void setup()
     delay(100); //  wait for radio to boot
     rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);
 
+    adc_setup();
+
     transmit_value(0);
     read_ui(0);
-    after(10000, &reset_radio, 0);
+    after(1000, &reset_radio, 0);
+    after(999, &read_battery, 0);
 }
 
 

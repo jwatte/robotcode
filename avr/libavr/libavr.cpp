@@ -293,6 +293,15 @@ BrateSetup const rates[] PROGMEM = {
     { 115, 16 }
 };
 
+void (*_usart_rx_vect_func)();
+void (*_usart_udre_vect_func)();
+
+ISR(USART_RX_vect) {
+    if (_usart_rx_vect_func) {
+        _usart_rx_vect_func();
+    }
+}
+
 unsigned char _uart_txbuf[32];
 char _uart_txptr;
 char _uart_txend;
@@ -300,7 +309,7 @@ unsigned char _uart_rxbuf[32];
 char _uart_rxptr;
 char _uart_rxend;
 
-ISR(USART_RX_vect) {
+static void usart_rx_vect() {
 again:
     while (UCSR0A & (1 << RXC0)) {
         if ((unsigned char)(_uart_rxend - _uart_rxptr) < (char)sizeof(_uart_rxbuf)) {
@@ -316,6 +325,12 @@ again:
 }
 
 ISR(USART_UDRE_vect) {
+    if (_usart_udre_vect_func) {
+        _usart_udre_vect_func();
+    }
+}
+
+static void usart_udre_vect() {
     if (UCSR0A & (1 << UDRE0)) {
         if ((char)(_uart_txend - _uart_txptr) > 0) {
             UDR0 = _uart_txbuf[_uart_txptr & 0x1f];
@@ -326,6 +341,11 @@ ISR(USART_UDRE_vect) {
             UCSR0B &= ~(1 << UDRIE0);
         }
     }
+}
+
+static void _usart_setup_ints() {
+    _usart_rx_vect_func = usart_rx_vect;
+    _usart_udre_vect_func = usart_udre_vect;
 }
 
 void uart_setup(unsigned long brate, unsigned long f_cpu) {
@@ -340,6 +360,7 @@ void uart_setup(unsigned long brate, unsigned long f_cpu) {
     for (unsigned char ch = 0; ch != sizeof(rates)/sizeof(rates[0]); ++ch) {
         memcpy_P(&bsu, &rates[ch], sizeof(bsu));
         if (bsu.rateKbps == kbps) {
+            _usart_setup_ints();
             _uart_rxptr = 0;
             _uart_rxend = 0;
             _uart_txptr = 0;
@@ -462,11 +483,18 @@ void adc_read(unsigned char channel, void (*cb)(unsigned char val)) {
 IPinChangeNotify *_pcn[24] = { 0 };
 unsigned char _pcint_last[3] = { 0 };
 
+void (*_pcint0_vect_func)();
+
+ISR(PCINT0_vect) {
+    if (_pcint0_vect_func) {
+        _pcint0_vect_func();
+    }
+}
 #define DISPATCH(x) \
     if (((last ^ val) & (1 << ((x) & 7))) && _pcn[(x)]) { \
         _pcn[(x)]->pin_change(val & (1 << ((x) & 7))); \
     }
-ISR(PCINT0_vect) {
+static void pcint0_vect() {
     unsigned char val = PINB;
     unsigned char last = _pcint_last[0];
     _pcint_last[0] = val;
@@ -480,7 +508,15 @@ ISR(PCINT0_vect) {
     DISPATCH(7);
 }
 
+void (*_pcint1_vect_func)();
+
 ISR(PCINT1_vect) {
+    if (_pcint1_vect_func) {
+        _pcint1_vect_func();
+    }
+}
+
+static void pcint1_vect() {
     unsigned char val = PINC;
     unsigned char last = _pcint_last[1];
     _pcint_last[1] = val;
@@ -494,7 +530,15 @@ ISR(PCINT1_vect) {
     DISPATCH(15);
 }
 
+void (*_pcint2_vect_func)();
+
 ISR(PCINT2_vect) {
+    if (_pcint2_vect_func) {
+        _pcint2_vect_func();
+    }
+}
+
+static void pcint2_vect() {
     unsigned char val = PIND;
     unsigned char last = _pcint_last[2];
     _pcint_last[2] = val;
@@ -514,6 +558,9 @@ void on_pinchange(unsigned char pin, IPinChangeNotify *pcn)
         fatal(FATAL_BAD_PIN_ARG);
     }
     IntDisable idi;
+    _pcint0_vect_func = pcint0_vect;
+    _pcint1_vect_func = pcint1_vect;
+    _pcint2_vect_func = pcint2_vect;
     _pcn[pin] = pcn;
     if (pcn) {
         pcMaskReg(pin) |= (1 << (pin & 7));

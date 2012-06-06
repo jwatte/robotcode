@@ -4,6 +4,9 @@
 #include <cmds.h>
 
 
+info_SensorInput g_actualData;
+info_SensorInput g_writeData;
+
 void read_ping(void *);
 void read_ir(void *);
 
@@ -52,6 +55,15 @@ class Ping4 : public IPinChangeNotify {
                 PORTB &= ~0x4;
             }
         }
+        unsigned char inches() const {
+            //  12 inches (1 foot) in a millisecond
+            unsigned char inchVal = value_ * 12 / 1000;
+            if (inchVal > 200) {
+                //  more than 5 meters, I don't yet detect it
+                inchVal = 0;
+            }
+            return inchVal & 0xff;
+        }
 };
 
 Ping4 pings[3] = {
@@ -63,6 +75,7 @@ unsigned char nPing = 0;
 
 void read_ping(void *)
 {
+    g_actualData.r_us[nPing] = pings[nPing].inches();
     nPing = (nPing + 1);
     if (nPing == 3) {
         nPing = 0;
@@ -74,9 +87,30 @@ void read_ping(void *)
 unsigned char nIr;
 unsigned char irVal[3];
 
+#define MIN_IR_VAL 60
+#define MAX_IR_VAL 180
+#define IR_MIN_DISTANCE 10
+
+unsigned char ir_inches(unsigned char val)
+{
+    if (val < MIN_IR_VAL) {
+        return 0;
+    }
+    if (val > MAX_IR_VAL) {
+        return IR_MIN_DISTANCE;
+    }
+    //  this is not a good formula, really -- but, whatever
+    unsigned short inchVal = IR_MIN_DISTANCE + (MAX_IR_VAL - val);
+    if (inchVal > 200) {
+        return 0;
+    }
+    return inchVal & 0xff;
+}
+
 void on_ir(unsigned char val)
 {
     irVal[nIr] = val;
+    g_actualData.r_ir[nIr] = ir_inches(val);
     nIr = (nIr + 1);
     if (nIr == 3) {
         nIr = 0;
@@ -113,13 +147,8 @@ class Slave : public ITWISlave {
             //  do nothing
         }
         virtual void request_from_master(void *o_buf, unsigned char &o_size) {
-            SensorOutput so;
-            for (unsigned char i = 0; i != 3; ++i) {
-                so.usDistance[i] = pings[i].value_ / 59;  //  microseconds to centimeters
-                so.irDistance[i] = irVal[i];  //  todo: correct for distance curve
-            }
-            memcpy(o_buf, &so, sizeof(so));
-            o_size = sizeof(so);
+            memcpy(o_buf, &g_actualData, sizeof(g_actualData));
+            o_size = sizeof(g_actualData);
         }
 };
 Slave slave;

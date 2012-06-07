@@ -20,6 +20,7 @@ public:
             invalidate();
         }
     }
+    T value() const { return oldValue_; }
 
     T oldValue_;
     unsigned char offset_;

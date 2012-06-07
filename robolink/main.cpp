@@ -29,7 +29,7 @@
 MotorPowerBoard &motorPower = *new MotorPowerBoard();
 Board &estop = *new Board(bidEstop);
 Board &sensors = *new Board(bidSensors);
-Board &usbLink = *new Board(bidUsbLink);
+UsbLinkBoard &usbLink = *new UsbLinkBoard();
 
 Parser p;
 Voltage voltage;
@@ -66,7 +66,7 @@ int main(int argc, char const *argv[])
     (new BoardTile(&estop))->make_widgets();
     (new BoardTile(&sensors))->make_widgets();
     (new BoardTile(&usbLink))->make_widgets();
-    voltage.make_widgets();
+    voltage.init(&motorPower, &usbLink);
     pack->end();
     ImageDisplay *id0 = new ImageDisplay();
     id0->box_->resize(10, 232, 1280/4, 720/4);

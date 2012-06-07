@@ -45,11 +45,6 @@ void do_nodedata(char const *buf, int nsize)
 {
     Board *b = Board::board_by_id((BoardId)buf[1]);
     b->on_data(buf + 3, nsize - 3);
-    if (buf[1] == bidMotorPower)
-    {
-        //  todo: this function shouldn't know about a particular board
-        voltage.on_motor_voltage((unsigned char)buf[3] / 16.0f);
-    }
 }
 
 void do_nodenak(char const *buf, int nsize)
@@ -64,9 +59,6 @@ void do_range(char const *buf, int nsize)
 
 void do_voltage(char const *buf, int nsize)
 {
-    float v = (unsigned char)buf[1] / 16.0f;
-    fprintf(stderr, "voltage %.2f\n", v);
-    voltage.on_main_voltage(v);
 }
 
 void do_debug(char const *buf, int nsize)

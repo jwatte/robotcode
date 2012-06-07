@@ -1,78 +1,70 @@
 
 #include "Voltage.h"
+#include "Board.h"
 
 #include <stdio.h>
 
 #include <FL/Fl.H>
 
-#define VOLTAGE_THRESHOLD 11.5f
-#define MOTOR_VOLTAGE_THRESHOLD 6.6f
 
-void shutdown(void *)
+Voltage::Voltage() :
+    group_(0),
+    mainVoltage_(11.0f, 16.0f),
+    motorVoltage_(6.4f, 8.5f)
 {
-    system("killall -9 lxsession");
 }
 
-
-void Voltage::on_main_voltage(float v)
-{
-    sprintf(voltsMain_, "%.1f V", v);
-    textMainPower_->label(voltsMain_);
-    dialMainPower_->value(v);
-    if (v <= VOLTAGE_THRESHOLD)
-    {
-        if (!timer_)
-        {
-            Fl::add_timeout(60, shutdown);
-            textMainPower_->label("DEAD!");
-            textMainPower_->labelcolor(0xff000000);
-            dialMainPower_->color(0xff000000);
-            dialMainPower_->color2(0xffffff00);
-        }
-    }
-}
-
-void Voltage::on_motor_voltage(float v)
-{
-    sprintf(voltsMotor_, "%.1f V", v);
-    textMotorPower_->label(voltsMotor_);
-    dialMotorPower_->value(v);
-    if (v <= MOTOR_VOLTAGE_THRESHOLD)
-    {
-        textMotorPower_->labelcolor(0xff000000);
-        dialMotorPower_->color(FL_YELLOW);
-        dialMotorPower_->color2(FL_CYAN);
-    }
-    else
-    {
-        textMotorPower_->labelcolor(0x00000000);
-        dialMotorPower_->color(FL_BLUE);
-        dialMotorPower_->color2(FL_YELLOW);
-    }
-}
-
-void Voltage::make_widgets()
+void Voltage::init(MotorPowerBoard *mpb, UsbLinkBoard *ulb)
 {
     group_ = new Fl_Group(0, 0, 200, 200);
-
-    dialMainPower_ = new Fl_Dial(10, 10, 85, 85);
-    dialMainPower_->minimum(10.0f);
-    dialMainPower_->maximum(16.0f);
-    dialMainPower_->value(13.0f);
-    dialMainPower_->type(FL_LINE_DIAL);
-    dialMainPower_->color(FL_GREEN);
-    dialMainPower_->color2(FL_RED);
-    textMainPower_ = new Fl_Box(25, 100, 50, 25, "13.0 V");
-
-    dialMotorPower_ = new Fl_Dial(105, 10, 85, 85);
-    dialMotorPower_->minimum(6.3f);
-    dialMotorPower_->maximum(8.5f);
-    dialMotorPower_->value(7.4f);
-    dialMotorPower_->type(FL_LINE_DIAL);
-    dialMotorPower_->color(FL_BLUE);
-    dialMotorPower_->color2(FL_YELLOW);
-    textMotorPower_ = new Fl_Box(125, 100, 50, 25, "7.5 V");
-
+    mainVoltage_.init(10, 10, &ulb->voltage_);
+    motorVoltage_.init(105, 10, &mpb->voltage_);
     group_->end();
+}
+
+
+VoltageDial::VoltageDial(float min, float max) :
+    src_(0),
+    min_(min),
+    max_(max),
+    dial_(0),
+    text_(0)
+{
+    memset(labelStr_, 0, sizeof(labelStr_));
+}
+
+void VoltageDial::init(int x, int y, Value<unsigned char> *src)
+{
+    src_ = src;
+    dial_ = new Fl_Dial(x, y, 85, 85);
+    dial_->minimum(min_);
+    dial_->maximum(max_);
+    dial_->value(min_);
+    dial_->type(FL_LINE_DIAL);
+    dial_->color(FL_BLUE);
+    dial_->color2(FL_YELLOW);
+    text_ = new Fl_Box(x + 20, y + 90, 50, 25, "");
+    src_->add_listener(this);
+    invalidate();
+}
+
+void VoltageDial::invalidate()
+{
+    float val = src_->value() * (1.0f / 16.0f);
+    if (val < min_) {
+        val = min_;
+    }
+    if (val > max_) {
+        val = max_;
+    }
+    sprintf(labelStr_, "%.1f V", val);
+    text_->label(labelStr_);
+    if (val < min_ + (max_ - min_) * 0.2f) {
+        text_->color(FL_RED);
+    }
+    else {
+        text_->color(FL_GREEN);
+    }
+    dial_->value(val);
 }
 

@@ -78,9 +78,9 @@ char const *Board::label()
 
 MotorPowerBoard::MotorPowerBoard() :
     Board(bidMotorPower),
-    voltage_(0),
-    power_(1),
-    steering_(2)
+    voltage_(8),
+    power_(0),
+    steering_(1)
 {
 }
 
@@ -92,3 +92,15 @@ void MotorPowerBoard::on_data(char const *data, int nsize)
     steering_.step(data_);
 }
 
+
+UsbLinkBoard::UsbLinkBoard() :
+    Board(bidUsbLink),
+    voltage_(0)
+{
+}
+
+void UsbLinkBoard::on_data(char const *data, int nsize)
+{
+    Board::on_data(data, nsize);
+    voltage_.step(data_);
+}

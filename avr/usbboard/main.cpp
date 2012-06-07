@@ -16,14 +16,15 @@
    D <node> <len> <data>  Data polled from node
    N <node>               Nak from node when polling
    R <sensor> <distance>  Distance reading from ranging sensor
-   V <value>              Local voltage value, ff == 16V, 00 == 8V
    X <len> <text>         Debug text
 
    Host->Usbboard
 
 
  */
-extern void setup_timers(unsigned long l);
+
+info_USBInterface g_info;
+
 
 void blink(bool on) {
     pinMode(LED_PIN, OUTPUT);
@@ -88,8 +89,9 @@ void request_from_sensor(void *)
 
 void request_from_usbboard(void *)
 {
-    char data[3] = { 'D', NodeUSBInterface, 0 };
+    char data[3] = { 'D', NodeUSBInterface, sizeof(g_info) };
     uart_send_all(3, data);
+    uart_send_all(sizeof(g_info), &g_info);
     after(1000, request_from_usbboard, 0);
 }
 
@@ -105,8 +107,7 @@ unsigned char map_voltage(unsigned char val)
 
 void voltage_cb(unsigned char val)
 {
-    char data[2] = { 'V', map_voltage(val) };
-    uart_send_all(2, data);
+    g_info.r_voltage = map_voltage(val);
 }
 
 void poll_voltage(void *)

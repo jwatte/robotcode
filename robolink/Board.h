@@ -44,6 +44,15 @@ public:
     Value<char> steering_;
 };
 
+class UsbLinkBoard : public Board
+{
+public:
+    UsbLinkBoard();
+    virtual void on_data(char const *data, int nsize);
+
+    Value<unsigned char> voltage_;
+};
+
 
 #endif  //  Board_h
 

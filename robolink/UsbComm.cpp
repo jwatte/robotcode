@@ -9,9 +9,9 @@
 #include "UsbComm.h"
 
 
-UsbComm::UsbComm(char const *name)
+UsbComm::UsbComm(std::string const &name)
 {
-    strncpy(name_, name, sizeof(name_));
+    strncpy(name_, name.c_str(), sizeof(name_));
     name_[sizeof(name_)-1] = 0;
     fd_ = -1;
 }

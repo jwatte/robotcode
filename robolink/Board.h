@@ -42,6 +42,7 @@ public:
     Value<unsigned char> voltage_;
     Value<char> power_;
     Value<char> steering_;
+    Value<bool> allowed_;
 };
 
 class UsbLinkBoard : public Board
@@ -53,6 +54,19 @@ public:
     Value<unsigned char> voltage_;
 };
 
+class SensorBoard : public Board
+{
+public:
+    SensorBoard();
+    virtual void on_data(char const *data, int nsize);
+
+    Value<unsigned char> cliffDetect_;
+    Value<unsigned char> leftDetect_;
+    Value<unsigned char> rightDetect_;
+    Value<unsigned char> leftWedge_;
+    Value<unsigned char> rightWedge_;
+    Value<unsigned char> backWedge_;
+};
 
 #endif  //  Board_h
 

@@ -27,6 +27,8 @@ void fatal(int err)
     if (eeprom_read_byte((uint8_t const *)EE_FATALCODE) != err) {
         eeprom_write_byte((uint8_t *)EE_FATALCODE, (unsigned char)err);
     }
+    //  sync byte
+    uart_force_out(0xed);
     uart_force_out('F');
     uart_force_out(err);
     unsigned int nIter = actual_f_cpu_1000 / 80;
@@ -233,6 +235,7 @@ void schedule()
             (*func)(data);
             wdt_reset();
             unsigned short then = read_timer();
+#if defined(MAX_TASK_TIME)
             if (then - now > MAX_TASK_TIME)
             {
                 eeprom_write_word((word *)EE_TOO_LONG_TASK_PTR, (word)func);
@@ -240,6 +243,7 @@ void schedule()
                 eeprom_write_word((word *)EE_TOO_LONG_TASK_POST, (word)then);
                 fatal(FATAL_TASK_TOOK_TOO_LONG);
             }
+#endif
             now = then;
         }
         else {

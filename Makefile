@@ -1,7 +1,7 @@
 
 APPS:=robolink simplegps
 
-CPP_CFLAGS:=$(sort -O0 -g $(filter-out -O%,$(shell fltk-config --use-images --cxxflags)))
+CPP_CFLAGS:=$(sort -O0 -g $(filter-out -O%,$(shell fltk-config --use-images --cxxflags))) -fstack-check
 CPP_LFLAGS:=-ljpeg $(sort $(shell fltk-config --use-images --ldflags)) -lv4l2 -lgps
 CPP_SRCS:=$(foreach app,$(APPS),$(wildcard $(app)/*.cpp))
 CPP_OBJS:=$(patsubst %.cpp,bld/obj/%.o,$(CPP_SRCS))
@@ -80,5 +80,5 @@ fuses_12:
 	# 12 MHz, crystal osc, 2.7V brown-out, 16k + 4.1ms boot delay
 	avrdude -e -u -V -p m328p -b 115200 -B 200 $(AVR_PROG) -U lfuse:w:0xE7:m -U hfuse:w:0xDF:m -U efuse:w:0xFD:m -U lock:w:0xFF:m
 
--include $(patsubst %.o,%.d,$(OBJS))
+-include $(patsubst %.o,%.d,$(CPP_OBJS))
 -include $(patsubst %.o,%.d,$(AVR_OBJS))

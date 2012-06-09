@@ -10,6 +10,7 @@
 
 /* UART protocol:
 
+   Each cmd prefixed by sync byte value 0xed
    Usbboard->Host
    O                      On, running
    F <code>               Fatal death, will reboot in 8 seconds
@@ -22,6 +23,8 @@
 
 
  */
+
+#define SYNC_BYTE ((char)0xed)
 
 info_USBInterface g_info;
 
@@ -37,8 +40,8 @@ void debug_text(char const *txt)
     if (l > 32) {
         l = 32;
     }
-    char buf[2] = { 'X', (char)l };
-    uart_send_all(2, buf);
+    char buf[3] = { SYNC_BYTE, 'X', (char)(l & 0xff) };
+    uart_send_all(3, buf);
     uart_send_all(l, txt);
 }
 
@@ -47,14 +50,14 @@ unsigned char requestFrom;
 class MyMaster : public ITWIMaster {
     public:
         virtual void data_from_slave(unsigned char n, void const *data) {
-            unsigned char ch[3] = { 'D', requestFrom, n };
-            uart_send_all(3, ch);
+            unsigned char ch[4] = { (unsigned char)SYNC_BYTE, 'D', requestFrom, n };
+            uart_send_all(4, ch);
             uart_send_all(n, data);
             requestFrom = 0;
         }
         virtual void nack() {
-            unsigned char ch[2] = { 'N', requestFrom };
-            uart_send_all(2, ch);
+            unsigned char ch[3] = { (unsigned char)SYNC_BYTE, 'N', requestFrom };
+            uart_send_all(3, ch);
             requestFrom = 0;
         }
 };
@@ -89,8 +92,8 @@ void request_from_sensor(void *)
 
 void request_from_usbboard(void *)
 {
-    char data[3] = { 'D', NodeUSBInterface, sizeof(g_info) };
-    uart_send_all(3, data);
+    char data[4] = { SYNC_BYTE, 'D', NodeUSBInterface, (char)sizeof(g_info) };
+    uart_send_all(4, data);
     uart_send_all(sizeof(g_info), &g_info);
     after(1000, request_from_usbboard, 0);
 }
@@ -124,7 +127,7 @@ void setup(void) {
     digitalWrite(LED_PIN, HIGH);
     setup_timers(F_CPU);
     uart_setup(115200, F_CPU);
-    uart_send_all(1, "O");
+    uart_send_all(2, "\xedO");
     delay(200);
     digitalWrite(LED_PIN, LOW);
     twi = start_twi_master(&twiMaster);

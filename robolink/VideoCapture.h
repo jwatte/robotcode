@@ -3,12 +3,13 @@
 
 #include "Talker.h"
 #include <boost/thread.hpp>
+#include <string>
 
 struct capture_info;
 
 class VideoCapture : public Talker {
 public:
-    VideoCapture(char const *dev);
+    VideoCapture(std::string const &name);
     ~VideoCapture();
 
     //  This may call invalidate() and signal listeners

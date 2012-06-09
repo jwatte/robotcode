@@ -3,7 +3,7 @@
 #include "pins_avr.h"
 #include <util/twi.h>
 
-extern long actual_f_cpu;
+extern unsigned long actual_f_cpu;
 
 ITWIMaster *_twi_master;
 ITWISlave *_twi_slave;

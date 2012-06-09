@@ -1,5 +1,6 @@
 
 #include <stdio.h>
+#include <assert.h>
 
 #include "Commands.h"
 #include "Board.h"
@@ -21,6 +22,9 @@
 
 
  */
+
+#define SYNC_BYTE ((char)0xed)
+bool syncerror = false;
 
 struct format {
     char code;
@@ -80,6 +84,33 @@ format codes[] = {
 
 int decode(char const *buf, int size)
 {
+    size_t offset = 0;
+    for (int i = 0; i != size; ++i)
+    {
+        if (buf[i] == SYNC_BYTE)
+        {
+            offset = i + 1;
+        }
+    }
+    //  no sync byte
+    if (offset == 0)
+    {
+        if (!syncerror)
+        {
+            fprintf(stderr, "unknown sync byte: 0x%02x\n", (unsigned char)buf[0]);
+            syncerror = true;
+        }
+        return size;
+    }
+    syncerror = false;
+    if (offset > 1)
+    {
+        //  simply skip data -- do not evaluate anything here
+        return offset-1;
+    }
+    assert(buf[0] == SYNC_BYTE);
+    ++buf;
+    --size;
     if (size < 1)
     {
         return 0;
@@ -102,12 +133,13 @@ int decode(char const *buf, int size)
                 }
             }
             codes[i].dispatch(buf, nsize);
-            return nsize;
+            return nsize + 1;
         }
     }
     //  This is unlikely to ever work -- will overflow because it's not recognized.
     //  Thus, just drop this one character and look for something I can recognize.
     fprintf(stderr, "unknown command: 0x%02x\n", (unsigned char)buf[0]);
+    //  skip the sync byte
     return 1;
 }
 

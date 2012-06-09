@@ -28,7 +28,7 @@
 
 //  how many milliseconds are allowed per task?
 //  Note: the LCD is super slow!
-#define MAX_TASK_TIME 2500
+//#define MAX_TASK_TIME 100
 
 #define TWI_MAX_SIZE 0x10
 

@@ -2,9 +2,11 @@
 #if !defined(UsbComm_h)
 #define UsbComm_h
 
+#include <string>
+
 class UsbComm {
 public:
-    UsbComm(char const *name);
+    UsbComm(std::string const &name);
     ~UsbComm();
     bool open();
     void close();

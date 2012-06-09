@@ -119,7 +119,7 @@ void on_ir(unsigned char val)
 
 void read_ir(void *)
 {
-    after(1, read_ir, 0);
+    after(5, read_ir, 0);
     if (adc_busy()) {
         return;
     }

@@ -80,7 +80,8 @@ MotorPowerBoard::MotorPowerBoard() :
     Board(bidMotorPower),
     voltage_(8),
     power_(0),
-    steering_(1)
+    steering_(1),
+    allowed_(2)
 {
 }
 
@@ -90,6 +91,7 @@ void MotorPowerBoard::on_data(char const *data, int nsize)
     voltage_.step(data_);
     power_.step(data_);
     steering_.step(data_);
+    allowed_.step(data_);
 }
 
 
@@ -104,3 +106,30 @@ void UsbLinkBoard::on_data(char const *data, int nsize)
     Board::on_data(data, nsize);
     voltage_.step(data_);
 }
+
+
+
+
+SensorBoard::SensorBoard() :
+    Board(bidSensors),
+    cliffDetect_(3),
+    leftDetect_(5),
+    rightDetect_(4),
+    leftWedge_(7),
+    rightWedge_(8),
+    backWedge_(6)
+{
+}
+
+void SensorBoard::on_data(char const *data, int nsize)
+{
+    Board::on_data(data, nsize);
+    cliffDetect_.step(data);
+    leftDetect_.step(data);
+    rightDetect_.step(data);
+    leftWedge_.step(data);
+    rightWedge_.step(data);
+    backWedge_.step(data);
+}
+
+

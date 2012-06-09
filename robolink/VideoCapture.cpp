@@ -22,27 +22,27 @@
 #define PADDING 4096
 #define JPG_SIZE (4*1920*1080 + 2*PADDING)  //  support uncompressed 1920x1080
 
-VideoCapture::VideoCapture(char const *dev)
+VideoCapture::VideoCapture(std::string const &dev)
 {
     fd_ = -1;
     info_ = 0;
     jpg_ = malloc(JPG_SIZE);
     size_ = JPG_SIZE;
-    fd_ = open_dev(dev);
+    fd_ = open_dev(dev.c_str());
     if (fd_ > -1) {
         info_ = make_capture_info();
         config_dev(fd_, info_);
         if (enqueue_all_buffers(fd_, info_) < 0) {
-            fprintf(stderr, "%s: enqueue error: %s\n", dev, get_error());
+            fprintf(stderr, "%s: enqueue error: %s\n", dev.c_str(), get_error());
             return;
         }
         if (start_capture(fd_, info_) < 0) {
-            fprintf(stderr, "%s: start error: %s\n", dev, get_error());
+            fprintf(stderr, "%s: start error: %s\n", dev.c_str(), get_error());
             return;
         }
     }
     else {
-        fprintf(stderr, "%s: error: %s\n", dev, get_error());
+        fprintf(stderr, "%s: error: %s\n", dev.c_str(), get_error());
     }
 }
 

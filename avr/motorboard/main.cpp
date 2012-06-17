@@ -500,6 +500,7 @@ void setup()
     setup_power();
     digitalWrite(POWEROFF_PIN, LOW);
     pinMode(POWEROFF_PIN, OUTPUT);
+    eeprom_read_block(&g_actual_state.r_last_fatal, (void *)EE_FATALCODE, 1);
     delay(100); //  wait for radio to boot
     on_pinchange(rf.getPinIRQ(), &rf_int);
     rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);

@@ -11,6 +11,7 @@ public:
     bool open();
     void close();
     int read1();
+    void message(unsigned char row, unsigned char col, std::string const &msg);
 
     char name_[128];
     int fd_;

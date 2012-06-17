@@ -1,4 +1,6 @@
 // *** Hardwarespecific functions ***
+#if HAS_UTFT
+
 template<byte model>
 void UTFT<model>::LCD_Writ_Bus(char VH,char VL)
 {   
@@ -109,3 +111,6 @@ void UTFT<model>::_set_direction_registers(byte mode)
 #endif
 
 }
+
+#endif
+

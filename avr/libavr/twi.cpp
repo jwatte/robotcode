@@ -5,8 +5,11 @@
 
 extern unsigned long actual_f_cpu;
 
-ITWIMaster *_twi_master;
 ITWISlave *_twi_slave;
+
+#if NATIVE_TWI
+
+ITWIMaster *_twi_master;
 
 #define READY_SLAVE ((1 << TWEN) | (1 << TWEA) | (1 << TWIE) | (1 << TWINT))
 #define UNREADY_SLAVE ((1 << TWEN) | (1 << TWIE) | (1 << TWINT))
@@ -60,7 +63,7 @@ class TWI : public TWIMaster {
             TWCR = READY_MASTER;
         }
 
-        void request_from(unsigned char addr)
+        void request_from(unsigned char addr, unsigned char count)
         {
             if (!_twi_master) {
                 fatal(FATAL_TWI_NO_USER);
@@ -230,7 +233,7 @@ ISR(TWI_vect)
                             }
                             else {
                                 (void)TWDR;
-                                TWCR = UNREADY_MASTER;
+                                TWCR = UNREADY_MASTER | (1 << TWSTO);
                             }
                             break;
         case TW_MR_DATA_NACK:
@@ -301,4 +304,155 @@ void stop_twi()
     _twi_slave = 0;
 }
 
+#else // emulated TWI
+
+static void twis_nop() {
+    //  just clear the interrupt
+    USISR |= (1 << USIOIF);
+    fatal(FATAL_TWI_NO_INFO);
+}
+
+void (*_twi_ovf_func)() = &twis_nop;
+unsigned char _twi_addr_write;
+unsigned char _twi_ptr;
+unsigned char _twi_buf_a[TWI_MAX_SIZE];
+unsigned char _twi_buf_b[TWI_MAX_SIZE];
+unsigned char _twi_sched_ptr;
+unsigned char *_twi_buf = _twi_buf_a;
+
+static inline void twi_look_for_start() {
+    _twi_ovf_func = &twis_nop;
+    USICR = (1 << USISIE) |
+        //  TWI mode, hold-low on overflow
+        (1 << USIWM1) | (1 << USIWM0) |
+        //  Data sampled on positive edge
+        (1 << USICS1);
+}
+
+static inline void twi_send_ack(unsigned char val) {
+    USIDR = val;
+    DDRA |= (1 << PA6);
+    PORTA &= ~(1 << PA6);
+    USISR = 0xe;
+}
+
+static void twis_begin_receive();
+
+static void twis_ack_receive() {
+    _twi_ovf_func = &twis_begin_receive;
+    if (_twi_ptr < sizeof(_twi_buf)) {
+        _twi_buf[_twi_ptr] = USIDR;
+        _twi_ptr++;
+        if (_twi_ptr < sizeof(_twi_buf)) {
+            twi_send_ack(0);
+        }
+    }
+    //  else don't send ack
+}
+
+static void twis_begin_receive() {
+    //  have sent ack -- wait for 8 bits of data
+    _twi_ovf_func = &twis_ack_receive;
+    DDRA &= ~(1 << PA6);
+    USISR = 0;
+}
+
+static void twis_address() {
+    if (USIDR == _twi_addr_write) {
+        //  matches the address to write to me
+        _twi_ovf_func = &twis_begin_receive;
+        twi_send_ack(0);
+    }
+    else {
+        //  not me!
+        twi_look_for_start();
+    }
+}
+
+static void twi_packet_complete(void *buf) {
+    _twi_slave->data_from_master(_twi_sched_ptr, buf);
+    _twi_sched_ptr = 0;
+}
+
+static void packet_complete() {
+    //  don't overwrite a packet that's not yet picked up
+    if (_twi_ptr > 0 && _twi_sched_ptr == 0) {
+        _twi_sched_ptr = _twi_ptr;
+        after(0, twi_packet_complete, _twi_buf);
+        _twi_buf = (_twi_buf == _twi_buf_a) ? _twi_buf_b : _twi_buf_a;
+    }
+    _twi_ptr = 0;
+}
+
+volatile bool _twi_has_after;
+
+static void twi_after(void *) {
+    IntDisable idi;
+    if (USISR & (1 << USIPF)) {
+        _twi_has_after = false;
+        packet_complete();
+        USISR |= (1 << USIPF);
+    }
+    else {
+        after(0, twi_after, 0);
+    }
+}
+
+static void twi_schedule_after() {
+    IntDisable idi;
+    if (!_twi_has_after) {
+        _twi_has_after = true;
+        after(0, twi_after, 0);
+    }
+}
+
+ISR(USI_START_vect) {
+    if (USISR & (1 << USIPF)) {
+        //  stop mode detected
+        USISR |= (1 << USIPF);
+        twi_look_for_start();
+    }
+    else {
+        //  no stop mode -- good to go!
+        _twi_ovf_func = &twis_address;
+        //  not looking for start mode here
+        USICR = (1 << USIOIE) |
+            //  TWI mode, hold-low on overflow
+            (1 << USIWM1) | (1 << USIWM0) |
+            //  Data sampled on positive edge
+            (1 << USICS1);
+    }
+    USISR |= (1 << USISIF);
+}
+
+ISR(USI_OVF_vect) {
+    if (USICR & (1 << USIPF)) {
+        //  stop condition -- cancel what I'm doing
+        USICR |= (1 << USIPF);
+        packet_complete();
+        twi_look_for_start();
+    }
+    else {
+        twi_schedule_after();
+        (*_twi_ovf_func)();
+    }
+    //  clear interrupt
+    USISR |= (1 << USIOIF);
+}
+
+void start_twi_slave(ITWISlave *s, unsigned char addr)
+{
+    IntDisable idi;
+    _twi_slave = s;
+    _twi_addr_write = addr << 1;
+    _twi_ptr = 0;
+    power_usi_enable();
+    DDRA &= ~((1 << PA4) | (1 << PA6));
+    //  clear some flags
+    USISR = (1 << USISIF) | (1 << USIOIF) | (1 << USIPF) |
+        (1 << USIDC);
+    twi_look_for_start();
+}
+
+#endif
 

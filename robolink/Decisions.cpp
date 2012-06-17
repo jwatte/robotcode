@@ -32,25 +32,31 @@ void Decisions::invalidate()
     if (leftDetect_.get() < 20) {
         gas = -255;
         turn -= 50;
+        std::cout << "leftDetect:" << (int)leftDetect_.get() << " ";
     }
     if (rightDetect_.get() < 20) {
         gas = -255;
         turn += 50;
+        std::cout << "rightDetect:" << (int)rightDetect_.get() << " ";
         if (turn == 0) {
             turn = 50;
+            std::cout << "tiebreaker ";
         }
     }
     if (leftWedge_.get() < 40) {
         turn -= (40 - leftWedge_.get());
+        std::cout << "leftWedge:" << (int)leftWedge_.get() << " ";
     }
     if (rightWedge_.get() < 40) {
         turn += (40 - rightWedge_.get());
+        std::cout << "rightWedge:" << (int)rightWedge_.get() << " ";
     }
     if (gas < 0) {
         if (rightWedge_.get() < 50) {
             gas = gas * rightWedge_.get() / 50;
+            std::cout << "backWedge:" << (int)backWedge_.get() << " ";
         }
     }
-    std::cout << "turn " << turn << " gas " << gas << std::endl;
+    std::cout << "turn " << turn << " gas " << gas << std::endl << std::flush;
 }
 

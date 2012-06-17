@@ -36,6 +36,7 @@ MotorPowerBoard &motorPower = *new MotorPowerBoard();
 Board &estop = *new Board(bidEstop);
 SensorBoard &sensors = *new SensorBoard();
 UsbLinkBoard &usbLink = *new UsbLinkBoard();
+UsbComm *g_usb;
 
 Parser p;
 Voltage voltage;
@@ -50,20 +51,32 @@ void on_uc(int fd, void *ucp)
     }
 }
 
-VideoCapture *vcap0;
-VideoCapture *vcap1;
+VideoCapture *vcapL;
+VideoCapture *vcapR;
 
 Talker postCapture_;
 
 void cap_callback(void *)
 {
-    vcap0->step();
-    vcap1->step();
+    vcapL->step();
+    vcapR->step();
     Fl::add_timeout(0.025, &cap_callback, 0);
     postCapture_.invalidate();
 }
 
-void make_window(VideoCapture *vcap0, VideoCapture *vcap1)
+void time_callback(void *)
+{
+    char buf[30];
+    time_t t;
+    struct tm tmm;
+    time(&t);
+    strftime(buf, 30, "%H:%M:%S", localtime_r(&t, &tmm));
+    fprintf(stderr, "time=%s\n", buf);
+    g_usb->message(0, 0, buf);
+    Fl::add_timeout(0.25, &time_callback, 0);
+}
+
+void make_window(VideoCapture *vcapL, VideoCapture *vcapR)
 {
     Fl::visual(FL_RGB|FL_DOUBLE);
     fl_register_images();
@@ -83,23 +96,23 @@ void make_window(VideoCapture *vcap0, VideoCapture *vcap1)
     id1->box_->resize(340, 232, 1280/4, 720/4);
     win->end();
     win->show();
-    id0->set_source(vcap0);
-    id1->set_source(vcap1);
+    id0->set_source(vcapL);
+    id1->set_source(vcapR);
 }
 
-std::string cam0("/dev/video0");
-std::string cam1("/dev/video1");
+std::string camL("/dev/video0");
+std::string camR("/dev/video1");
 std::string usb("/dev/ttyACM2");
 
 bool set_option(std::string const &key, std::string const &value)
 {
-    if (key == "cam0")
+    if (key == "camL")
     {
-        cam0 = value;
+        camL = value;
     }
-    else if (key == "cam1")
+    else if (key == "camR")
     {
-        cam1 = value;
+        camR = value;
     }
     else if (key == "usb")
     {
@@ -127,9 +140,17 @@ static void trim(std::string &s)
     s = s.substr(front, back-front);
 }
 
+bool readCfgFile_ = false;
+
 void read_config_file(std::string const &path)
 {
+    readCfgFile_ = true;
     std::ifstream ifile(path.c_str(), std::ifstream::in | std::ifstream::binary);
+    if (!ifile)
+    {
+        std::cerr << path << ": file not readable" << std::endl;
+        exit(1);
+    }
     char buf[1024];
     int lineno = 0;
     while (!ifile.eof())
@@ -209,6 +230,12 @@ void parse_args(int &argc, char const ** &argv)
         --argc;
         ++argv;
     }
+    if (!readCfgFile_)
+    {
+        std::string s(getenv("HOME"));
+        s += "/.config/robolink.cfg";
+        read_config_file(s.c_str());
+    }
 }
 
 int main(int argc, char const **argv)
@@ -216,18 +243,19 @@ int main(int argc, char const **argv)
     --argc;
     ++argv;
     parse_args(argc, argv);
-    vcap0 = new VideoCapture(cam0);
-    vcap1 = new VideoCapture(cam1);
-    make_window(vcap0, vcap1);
-    UsbComm uc(usb);
-    if (!uc.open())
+    vcapL = new VideoCapture(camL);
+    vcapR = new VideoCapture(camR);
+    make_window(vcapL, vcapR);
+    g_usb = new UsbComm(usb);
+    if (!g_usb->open())
     {
         return 1;
     }
-    Fl::add_fd(uc.fd_, on_uc, &uc);
+    Fl::add_fd(g_usb->fd_, on_uc, g_usb);
     Fl::add_timeout(0.025, &cap_callback, 0);
+    //Fl::add_timeout(0.25, &time_callback, 0);
     Decisions *d = new Decisions(
-        &motorPower, &estop, &sensors, &usbLink, vcap0, vcap1, &uc, &postCapture_);
+        &motorPower, &estop, &sensors, &usbLink, vcapL, vcapR, g_usb, &postCapture_);
     return Fl::run();
 }
 

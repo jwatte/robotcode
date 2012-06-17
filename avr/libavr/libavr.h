@@ -93,7 +93,7 @@ class TWIMaster {
     public:
         virtual bool is_busy() = 0;
         virtual void send_to(unsigned char n, void const *data, unsigned char addr) = 0;
-        virtual void request_from(unsigned char addr) = 0;
+        virtual void request_from(unsigned char addr, unsigned char count) = 0;
 };
 /*  Call start_twi_master() to become a master. If you were a slave, that's shut down. */
 TWIMaster *start_twi_master(ITWIMaster *m);

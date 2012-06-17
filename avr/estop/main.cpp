@@ -173,6 +173,7 @@ char const pTrimSteer[] PROGMEM =   "Trim Steer ";
 char const pActualPower[] PROGMEM = "Act Power  ";
 char const pSelfStop[] PROGMEM =    "Self Stop  ";
 char const pVoltage[] PROGMEM =     "M Batt (V) ";
+char const pFatal[] PROGMEM =       "Fc ";
 
 void render_info()
 {
@@ -180,6 +181,7 @@ void render_info()
     lcdPrint(1, 0, fmt(pCmdSteer, &g_info.w_cmd_steer, RegTypeSchar));
     lcdPrint(2, 0, fmt(pEAllow, &g_info.w_e_allow, RegTypeUchar));
     lcdPrint(3, 0, fmt(pTrimPower, &g_info.w_trim_power, RegTypeUchar));
+    lcdPrint(3, 20, fmt(pFatal, &g_info.r_last_fatal, RegTypeUchar));
     lcdPrint(4, 0, fmt(pTrimSteer, &g_info.w_trim_steer, RegTypeUchar));
     lcdPrint(5, 0, fmt(pActualPower, &g_info.r_actual_power, RegTypeSchar));
     lcdPrint(6, 0, fmt(pSelfStop, &g_info.r_self_stop, RegTypeUchar));

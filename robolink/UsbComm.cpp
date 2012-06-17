@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include <boost/lexical_cast.hpp>
+#include <stdexcept>
+
 #include "UsbComm.h"
 
 
@@ -71,5 +74,45 @@ void UsbComm::setup()
     cfsetispeed(&tios, B115200);
     cfsetospeed(&tios, B115200);
     tcsetattr(fd_, TCSANOW, &tios);
+}
+
+void UsbComm::message(unsigned char row, unsigned char col, std::string const &msg)
+{
+    if (col >= 40) {
+        throw std::runtime_error(std::string("Bad column in UsbComm::message(): ")
+            + boost::lexical_cast<std::string>(col));
+        return;
+    }
+    if (row >= 4) {
+        throw std::runtime_error(std::string("Bad row in UsbComm::message(): ")
+            + boost::lexical_cast<std::string>(row));
+        return;
+    }
+    size_t s = msg.size();
+    if (s > 40 - col) {
+        s = 40 - col;
+    }
+    char const *str = msg.c_str();
+    while (s > 0) {
+        unsigned char n = (unsigned char)(s & 0xff);
+        if (n > 14) {
+            n = 14;
+        }
+        char msg[19];
+        msg[0] = 'W';
+        msg[1] = 0x11;  //  display node
+        msg[2] = n + 2; //  row, col, data
+        msg[3] = row;
+        msg[4] = col;
+        memcpy(&msg[5], str, n);
+        str += n;
+        col += n;
+        s -= n;
+        int i = write(fd_, msg, 5 + n);
+        if (i < 0) {
+            perror("UsbComm::message()");
+            break;
+        }
+    }
 }
 

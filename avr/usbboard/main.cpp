@@ -20,8 +20,7 @@
    X <len> <text>         Debug text
 
    Host->Usbboard
-
-
+   W <node> <len> <data>  Write data to given node
  */
 
 #define SYNC_BYTE ((char)0xed)
@@ -46,6 +45,7 @@ void debug_text(char const *txt)
 }
 
 unsigned char requestFrom;
+unsigned char requestNext = (unsigned char)NodeMotorPower;
 
 class MyMaster : public ITWIMaster {
     public:
@@ -64,30 +64,33 @@ class MyMaster : public ITWIMaster {
 MyMaster twiMaster;
 TWIMaster *twi;
 
-void request_from_motor(void *)
-{
-    unsigned int d = 500;
-    if (requestFrom || twi->is_busy()) {
-        d = 1;
+unsigned char board_size(unsigned char type) {
+    switch (type) {
+        case NodeMotorPower: return sizeof(info_MotorPower);
+        case NodeSensorInput: return sizeof(info_SensorInput);
+        default: return 12;
     }
-    else {
-        requestFrom = NodeMotorPower;
-        twi->request_from(NodeMotorPower);
-    }
-    after(d, request_from_motor, 0);
 }
 
-void request_from_sensor(void *)
+void request_from_boards(void *)
 {
-    unsigned int d = 100;
     if (requestFrom || twi->is_busy()) {
-        d = 1;
+        after(1, request_from_boards, 0);
+        return;
     }
-    else {
-        requestFrom = NodeSensorInput;
-        twi->request_from(NodeSensorInput);
+    twi->request_from(requestNext, board_size(requestNext));
+    switch (requestNext) {
+        case NodeMotorPower:
+            requestNext = NodeSensorInput;
+            break;
+        case NodeSensorInput:
+            requestNext = NodeMotorPower;
+            break;
+        default:
+            fatal(FATAL_BAD_PARAM);
+            break;
     }
-    after(d, request_from_sensor, 0);
+    after(100, request_from_boards, 0);
 }
 
 void request_from_usbboard(void *)
@@ -121,6 +124,38 @@ void poll_voltage(void *)
     after(500, &poll_voltage, 0);
 }
 
+unsigned char parse_in_cmd(unsigned char n, char const *buf) {
+    for (unsigned char ch = 0; ch < n; ++ch) {
+        if (buf[ch] == 'W') {
+            if (n - ch >= 3) {
+                if (n - ch >= 3 + buf[ch + 2]) {
+                    //  got a full cmd
+                    twi->send_to(buf[ch + 2], &buf[ch + 3], buf[ch + 1]);
+                    return ch + 3 + buf[ch + 2];
+                }
+            }
+            return ch;
+        }
+    }
+    return n;
+}
+
+char ser_buf[35];
+
+void poll_serial(void *ptr) {
+    unsigned char left = sizeof(ser_buf) - ((char *)ptr - ser_buf);
+    unsigned char n = uart_available();
+    if (n > left) {
+        n = left;
+    }
+    uart_read(n, &ser_buf[sizeof(ser_buf)-left]);
+    left -= n;
+    while ((n = parse_in_cmd(left, ser_buf)) > 0) {
+        memmove(ser_buf, &ser_buf[n], sizeof(ser_buf)-left-n);
+        left += n;
+    }
+}
+
 void setup(void) {
     fatal_set_blink(&blink);
     pinMode(LED_PIN, OUTPUT);
@@ -132,9 +167,9 @@ void setup(void) {
     digitalWrite(LED_PIN, LOW);
     twi = start_twi_master(&twiMaster);
     adc_setup(false);
-    after(0, request_from_motor, 0);
-    after(0, request_from_sensor, 0);
+    after(0, request_from_boards, 0);
     after(0, request_from_usbboard, 0);
+    after(0, poll_serial, ser_buf);
     //after(0, request_from_compass_a, 0);
     //after(0, request_from_compass_b, 0);
     after(0, poll_voltage, 0);

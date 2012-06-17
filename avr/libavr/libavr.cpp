@@ -28,9 +28,11 @@ void fatal(int err)
         eeprom_write_byte((uint8_t *)EE_FATALCODE, (unsigned char)err);
     }
     //  sync byte
+#if HAS_UART
     uart_force_out(0xed);
     uart_force_out('F');
     uart_force_out(err);
+#endif
     unsigned int nIter = actual_f_cpu_1000 / 80;
     if (nIter < 10) {
         nIter = 10;
@@ -276,6 +278,7 @@ void setup_watchdog()
     wdt_reset();
 }
 
+#if HAS_UART
 
 /* UART serial API */
 
@@ -439,6 +442,10 @@ unsigned char uart_read(unsigned char n, void *data) {
     return avail;
 }
 
+#endif
+
+
+
 void adc_setup(bool use_aref) {
     power_adc_enable();
     ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1);  //  enable, prescaler @ 0.25 MHz @ 16 MHz
@@ -476,14 +483,15 @@ void adc_read(unsigned char channel, void (*cb)(unsigned char val)) {
     _adc_cb = cb;
     ADMUX = (ADMUX & 0xf0) | channel;
     DIDR0 |= (1 << channel);  //  disable ADC input as digital
-    DDRC &= ~(1 << channel);
-    PORTC &= ~(1 << channel);
+    ADC_DDR &= ~(1 << channel);
+    ADC_PORT &= ~(1 << channel);
     ADCSRA = ADCSRA | (1 << ADSC) | (1 << ADIF) | (1 << ADIE);  //  start conversion, clear interrupt flag, enable interrupt
 }
 
 
 /* pinchange interrupts */
 
+#if defined(PIN_PCINT0)
 IPinChangeNotify *_pcn[24] = { 0 };
 unsigned char _pcint_last[3] = { 0 };
 
@@ -499,7 +507,7 @@ ISR(PCINT0_vect) {
         _pcn[(x)]->pin_change(val & (1 << ((x) & 7))); \
     }
 static void pcint0_vect() {
-    unsigned char val = PINB;
+    unsigned char val = PIN_PCINT0;
     unsigned char last = _pcint_last[0];
     _pcint_last[0] = val;
     DISPATCH(0);
@@ -511,7 +519,9 @@ static void pcint0_vect() {
     DISPATCH(6);
     DISPATCH(7);
 }
+#endif
 
+#if defined(PIN_PCINT1)
 void (*_pcint1_vect_func)();
 
 ISR(PCINT1_vect) {
@@ -521,7 +531,7 @@ ISR(PCINT1_vect) {
 }
 
 static void pcint1_vect() {
-    unsigned char val = PINC;
+    unsigned char val = PIN_PCINT1;
     unsigned char last = _pcint_last[1];
     _pcint_last[1] = val;
     DISPATCH(8);
@@ -533,6 +543,9 @@ static void pcint1_vect() {
     DISPATCH(14);
     DISPATCH(15);
 }
+#endif
+
+#if defined(PIN_PCINT2)
 
 void (*_pcint2_vect_func)();
 
@@ -543,7 +556,7 @@ ISR(PCINT2_vect) {
 }
 
 static void pcint2_vect() {
-    unsigned char val = PIND;
+    unsigned char val = PIN_PCINT2;
     unsigned char last = _pcint_last[2];
     _pcint_last[2] = val;
     DISPATCH(16);
@@ -555,7 +568,9 @@ static void pcint2_vect() {
     DISPATCH(22);
     DISPATCH(23);
 }
+#endif
 
+#if defined(PIN_PCINT0)
 void on_pinchange(unsigned char pin, IPinChangeNotify *pcn)
 {
     if (pin > 23) {
@@ -563,22 +578,27 @@ void on_pinchange(unsigned char pin, IPinChangeNotify *pcn)
     }
     IntDisable idi;
     _pcint0_vect_func = pcint0_vect;
+#if defined(PIN_PCINT1)
     _pcint1_vect_func = pcint1_vect;
+#endif
+#if defined(PIN_PCINT2)
     _pcint2_vect_func = pcint2_vect;
+#endif
     _pcn[pin] = pcn;
     if (pcn) {
-        pcMaskReg(pin) |= (1 << (pin & 7));
+        pcMaskReg(pin) |= pcMaskBit(pin);
     }
     else {
-        pcMaskReg(pin) &= ~(1 << (pin & 7));
+        pcMaskReg(pin) &= ~pcMaskBit(pin);
     }
     if (pcMaskReg(pin)) {
-        PCICR |= (1 << (pin >> 3));
+        pcCtlReg(pin) |= pcCtlBit(pin);
     }
     else {
-        PCICR &= (1 << (pin >> 3));
+        pcCtlReg(pin) &= ~pcCtlBit(pin);
     }
 }
+#endif
 
 
 /* boot stuff */

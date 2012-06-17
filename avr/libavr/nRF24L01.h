@@ -7,6 +7,8 @@
 #include "spi.h"
 #include "libavr.h"
 
+#if HAS_SPI
+
 typedef enum {
     IdleMode,
     ReadMode,
@@ -318,5 +320,6 @@ private:
   char packetBuf_[MAX_PAYLOAD];
 };
 
+#endif
 
 #endif  //  nRF24L01_h

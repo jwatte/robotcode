@@ -35,8 +35,67 @@ inline void cbi(uint8_t volatile *reg, uint8_t val) {
     *reg &= ~val;
 }
 
+#if defined(__AVR_ATtiny84A__)
+
+#define pinToPortRegOut(pin) \
+    (((pin & 0x18) == 0) ? PORTA : ((pin & 0x18) == 0x8) ? PORTB : (fatal(FATAL_BAD_PIN_ARG), *(regtype *)0))
+#define pinToPortRegIn(pin) \
+    (((pin & 0x18) == 0) ? PINA : ((pin & 0x18) == 0x8) ? PINB : (fatal(FATAL_BAD_PIN_ARG), *(regtype *)0))
+#define pinToPortDirReg(pin) \
+    (((pin & 0x18) == 0) ? DDRA : ((pin & 0x18) == 0x8) ? DDRB : (fatal(FATAL_BAD_PIN_ARG), *(regtype *)0))
+#define pcMaskReg(pin) \
+    (((pin & 0x18) == 0) ? PCMSK0 : ((pin & 0x18) == 0x8) ? PCMSK1 :(fatal(FATAL_BAD_PIN_ARG), *(regtype *)0))
+#define pcCtlBit(pin) \
+    (1 << (((pin & 0x18) == 0) ? PCIE0 : ((pin & 0x18) == 0x8) ? PCIE1 :(fatal(FATAL_BAD_PIN_ARG), *(regtype *)0)))
+
+inline regtype &pcCtlReg(uint8_t pin) {
+    return GIMSK;
+}
+
+#define HAS_UTFT 0
+#define HAS_UART 0
+#define HAS_SPI 0
+#define NATIVE_TWI 0
+#define ADC_DDR DDRA
+#define ADC_PORT PORTA
+#define PIN_PCINT0 PINA
+#define PIN_PCINT1 PINB
+#define TIMER1_OVF_vect TIM1_OVF_vect
+#define TIMER1_COMPA_vect TIM1_COMPA_vect
+
+
+#elif defined(__AVR_ATmega328P__)
+
+/* for hysterical reasons, Atmega328p starts with pin group == port b */
 #define pinToPortRegOut(pin) \
     (((pin & 0x18) == 0) ? PORTB : ((pin & 0x18) == 0x8) ? PORTC : ((pin & 0x18) == 0x10) ? PORTD : (fatal(FATAL_BAD_PIN_ARG), *(regtype *)0))
+#define pinToPortRegIn(pin) \
+    (((pin & 0x18) == 0) ? PINB : ((pin & 0x18) == 0x8) ? PINC : ((pin & 0x18) == 0x10) ? PIND : (fatal(FATAL_BAD_PIN_ARG), *(regtype *)0))
+#define pinToPortDirReg(pin) \
+    (((pin & 0x18) == 0) ? DDRB : ((pin & 0x18) == 0x8) ? DDRC : ((pin & 0x18) == 0x10) ? DDRD : (fatal(FATAL_BAD_PIN_ARG), *(regtype *)0))
+#define pcMaskReg(pin) \
+    (((pin & 0x18) == 0) ? PCMSK0 : ((pin & 0x18) == 0x8) ? PCMSK1 : ((pin & 0x18) == 0x10) ? PCMSK2 : (fatal(FATAL_BAD_PIN_ARG), *(regtype *)0))
+#define pcCtlBit(pin) \
+    (1 << (((pin & 0x18) == 0) ? PCIE0 : ((pin & 0x18) == 0x8) ? PCIE1 : ((pin & 0x18) == 0x10) ? PCIE2 : (fatal(FATAL_BAD_PIN_ARG), *(regtype *)0)))
+
+inline regtype &pcCtlReg(uint8_t pin) {
+    return PCICR;
+}
+
+#define HAS_UTFT 1
+#define HAS_UART 1
+#define HAS_SPI 1
+#define NATIVE_TWI 1
+#define ADC_DDR DDRC
+#define ADC_PORT PORTC
+#define PIN_PCINT0 PINB
+#define PIN_PCINT1 PINC
+#define PIN_PCINT2 PIND
+
+#else
+#error "please set up this part"
+#endif
+
 /*
    inline regtype &pinToPortRegOut(uint8_t pin) {
    switch (pin >> 3) {
@@ -48,8 +107,6 @@ inline void cbi(uint8_t volatile *reg, uint8_t val) {
    }
  */
 
-#define pinToPortRegIn(pin) \
-    (((pin & 0x18) == 0) ? PINB : ((pin & 0x18) == 0x8) ? PINC : ((pin & 0x18) == 0x10) ? PIND : (fatal(FATAL_BAD_PIN_ARG), *(regtype *)0))
 /*
    inline regtype const &pinToPortRegIn(uint8_t pin) {
    switch (pin >> 3) {
@@ -61,8 +118,6 @@ inline void cbi(uint8_t volatile *reg, uint8_t val) {
    }
  */
 
-#define pinToPortDirReg(pin) \
-    (((pin & 0x18) == 0) ? DDRB : ((pin & 0x18) == 0x8) ? DDRC : ((pin & 0x18) == 0x10) ? DDRD : (fatal(FATAL_BAD_PIN_ARG), *(regtype *)0))
 /*
    inline regtype &pinToPortDirReg(uint8_t pin) {
    switch (pin >> 3) {
@@ -74,8 +129,6 @@ inline void cbi(uint8_t volatile *reg, uint8_t val) {
    }
  */
 
-#define pcMaskReg(pin) \
-    (((pin & 0x18) == 0) ? PCMSK0 : ((pin & 0x18) == 0x8) ? PCMSK1 : ((pin & 0x18) == 0x10) ? PCMSK2 : (fatal(FATAL_BAD_PIN_ARG), *(regtype *)0))
 /*
    inline regtype &pcMaskReg(uint8_t pin) {
    switch (pin >> 3) {
@@ -91,12 +144,6 @@ inline uint8_t pcMaskBit(uint8_t pin) {
     return (1 << (pin & 7));
 }
 
-inline regtype &pcCtlReg(uint8_t pin) {
-    return PCICR;
-}
-
-#define pcCtlBit(pin) \
-    (1 << (((pin & 0x18) == 0) ? PCIE0 : ((pin & 0x18) == 0x8) ? PCIE1 : ((pin & 0x18) == 0x10) ? PCIE2 : (fatal(FATAL_BAD_PIN_ARG), *(regtype *)0)))
 /*
    inline uint8_t pcCtlBit(uint8_t pin) {
    switch (pin >> 3) {

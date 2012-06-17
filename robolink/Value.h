@@ -76,6 +76,7 @@ public:
                 value_ = src_->value();
             }
         }
+        return value_;
     }
     operator T const &() const
     {

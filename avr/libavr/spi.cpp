@@ -1,6 +1,9 @@
 
 #include <avr/io.h>
 #include "spi.h"
+#include "pins_avr.h"
+
+#if HAS_SPI 
 
 #define DDRSPI DDRB
 #define DD_SCK PB5
@@ -32,4 +35,6 @@ uint8_t shift_spi(uint8_t val)
     }
     return SPDR;
 }
+
+#endif
 

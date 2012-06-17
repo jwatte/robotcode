@@ -42,6 +42,8 @@ struct info_MotorPower {
     unsigned char r_e_conn;
     unsigned char r_voltage;
     unsigned char r_debug_bits;
+
+    unsigned char r_last_fatal;
 };
 
 /*

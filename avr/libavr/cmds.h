@@ -64,7 +64,9 @@ struct info_USBInterface {
 };
 
 struct info_IMU {
-    unsigned short r_regs[9];
+    unsigned short r_mag[3];
+    unsigned short r_accel[3];
+    unsigned short r_gyro[3];
 };
 
 char hexchar(unsigned char nybble);

@@ -35,6 +35,7 @@ PART_usbboard:=atmega328p
 PART_sensorboard:=atmega328p
 PART_blink:=atmega328p
 PART_display:=atmega328p
+PART_readcompass:=atmega328p
 
 fuses_motorboard:	fuses_8
 fuses_estop:	fuses_8
@@ -42,6 +43,7 @@ fuses_usbboard:	fuses_16
 fuses_sensorboard:	fuses_8
 fuses_blink:	fuses_12
 fuses_display:	fuses_20
+fuses_readcompass:	fuses_16
 
 define mkapp
 bld/bin/$(1):	$(filter bld/obj/$(1)/%,$(CPP_OBJS))

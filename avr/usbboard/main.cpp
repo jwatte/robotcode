@@ -4,6 +4,7 @@
 #include "libavr.h"
 #include "pins_avr.h"
 #include "cmds.h"
+#include "L3G4200D.h"
 #include <stdio.h>
 
 #define LED_PIN (0|5)
@@ -44,26 +45,6 @@ void debug_text(char const *txt)
     uart_send_all(l, txt);
 }
 
-unsigned char requestFrom;
-unsigned char requestNext = (unsigned char)NodeMotorPower;
-
-class MyMaster : public ITWIMaster {
-    public:
-        virtual void data_from_slave(unsigned char n, void const *data) {
-            unsigned char ch[4] = { (unsigned char)SYNC_BYTE, 'D', requestFrom, n };
-            uart_send_all(4, ch);
-            uart_send_all(n, data);
-            requestFrom = 0;
-        }
-        virtual void nack() {
-            unsigned char ch[3] = { (unsigned char)SYNC_BYTE, 'N', requestFrom };
-            uart_send_all(3, ch);
-            requestFrom = 0;
-        }
-};
-MyMaster twiMaster;
-TWIMaster *twi;
-
 unsigned char board_size(unsigned char type) {
     switch (type) {
         case NodeMotorPower: return sizeof(info_MotorPower);
@@ -72,25 +53,228 @@ unsigned char board_size(unsigned char type) {
     }
 }
 
-void request_from_boards(void *)
-{
-    if (requestFrom || twi->is_busy()) {
-        after(1, request_from_boards, 0);
-        return;
+void request_from_boards(void *);
+
+class IRequest {
+public:
+    virtual unsigned char id() = 0;
+    virtual void on_tick() = 0;
+    virtual bool on_data(unsigned char n, void const *data) = 0;
+    virtual void on_xmit() = 0;
+};
+
+TWIMaster *twi;
+class MyMaster : public ITWIMaster {
+    public:
+        unsigned char requestFrom;
+        unsigned char requestState;
+
+        MyMaster() :
+            requestFrom(0),
+            requestState(0) {
+        }
+
+        virtual void data_from_slave(unsigned char n, void const *data) {
+            if (boards[requestState]->on_data(n, data)) {
+                unsigned char ch[4] = { (unsigned char)SYNC_BYTE, 'D', requestFrom, n };
+                uart_send_all(4, ch);
+                uart_send_all(n, data);
+                requestFrom = 0;
+                after(50, request_from_boards, 0);
+            }
+        }
+        virtual void xmit_complete() {
+            boards[requestState]->on_xmit();
+        }
+        virtual void nack() {
+            unsigned char ch[3] = { (unsigned char)SYNC_BYTE, 'N', requestFrom };
+            uart_send_all(3, ch);
+            requestFrom = 0;
+            ++requestState;
+            after(50, request_from_boards, 0);
+        }
+        void tick() {
+            if (requestFrom || twi->is_busy()) {
+                after(1, request_from_boards, 0);
+                return;
+            }
+            request_next();
+        }
+        void request_next();
+        static IRequest *boards[];
+};
+MyMaster twiMaster;
+
+class DefaultRequest : public IRequest {
+public:
+    DefaultRequest(unsigned char i) :
+        id_(i) {
     }
-    twi->request_from(requestNext, board_size(requestNext));
-    switch (requestNext) {
-        case NodeMotorPower:
-            requestNext = NodeSensorInput;
+    unsigned char id_;
+    virtual unsigned char id() {
+    return id_;
+    }
+    virtual void on_tick() {
+        twi->request_from(id_, board_size(id_));
+    }
+    virtual bool on_data(unsigned char n, void const *data) {
+        return true;
+    }
+    virtual void on_xmit() {}
+};
+DefaultRequest motorRequest(NodeMotorPower);
+DefaultRequest sensorRequest(NodeSensorInput);
+
+//  I2C addresses
+#define ACCEL           0x18
+#define MAG             0x1E
+#define GYRO            0x69
+//  MAG registers
+#define CRA_REG_M       0x00
+#define MR_REG_M        0x02
+#define OUT_X_H_M       0x03
+//  ACCEL registers
+#define CTRL_REG1_A     0x20
+#define CTRL_REG4_A     0x23
+#define OUT_X_L_A       0x28
+
+#define REG_IS_MAG(x) ((x) < 0x20)
+
+static void bigend(unsigned short *dst, void const *src) {
+    unsigned char const *s = (unsigned char const *)src;
+    dst[0] = (s[0] << 8) | s[1];
+    dst[1] = (s[2] << 8) | s[3];
+    dst[2] = (s[4] << 8) | s[5];
+}
+
+static void litend(unsigned short *dst, void const *src) {
+    unsigned char const *s = (unsigned char const *)src;
+    dst[0] = (s[1] << 8) | s[0];
+    dst[1] = (s[3] << 8) | s[2];
+    dst[2] = (s[5] << 8) | s[4];
+}
+
+class CompassRequest : public IRequest {
+public:
+    enum State {
+        Uninited = 0x00,
+        Inited = 0x20,  //  a k a AddrMag
+        RequestMag,
+        AddrAccel,
+        RequestAccel,
+        AddrGyro,
+        RequestGyro
+    };
+    CompassRequest() :
+        state_(Uninited) {
+        memset(&imu_, 0, sizeof(imu_));
+    }
+
+    unsigned char state_;
+    unsigned char nextState_;
+    info_IMU imu_;
+
+    virtual unsigned char id() {
+        return NodeIMU;
+    }
+    virtual void on_tick() {
+        next();
+    }
+    virtual bool on_data(unsigned char n, void const *data) {
+        switch (state_) {
+            case RequestMag:
+                bigend(imu_.r_mag, data);
+                break;
+            case RequestAccel:
+                litend(imu_.r_accel, data);
+                break;
+            case RequestGyro:
+                litend(imu_.r_gyro, data);
+                break;
+            default:
+                fatal(FATAL_BAD_USAGE);
+        }
+        next();
+    }
+    virtual void on_xmit() {
+        next();
+    }
+    void next() {
+        nextState_ = state_ + 1;
+        switch (state_) {
+        case 0:
+            regwr(CTRL_REG1_A, 0x27, ACCEL);   //  full power on
             break;
-        case NodeSensorInput:
-            requestNext = NodeMotorPower;
+        case 1:
+            regwr(CTRL_REG4_A, 0x00, ACCEL);   //  no limitation of range
+            break;
+        case 2:
+            regwr(CRA_REG_M, 0x14, MAG);     //  full output rate
+            break;
+        case 3:
+            regwr(MR_REG_M, 0x00, MAG);      //  keep running!
+            break;
+        case 4:
+            regwr(L3G4200D_CTRL_REG1, 0x0F, GYRO);    //  full power
+            break;
+        case 5:
+            nextState_ = Inited;
+            break;
+        case Inited:
+            regrd(OUT_X_H_M, MAG);
+            break;
+        case RequestMag:
+            twi->request_from(MAG, 6);
+            break;
+        case AddrAccel:
+            regrd(OUT_X_L_A | 0x80, ACCEL);
+            break;
+        case RequestAccel:
+            twi->request_from(ACCEL, 6);
+            break;
+        case AddrGyro:
+            regrd(L3G4200D_OUT_X_L | 0x80, GYRO);
+            break;
+        case RequestGyro:
+            twi->request_from(GYRO, 6);
             break;
         default:
-            fatal(FATAL_BAD_PARAM);
+            //  I'm complete with one cycle!
+            nextState_ = Inited;
             break;
+        }
+        state_ = nextState_;
     }
-    after(100, request_from_boards, 0);
+
+    void regwr(unsigned char reg, unsigned char val, unsigned char addr) {
+        unsigned char data[2] = { reg, val };
+        twi->send_to(2, data, addr);
+    }
+    void regrd(unsigned char reg, unsigned char addr) {
+        twi->send_to(1, &reg, addr);
+    }
+};
+CompassRequest compassRequest;
+
+IRequest *MyMaster::boards[] = {
+    &motorRequest,
+    &sensorRequest,
+    &compassRequest
+};
+
+void MyMaster::request_next() {
+    ++requestState;
+    if (requestState >= sizeof(boards)/sizeof(boards[0])) {
+        requestState = 0;
+    }
+    requestFrom = boards[requestState]->id();
+    boards[requestState]->on_tick();
+}
+
+
+void request_from_boards(void *)
+{
+    twiMaster.tick();
 }
 
 void request_from_usbboard(void *)

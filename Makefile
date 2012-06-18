@@ -1,5 +1,5 @@
 
-APPS:=robolink simplegps
+APPS:=robolink simplegps serial
 
 CPP_OPT:=-ggdb -O0 -fvar-tracking-assignments
 CPP_CFLAGS:=$(sort $(CPP_OPT) $(filter-out -O%,$(shell fltk-config --use-images --cxxflags)))

@@ -12,7 +12,8 @@ static char const *boardLabels_[bidNumBoards] = {
     "Motor/Power",
     "E-stop",
     "Sensors",
-    "USB Link"
+    "USB Link",
+    "IMU"
 };
 
 Board::Board(BoardId id)
@@ -63,6 +64,7 @@ void Board::dead(unsigned char code)
 Board *Board::board_by_id(BoardId id)
 {
     assert(id >= 0 && id < sizeof(boardIds_)/sizeof(boardIds_[0]));
+    assert(boardIds_[id] != 0);
     return boardIds_[id];
 }
 
@@ -132,4 +134,32 @@ void SensorBoard::on_data(char const *data, int nsize)
     backWedge_.step(data);
 }
 
+
+IMUBoard::IMUBoard() :
+    Board(bidIMU),
+    magX_(0),
+    magY_(2),
+    magZ_(4),
+    accX_(6),
+    accY_(8),
+    accZ_(10),
+    gyrX_(12),
+    gyrY_(14),
+    gyrZ_(16)
+{
+}
+
+void IMUBoard::on_data(char const *data, int nsize)
+{
+    Board::on_data(data, nsize);
+    magX_.step(data);
+    magY_.step(data);
+    magZ_.step(data);
+    accX_.step(data);
+    accY_.step(data);
+    accZ_.step(data);
+    gyrX_.step(data);
+    gyrY_.step(data);
+    gyrZ_.step(data);
+}
 

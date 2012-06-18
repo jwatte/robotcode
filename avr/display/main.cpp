@@ -161,7 +161,7 @@ public:
         lcd_output(2, 0, "Y");
     }
     virtual void request_from_master(void *o_buf, unsigned char &o_size) {
-        fatal(FATAL_BAD_USAGE);
+        fatal(FATAL_TWI_UNEXPECTED);
     }
 };
 

@@ -9,11 +9,13 @@
 
 enum Node {
     NodeAny,
-    NodeMotorPower,
-    NodeEstop,
-    NodeSensorInput,
-    NodeUSBInterface,
-    NodeIMU
+    NodeMotorPower,     //  1
+    NodeEstop,          //  2
+    NodeSensorInput,    //  3
+    NodeUSBInterface,   //  4
+    NodeIMU,            //  5
+
+    NodeCount
 };
 
 enum RegType {

@@ -59,7 +59,7 @@ class IRequest {
 public:
     virtual unsigned char id() = 0;
     virtual void on_tick() = 0;
-    virtual bool on_data(unsigned char n, void const *data) = 0;
+    virtual void on_data(unsigned char n, void const *data) = 0;
     virtual void on_xmit() = 0;
 };
 
@@ -75,13 +75,7 @@ class MyMaster : public ITWIMaster {
         }
 
         virtual void data_from_slave(unsigned char n, void const *data) {
-            if (boards[requestState]->on_data(n, data)) {
-                unsigned char ch[4] = { (unsigned char)SYNC_BYTE, 'D', requestFrom, n };
-                uart_send_all(4, ch);
-                uart_send_all(n, data);
-                requestFrom = 0;
-                after(50, request_from_boards, 0);
-            }
+            boards[requestState]->on_data(n, data);
         }
         virtual void xmit_complete() {
             boards[requestState]->on_xmit();
@@ -91,6 +85,15 @@ class MyMaster : public ITWIMaster {
             uart_send_all(3, ch);
             requestFrom = 0;
             ++requestState;
+            after(50, request_from_boards, 0);
+        }
+        void got_board_data(unsigned char n, void const *data, unsigned char boardId) {
+            unsigned char ch[4] = { (unsigned char)SYNC_BYTE, 'D', boardId, n };
+            uart_send_all(4, ch);
+            if (n > 0) {
+                uart_send_all(n, data);
+            }
+            requestFrom = 0;
             after(50, request_from_boards, 0);
         }
         void tick() {
@@ -112,13 +115,15 @@ public:
     }
     unsigned char id_;
     virtual unsigned char id() {
-    return id_;
+        return id_;
     }
     virtual void on_tick() {
+        uart_force_out('t');
         twi->request_from(id_, board_size(id_));
     }
-    virtual bool on_data(unsigned char n, void const *data) {
-        return true;
+    virtual void on_data(unsigned char n, void const *data) {
+        uart_force_out('g');
+        twiMaster.got_board_data(n, data, id_);
     }
     virtual void on_xmit() {}
 };
@@ -154,7 +159,7 @@ static void litend(unsigned short *dst, void const *src) {
     dst[2] = (s[5] << 8) | s[4];
 }
 
-class CompassRequest : public IRequest {
+class IMURequest : public IRequest {
 public:
     enum State {
         Uninited = 0x00,
@@ -165,7 +170,7 @@ public:
         AddrGyro,
         RequestGyro
     };
-    CompassRequest() :
+    IMURequest() :
         state_(Uninited) {
         memset(&imu_, 0, sizeof(imu_));
     }
@@ -180,7 +185,7 @@ public:
     virtual void on_tick() {
         next();
     }
-    virtual bool on_data(unsigned char n, void const *data) {
+    virtual void on_data(unsigned char n, void const *data) {
         switch (state_) {
             case RequestMag:
                 bigend(imu_.r_mag, data);
@@ -192,7 +197,8 @@ public:
                 litend(imu_.r_gyro, data);
                 break;
             default:
-                fatal(FATAL_BAD_USAGE);
+                //  how did I end up here?
+                fatal(FATAL_UNEXPECTED);
         }
         next();
     }
@@ -200,6 +206,11 @@ public:
         next();
     }
     void next() {
+        uart_force_out('n');
+        uart_force_out('0' + state_);
+        if (state_ == 5) {
+            state_ = Inited;
+        }
         nextState_ = state_ + 1;
         switch (state_) {
         case 0:
@@ -217,9 +228,10 @@ public:
         case 4:
             regwr(L3G4200D_CTRL_REG1, 0x0F, GYRO);    //  full power
             break;
-        case 5:
-            nextState_ = Inited;
-            break;
+        //case 5:
+        //    nextState_ = Inited;
+        //    //  aaand the transition is dropped on the floor...
+        //    break;
         case Inited:
             regrd(OUT_X_H_M, MAG);
             break;
@@ -239,6 +251,7 @@ public:
             twi->request_from(GYRO, 6);
             break;
         default:
+            twiMaster.got_board_data(sizeof(imu_), &imu_, NodeIMU);
             //  I'm complete with one cycle!
             nextState_ = Inited;
             break;
@@ -254,12 +267,12 @@ public:
         twi->send_to(1, &reg, addr);
     }
 };
-CompassRequest compassRequest;
+IMURequest imuRequest;
 
 IRequest *MyMaster::boards[] = {
     &motorRequest,
     &sensorRequest,
-    &compassRequest
+    &imuRequest
 };
 
 void MyMaster::request_next() {
@@ -282,7 +295,7 @@ void request_from_usbboard(void *)
     char data[4] = { SYNC_BYTE, 'D', NodeUSBInterface, (char)sizeof(g_info) };
     uart_send_all(4, data);
     uart_send_all(sizeof(g_info), &g_info);
-    after(1000, request_from_usbboard, 0);
+    after(2000, request_from_usbboard, 0);
 }
 
 
@@ -346,16 +359,14 @@ void setup(void) {
     digitalWrite(LED_PIN, HIGH);
     setup_timers(F_CPU);
     uart_setup(115200, F_CPU);
-    uart_send_all(2, "\xedO");
     delay(200);
+    uart_send_all(2, "\xedO");
     digitalWrite(LED_PIN, LOW);
     twi = start_twi_master(&twiMaster);
     adc_setup(false);
     after(0, request_from_boards, 0);
-    after(0, request_from_usbboard, 0);
-    after(0, poll_serial, ser_buf);
-    //after(0, request_from_compass_a, 0);
-    //after(0, request_from_compass_b, 0);
+    after(2000, request_from_usbboard, 0);
     after(0, poll_voltage, 0);
+    //after(0, poll_serial, ser_buf);
 }
 

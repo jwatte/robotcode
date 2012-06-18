@@ -30,7 +30,7 @@ void format_value(void const *src, RegType type, unsigned char bufsz, char *oDat
     unsigned char v = *(unsigned char *)src;
     switch (type) {
     default:
-        fatal(FATAL_BAD_USAGE);
+        fatal(FATAL_BAD_ARGS);
     case RegTypeUnknown:
         return;
     case RegTypeUchar:

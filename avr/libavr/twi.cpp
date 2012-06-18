@@ -51,7 +51,7 @@ public:
     void send_to(unsigned char n, void const *data, unsigned char addr) {
         IntDisable idi;
         if (is_busy()) {
-            fatal(FATAL_TWI_BAD_USAGE);
+            fatal(FATAL_TWI_BUSY);
         }
         if (n > TWI_MAX_SIZE) {
             fatal(FATAL_TWI_TOO_BIG);
@@ -67,7 +67,7 @@ public:
     void request_from(unsigned char addr, unsigned char count) {
         IntDisable idi;
         if (is_busy()) {
-            fatal(FATAL_TWI_BAD_USAGE);
+            fatal(FATAL_TWI_BUSY);
         }
         if (count > TWI_MAX_SIZE) {
             fatal(FATAL_TWI_TOO_BIG);

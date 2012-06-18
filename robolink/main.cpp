@@ -27,6 +27,7 @@
 #include "VideoCapture.h"
 #include "ImageDisplay.h"
 #include "Decisions.h"
+#include "args.h"
 
 
 
@@ -36,6 +37,8 @@ MotorPowerBoard &motorPower = *new MotorPowerBoard();
 Board &estop = *new Board(bidEstop);
 SensorBoard &sensors = *new SensorBoard();
 UsbLinkBoard &usbLink = *new UsbLinkBoard();
+IMUBoard &imu = *new IMUBoard();
+
 UsbComm *g_usb;
 
 Parser p;
@@ -88,6 +91,7 @@ void make_window(VideoCapture *vcapL, VideoCapture *vcapR)
     (new BoardTile(&estop))->make_widgets();
     (new BoardTile(&sensors))->make_widgets();
     (new BoardTile(&usbLink))->make_widgets();
+    (new BoardTile(&imu))->make_widgets();
     voltage.init(&motorPower, &usbLink);
     pack->end();
     ImageDisplay *id0 = new ImageDisplay();
@@ -125,124 +129,13 @@ bool set_option(std::string const &key, std::string const &value)
     return true;
 }
 
-static void trim(std::string &s)
-{
-    size_t front = 0;
-    size_t back = s.size();
-    while (front < back && isspace(s[front]))
-    {
-        ++front;
-    }
-    while (back > front && isspace(s[back-1]))
-    {
-        --back;
-    }
-    s = s.substr(front, back-front);
-}
-
-bool readCfgFile_ = false;
-
-void read_config_file(std::string const &path)
-{
-    readCfgFile_ = true;
-    std::ifstream ifile(path.c_str(), std::ifstream::in | std::ifstream::binary);
-    if (!ifile)
-    {
-        std::cerr << path << ": file not readable" << std::endl;
-        exit(1);
-    }
-    char buf[1024];
-    int lineno = 0;
-    while (!ifile.eof())
-    {
-        buf[0] = 0;
-        ifile.getline(buf, 1024);
-        ++lineno;
-        size_t off = 0;
-        while (isspace(buf[off]))
-        {
-            ++off;
-        }
-        if (buf[0] && buf[0] != '#')
-        {
-            std::string s(&buf[off]);
-            size_t off = s.find('=');
-            if (off == std::string::npos)
-            {
-                std::cerr << path << ":" << lineno << ": missing value for: " << s << std::endl;
-                exit(1);
-            }
-            std::string v(s.substr(off+1));
-            s = s.substr(0, off);
-            trim(s);
-            trim(v);
-            if (!set_option(s, v))
-            {
-                std::cerr << path << ":" << lineno << ": unknown option: " << s << std::endl;
-                exit(1);
-            }
-        }
-    }
-}
-
-void parse_args(int &argc, char const ** &argv)
-{
-    while (argc > 0)
-    {
-        if ((*argv)[0] == '-')
-        {
-            std::string s;
-            if ((*argv)[1] == '-')
-            {
-                s = (*argv) + 2;
-            }
-            else
-            {
-                s = (*argv) + 1;
-            }
-            std::string v;
-            if (s.find('=') == std::string::npos)
-            {
-                if (argc <= 1)
-                {
-                    std::cerr << "missing value for: " << s << std::endl;
-                    exit(1);
-                }
-                --argc;
-                ++argv;
-                v = *argv;
-            }
-            else
-            {
-                v = s.substr(s.find('=') + 1);
-                s = s.substr(0, s.find('='));
-            }
-            if (!set_option(s, v))
-            {
-                std::cerr << "unknown option: " << s << std::endl;
-                exit(1);
-            }
-        }
-        else
-        {
-            read_config_file(*argv);
-        }
-        --argc;
-        ++argv;
-    }
-    if (!readCfgFile_)
-    {
-        std::string s(getenv("HOME"));
-        s += "/.config/robolink.cfg";
-        read_config_file(s.c_str());
-    }
-}
-
 int main(int argc, char const **argv)
 {
     --argc;
     ++argv;
-    parse_args(argc, argv);
+    if (!parse_args(argc, argv, set_option)) {
+        exit(1);
+    }
     vcapL = new VideoCapture(camL);
     vcapR = new VideoCapture(camR);
     make_window(vcapL, vcapR);

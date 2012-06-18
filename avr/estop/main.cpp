@@ -126,7 +126,7 @@ void lcdDrawChars(char *ptr, unsigned char n, unsigned char y, unsigned char x)
 void lcdPrint(unsigned char row, unsigned char col, char const *data)
 {
     if (row >= N_ROWS || col >= N_COLS) {
-        fatal(FATAL_BAD_PARAM);
+        fatal(FATAL_UI_BAD_PARAM);
     }
     bool diff = false;
     unsigned char startCol = col;

@@ -10,6 +10,7 @@ enum BoardId
     bidEstop,
     bidSensors,
     bidUsbLink,
+    bidIMU,
 
     bidNumBoards
 };
@@ -66,6 +67,23 @@ public:
     Value<unsigned char> leftWedge_;
     Value<unsigned char> rightWedge_;
     Value<unsigned char> backWedge_;
+};
+
+class IMUBoard : public Board
+{
+public:
+    IMUBoard();
+    virtual void on_data(char const *data, int nsize);
+
+    Value<short> magX_;
+    Value<short> magY_;
+    Value<short> magZ_;
+    Value<short> accX_;
+    Value<short> accY_;
+    Value<short> accZ_;
+    Value<short> gyrX_;
+    Value<short> gyrY_;
+    Value<short> gyrZ_;
 };
 
 #endif  //  Board_h

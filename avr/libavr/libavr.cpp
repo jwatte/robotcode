@@ -6,6 +6,9 @@
 int volatile globalctr;
 unsigned long actual_f_cpu = F_CPU;
 unsigned long actual_f_cpu_1000 = F_CPU / 1000;
+#if HAS_UART
+bool _uart_init = false;
+#endif
 
 
 void fatal_no_blink(bool) {}
@@ -29,9 +32,11 @@ void fatal(int err)
     }
     //  sync byte
 #if HAS_UART
-    uart_force_out(0xed);
-    uart_force_out('F');
-    uart_force_out(err);
+    if (_uart_init) {
+        uart_force_out(0xed);
+        uart_force_out('F');
+        uart_force_out(err);
+    }
 #endif
     unsigned int nIter = actual_f_cpu_1000 / 80;
     if (nIter < 10) {
@@ -41,35 +46,20 @@ void fatal(int err)
         nIter = 300;
     }
     while (true) {
-        if (err >= FATAL_TWI_ERROR_BASE) {
-            /* just blink madly! */
+        for (int k = 0; k < (err & 0xf); ++k) {
             (*g_fatal_blink)(true);
             for (unsigned int volatile i = 0; i < nIter; ++i) {
-                for (globalctr = 0; globalctr < 300; ++globalctr) {
+                for (globalctr = 0; globalctr < 350; ++globalctr) {
                 }
             }
             (*g_fatal_blink)(false);
-            for (unsigned int volatile i = 0; i < nIter; ++i) {
-                for (globalctr = 0; globalctr < 300; ++globalctr) {
+            for (unsigned int volatile i = 0; i < 2 * nIter; ++i) {
+                for (globalctr = 0; globalctr < 350; ++globalctr) {
                 }
             }
         }
-        else {
-            for (int k = 0; k < err; ++k) {
-                (*g_fatal_blink)(true);
-                for (unsigned int volatile i = 0; i < nIter; ++i) {
-                    for (globalctr = 0; globalctr < 350; ++globalctr) {
-                    }
-                }
-                (*g_fatal_blink)(false);
-                for (unsigned int volatile i = 0; i < 2 * nIter; ++i) {
-                    for (globalctr = 0; globalctr < 350; ++globalctr) {
-                    }
-                }
-            }
-            for (unsigned int volatile i = 0; i < 8 * nIter; ++i) {
-                for (globalctr = 0; globalctr < 350; ++globalctr) {
-                }
+        for (unsigned int volatile i = 0; i < 8 * nIter; ++i) {
+            for (globalctr = 0; globalctr < 350; ++globalctr) {
             }
         }
     }
@@ -377,6 +367,7 @@ void uart_setup(unsigned long brate, unsigned long f_cpu) {
             UCSR0A = (1 << U2X0);
             UCSR0C = (3 << UCSZ00);
             UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
+            _uart_init = true;
             return;
         }
     }
@@ -462,7 +453,7 @@ void _adc_result(void *cb) {
 
 ISR(ADC_vect) {
     if (!_adc_cb) {
-        fatal(FATAL_BAD_USAGE);
+        fatal(FATAL_ADC_BADCALL);
     }
     after(0, _adc_result, 0);
     ADCSRA = ADCSRA & ~((1 << ADSC) | (1 << ADATE) | (1 << ADIE));
@@ -478,7 +469,7 @@ void adc_read(unsigned char channel, void (*cb)(unsigned char val)) {
         fatal(FATAL_ADC_BUSY);
     }
     if (channel > 5) {
-        fatal(FATAL_BAD_USAGE);
+        fatal(FATAL_ADC_BAD_CHANNEL);
     }
     _adc_cb = cb;
     ADMUX = (ADMUX & 0xf0) | channel;
@@ -574,7 +565,7 @@ static void pcint2_vect() {
 void on_pinchange(unsigned char pin, IPinChangeNotify *pcn)
 {
     if (pin > 23) {
-        fatal(FATAL_BAD_PIN_ARG);
+        fatal(FATAL_BAD_PIN);
     }
     IntDisable idi;
     _pcint0_vect_func = pcint0_vect;

@@ -379,7 +379,7 @@ void dispatch_cmd(unsigned char sz, unsigned char const *d)
     for (unsigned char off = 0; off < cmd.reg_count; ++off) {
         unsigned char p = off + cmd.reg_start;
         if (p > sizeof(info_MotorPower)) {
-            fatal(FATAL_BAD_PARAM);
+            fatal(FATAL_UNEXPECTED);
         }
         ((unsigned char *)&g_write_state)[p] = d[2 + off];
     }
@@ -475,7 +475,7 @@ class MySlave : public ITWISlave {
         virtual void data_from_master(unsigned char n, void const *data) {
             //  packet format: start, count, <data>
             if (n != ((unsigned char const *)data)[1] + 2) {
-                fatal(FATAL_BAD_PARAM);
+                fatal(FATAL_TWI_UNEXPECTED);
             }
             dispatch_cmd(n, (unsigned char const *)data);
         }

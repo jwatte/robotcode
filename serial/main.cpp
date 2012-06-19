@@ -6,6 +6,7 @@
 #include <termios.h>
 #include <ctype.h>
 #include <sys/fcntl.h>
+#include <termios.h>
 
 #include <string>
 #include <algorithm>
@@ -42,6 +43,11 @@ int main(int argc, char const *argv[])
         perror(usb.c_str());
         return 1;
     }
+    termios tio;
+    tcgetattr(fd, &tio);
+    cfmakeraw(&tio);
+    cfsetspeed(&tio, B115200);
+    tcsetattr(fd, TCSANOW, &tio);
     while (true)
     {
         unsigned char ch;

@@ -48,6 +48,11 @@ void UsbComm::close()
     }
 }
 
+void UsbComm::setRTimestamp(double ts)
+{
+    //  do nothing
+}
+
 int UsbComm::read1()
 {
     if (fd_ < 0)

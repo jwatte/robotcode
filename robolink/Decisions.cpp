@@ -11,7 +11,6 @@ Decisions::Decisions(
     UsbLinkBoard *ulb,
     VideoCapture *vc0,
     VideoCapture *vc1,
-    UsbComm *uc,
     Talker *t)
 {
     t->add_listener(this);

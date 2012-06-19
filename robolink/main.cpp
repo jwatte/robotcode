@@ -7,6 +7,7 @@
 #include <termios.h>
 #include <string.h>
 #include <ctype.h>
+#include <sys/time.h>
 
 #include <string>
 #include <iostream>
@@ -27,6 +28,7 @@
 #include "VideoCapture.h"
 #include "ImageDisplay.h"
 #include "Decisions.h"
+#include "CaptureFile.h"
 #include "args.h"
 
 
@@ -44,12 +46,48 @@ UsbComm *g_usb;
 Parser p;
 Voltage voltage;
 
+
+
+class InitNow
+{
+public:
+    InitNow() : time_at_start(0) {
+        time_at_start = now();
+    }
+    double time_at_start;
+    double now() {
+        struct timeval tv = { 0 };
+        gettimeofday(&tv, 0);
+        double t = (double)tv.tv_sec + (double)tv.tv_usec * 0.000001;
+        return t - time_at_start;
+    }
+};
+
+double now()
+{
+    static InitNow theNow;
+    return theNow.now();
+}
+
+
+struct UC_Info {
+    IReader *rd;
+    IWriter *wr;
+};
+static UC_Info ucinfo;
+
 void on_uc(int fd, void *ucp)
 {
-    UsbComm *uc = (UsbComm *)ucp;
+    UC_Info *uci = (UC_Info *)ucp;
+    IReader *ir = uci->rd;
+    IWriter *wr = uci->wr;
+    double n = now();
+    ir->setRTimestamp(n);
+    wr->setWTimestamp(n);
     int ch = 0;
-    while ((ch = uc->read1()) >= 0)
+    while ((ch = ir->read1()) >= 0)
     {
+        wr->write1(ch);
         p.on_char(ch);
     }
 }
@@ -107,48 +145,100 @@ void make_window(VideoCapture *vcapL, VideoCapture *vcapR)
 std::string camL("/dev/video0");
 std::string camR("/dev/video1");
 std::string usb("/dev/ttyACM2");
+std::string capture("capture.bin");
+std::string playback("");
 
+struct opt {
+    char const *name;
+    std::string *value;
+}
+options[] = {
+    { "camL", &camL },
+    { "camR", &camR },
+    { "usb", &usb },
+    { "capture", &capture },
+    { "playback", &playback },
+};
 bool set_option(std::string const &key, std::string const &value)
 {
-    if (key == "camL")
+    for (size_t i = 0; i != sizeof(options)/sizeof(options[0]); ++i)
     {
-        camL = value;
+        if (key == options[i].name)
+        {
+            *options[i].value = value;
+            return true;
+        }
     }
-    else if (key == "camR")
-    {
-        camR = value;
-    }
-    else if (key == "usb")
-    {
-        usb = value;
-    }
-    else
-    {
-        return false;
-    }
-    return true;
+    return false;
 }
+
+class DummyWr : public IWriter {
+public:
+    virtual void setWTimestamp(double) {}
+    virtual void write1(int) {}
+};
+DummyWr g_dummyWr;
 
 int main(int argc, char const **argv)
 {
     --argc;
     ++argv;
-    if (!parse_args(argc, argv, set_option)) {
+    if (!parse_args(argc, argv, set_option))
+    {
+        std::cerr << "Errors parsing arguments." << std::endl;
         exit(1);
     }
-    vcapL = new VideoCapture(camL);
-    vcapR = new VideoCapture(camR);
-    make_window(vcapL, vcapR);
     g_usb = new UsbComm(usb);
     if (!g_usb->open())
     {
+        std::cerr << "Can't open USB: " << usb << std::endl;
         return 1;
     }
-    Fl::add_fd(g_usb->fd_, on_uc, g_usb);
+    ucinfo.rd = g_usb;
+    ucinfo.wr = &g_dummyWr;
+    vcapL = new VideoCapture(camL);
+    vcapR = new VideoCapture(camR);
+    make_window(vcapL, vcapR);
+
+    //  playback?
+    CaptureFile *pb = 0;
+    if (playback.size())
+    {
+        std::cerr << "Playback from file: " << playback << std::endl;
+        if (playback == capture)
+        {
+            std::cerr << "Can't playback the same file that's captured." << std::endl;
+            return 1;
+        }
+        pb = new CaptureFile(playback, false);
+        if (!pb->open())
+        {
+            std::cerr << "Can't open playback file: " << playback << std::endl;
+            return 1;
+        }
+        ucinfo.rd = pb;
+    }
+
+    //  capture?
+    CaptureFile *ca = 0;
+    if (capture.size())
+    {
+        std::cerr << "Capture to file: " << capture << std::endl;
+        ca = new CaptureFile(capture, true);
+        if (!ca->open())
+        {
+            std::cerr << "Can't open capture file: " << capture << std::endl;
+            return 1;
+        }
+        ucinfo.wr = ca;
+    }
+
+    //  Set up processing pump
+    Fl::add_fd(pb ? pb->fd_ : g_usb->fd_, on_uc, &ucinfo);
     Fl::add_timeout(0.025, &cap_callback, 0);
     //Fl::add_timeout(0.25, &time_callback, 0);
     Decisions *d = new Decisions(
-        &motorPower, &estop, &sensors, &usbLink, vcapL, vcapR, g_usb, &postCapture_);
+        &motorPower, &estop, &sensors, &usbLink, vcapL, vcapR, &postCapture_);
     return Fl::run();
 }
 

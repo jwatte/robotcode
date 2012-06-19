@@ -118,15 +118,12 @@ public:
 
     uint8_t on_mr_data(uint8_t twcr) {
         m_buf[m_ptr++] = TWDR;
+        twcr &= ~(1 << TWEA);
         if (m_ptr == m_end) {
             twcr |= (1 << TWSTO);
-            twcr &= ~(1 << TWEA);
             after(0, got_data, 0);
         }
-        else if (m_ptr == m_end - 1) {
-            twcr &= ~(1 << TWEA);
-        }
-        else { 
+        else if (m_ptr < m_end - 1) {
             twcr |= (1 << TWEA);
         }
         return twcr;
@@ -157,11 +154,13 @@ static void send_nak(void *) {
 }
 
 static void got_data(void *) {
+    unsigned char n;
     {
         IntDisable idi;
+        n = _twi.m_ptr;
         _twi.m_addr = 0; _twi.m_ptr = _twi.m_end = 0;
     }
-    _twi_master->data_from_slave(_twi.m_ptr, _twi.m_buf);
+    _twi_master->data_from_slave(n, _twi.m_buf);
 }
 
 static void done_sending(void *) {

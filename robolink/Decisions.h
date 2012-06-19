@@ -21,7 +21,6 @@ public:
         UsbLinkBoard *ulb,
         VideoCapture *vc0,
         VideoCapture *vc1,
-        UsbComm *uc,
         Talker *t);
     
     ValueShadow<bool> allowed_;

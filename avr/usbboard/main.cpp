@@ -118,11 +118,9 @@ public:
         return id_;
     }
     virtual void on_tick() {
-        uart_force_out('t');
         twi->request_from(id_, board_size(id_));
     }
     virtual void on_data(unsigned char n, void const *data) {
-        uart_force_out('g');
         twiMaster.got_board_data(n, data, id_);
     }
     virtual void on_xmit() {}
@@ -165,10 +163,13 @@ public:
         Uninited = 0x00,
         Inited = 0x20,  //  a k a AddrMag
         RequestMag,
-        AddrAccel,
+        ReplyMag,
+        AddrAccel = ReplyMag,
         RequestAccel,
-        AddrGyro,
-        RequestGyro
+        ReplyAccel,
+        AddrGyro = ReplyAccel,
+        RequestGyro,
+        ReplyGyro
     };
     IMURequest() :
         state_(Uninited) {
@@ -187,17 +188,21 @@ public:
     }
     virtual void on_data(unsigned char n, void const *data) {
         switch (state_) {
-            case RequestMag:
+            case ReplyMag:
                 bigend(imu_.r_mag, data);
                 break;
-            case RequestAccel:
+            case ReplyAccel:
                 litend(imu_.r_accel, data);
                 break;
-            case RequestGyro:
+            case ReplyGyro:
                 litend(imu_.r_gyro, data);
                 break;
             default:
                 //  how did I end up here?
+                uart_force_out(0xed);
+                uart_force_out('s');
+                uart_force_out(state_);
+                uart_force_out(n);
                 fatal(FATAL_UNEXPECTED);
         }
         next();
@@ -206,8 +211,6 @@ public:
         next();
     }
     void next() {
-        uart_force_out('n');
-        uart_force_out('0' + state_);
         if (state_ == 5) {
             state_ = Inited;
         }

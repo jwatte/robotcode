@@ -8,8 +8,9 @@ class MotorPowerBoard;
 class UsbLinkBoard;
 class SensorBoard;
 class Board;
-class VideoCapture;
+class AsyncVideoCapture;
 class UsbComm;
+class DecisionPanel;
 
 class Decisions : public Listener
 {
@@ -19,9 +20,9 @@ public:
         Board *estop,
         SensorBoard *sens,
         UsbLinkBoard *ulb,
-        VideoCapture *vc0,
-        VideoCapture *vc1,
-        Talker *t);
+        AsyncVideoCapture *avc,
+        Talker *t,
+        DecisionPanel *dp);
     
     ValueShadow<bool> allowed_;
     ValueShadow<unsigned char> cliffDetect_;
@@ -32,6 +33,8 @@ public:
     ValueShadow<unsigned char> backWedge_;
 
     void invalidate();
+
+    DecisionPanel *panel_;
 };
 
 #endif  //  Decisions_h

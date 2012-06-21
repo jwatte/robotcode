@@ -88,9 +88,9 @@ bool parse_args(int &argc, char const ** &argv, SetOption const &so)
                     std::cerr << "missing value for: " << s << std::endl;
                     return false;
                 }
-                v = *argv;
                 --argc;
                 ++argv;
+                v = *argv;
             }
             else
             {

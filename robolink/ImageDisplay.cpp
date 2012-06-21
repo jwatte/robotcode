@@ -1,4 +1,5 @@
 #include "ImageDisplay.h"
+#include "AsyncVideoCapture.h"
 
 #include <FL/Fl.H>
 #include <FL/fl_draw.H>
@@ -42,7 +43,6 @@ void Fl_ImageBox::draw()
 ImageDisplay::ImageDisplay(int x, int y, int w, int h)
 {
     box_ = new Fl_ImageBox(this, x, y, w, h);
-    src_ = 0;
     data_ = 0;
     width_ = 0;
     height_ = 0;
@@ -56,12 +56,15 @@ ImageDisplay::~ImageDisplay()
 
 int n = 0;
 
-void ImageDisplay::invalidate()
+void ImageDisplay::invalidate(VideoFrame *vf, unsigned int ix)
 {
-    unsigned char *dst = (unsigned char *)src_->get_jpg();
+    size_t size;
+    unsigned char *dst = (unsigned char *)vf->data(size, ix);
     unsigned char *ptr = dst;
-    size_t size = src_->get_size();
-    size_t padding = src_->get_padding();
+
+    /*
+    there's enough padding in the capture
+
     if (padding < huff_size)
     {
         fprintf(stderr, "Too little padding! need %llu, got %llu\n", 
@@ -69,6 +72,7 @@ void ImageDisplay::invalidate()
         //  can't do this!
         return;
     }
+    */
 
     //  find the spot to put the header
     while (ptr < dst + size)
@@ -145,16 +149,4 @@ void ImageDisplay::invalidate()
     box_->redraw();
 }
 
-void ImageDisplay::set_source(VideoCapture *src)
-{
-    if (src_ != 0)
-    {
-        src_->remove_listener(this);
-    }
-    src_ = src;
-    if (src)
-    {
-        src->add_listener(this);
-    }
-}
 

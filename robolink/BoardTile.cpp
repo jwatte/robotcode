@@ -31,6 +31,7 @@ BoardTile::BoardTile(Board *b) :
 void BoardTile::invalidate()
 {
     image_->image(board_->online_ ? online_ : offline_);
+    image_->redraw();
     sprintf(codeText_, "0x%02x", board_->code_);
     code_->label(codeText_);
     code_->labelcolor(board_->code_ ? FL_RED : FL_BLACK);

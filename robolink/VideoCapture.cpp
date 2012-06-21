@@ -81,6 +81,10 @@ size_t VideoCapture::get_padding() const
 
 extern "C" {
 
+    //  As long as the frame rate is capped at 7.5 Hz, I only 
+    //  need a single buffer.
+    unsigned int N_V_BUFS = 1;
+
     static std::string error;
 
     char const *get_error()
@@ -148,7 +152,7 @@ extern "C" {
         memset(capi, 0, sizeof(*capi));
         capi->rbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         capi->rbuf.memory = V4L2_MEMORY_MMAP;
-        capi->rbuf.count = 2;
+        capi->rbuf.count = N_V_BUFS;
         if (v4l2_ioctl(fd, VIDIOC_REQBUFS, &capi->rbuf) < 0) {
             int en = errno;
             error = "ioctl(VIDIOC_REQBUFS) failed: ";

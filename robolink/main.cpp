@@ -18,6 +18,7 @@
 #include <FL/Fl_Box.H>
 #include <FL/Fl_Pack.H>
 #include <FL/Fl_Shared_Image.H>
+#include <FL/Fl_Output.H>
 
 #include "UsbComm.h"
 #include "Commands.h"
@@ -25,11 +26,11 @@
 #include "Parser.h"
 #include "BoardTile.h"
 #include "Voltage.h"
-#include "VideoCapture.h"
+#include "AsyncVideoCapture.h"
 #include "ImageDisplay.h"
 #include "Decisions.h"
-#include "CaptureFile.h"
 #include "args.h"
+#include "DecisionPanel.h"
 
 
 
@@ -45,6 +46,8 @@ UsbComm *g_usb;
 
 Parser p;
 Voltage voltage;
+DecisionPanel decisionPanel;
+Fl_Box *fps_;
 
 
 
@@ -92,17 +95,38 @@ void on_uc(int fd, void *ucp)
     }
 }
 
-VideoCapture *vcapL;
-VideoCapture *vcapR;
-
 Talker postCapture_;
+int captureN_;
+double captureStart_;
 
-void cap_callback(void *)
+//  My God! This looks like polling!
+//  The reason it's like this, is that FLTK doesn't provide
+//  a separate "wake up the main thread" function. I could 
+//  perhaps build one with a FIFO inside AsyncVideoCapture, 
+//  but this seems good enough. The good news here is that 
+//  the USB camera will never run ahead of processing by more 
+//  than a frame, so if I'm processing at 10 Hz, I still won't 
+//  have more than a frame's worth of latency.
+void cap_callback(void *ac)
 {
-    vcapL->step();
-    vcapR->step();
-    Fl::add_timeout(0.025, &cap_callback, 0);
-    postCapture_.invalidate();
+    AsyncVideoCapture *acap = (AsyncVideoCapture *)ac;
+    if (acap->gotFrame()) {
+        double t = now();
+        if (captureN_ == 30 || (t - captureStart_ > 4.9)) {
+            float fps = captureN_ / (t - captureStart_);
+            captureN_ = 0;
+            static char buf[20];
+            sprintf(buf, "%.1f", fps);
+            fps_->label(buf);
+            std::cerr << buf << " fps" << std::endl;
+        }
+        if (captureN_ == 0) {
+            captureStart_ = t;
+        }
+        ++captureN_;
+        postCapture_.invalidate();
+    }
+    Fl::add_timeout(0.005, &cap_callback, ac);
 }
 
 void time_callback(void *)
@@ -117,11 +141,41 @@ void time_callback(void *)
     Fl::add_timeout(0.25, &time_callback, 0);
 }
 
-void make_window(VideoCapture *vcapL, VideoCapture *vcapR)
+class ImageInvalidate : public Listener
+{
+public:
+    ImageInvalidate(Talker *sig, AsyncVideoCapture *avc, ImageDisplay *left, ImageDisplay *right) :
+        sig_(sig),
+        avc_(avc),
+        left_(left),
+        right_(right)
+    {
+        sig_->add_listener(this);
+    }
+    ~ImageInvalidate()
+    {
+        sig_->remove_listener(this);
+    }
+    void invalidate()
+    {
+        VideoFrame *vf = avc_->next();
+        left_->invalidate(vf, VideoFrame::IndexLeft);
+        right_->invalidate(vf, VideoFrame::IndexRight);
+    }
+
+    Talker *sig_;
+    AsyncVideoCapture *avc_;
+    ImageDisplay *left_;
+    ImageDisplay *right_;
+};
+
+
+void make_window(AsyncVideoCapture *avc, Talker *postCapture)
 {
     Fl::visual(FL_RGB|FL_DOUBLE);
     fl_register_images();
     Fl_Window *win = new Fl_Window(1280, 720);
+    fps_ = new Fl_Box(0, 690, 60, 30);
     Fl_Pack *pack = new Fl_Pack(5, 20, 1270, 200);
     pack->type(Fl_Pack::HORIZONTAL);
     pack->spacing(5);
@@ -130,16 +184,20 @@ void make_window(VideoCapture *vcapL, VideoCapture *vcapR)
     (new BoardTile(&sensors))->make_widgets();
     (new BoardTile(&usbLink))->make_widgets();
     (new BoardTile(&imu))->make_widgets();
-    voltage.init(&motorPower, &usbLink);
     pack->end();
+    pack = new Fl_Pack(2, 225, 1270, 200);
+    pack->type(Fl_Pack::HORIZONTAL);
+    pack->spacing(5);
     ImageDisplay *id0 = new ImageDisplay();
-    id0->box_->resize(10, 232, 1280/4, 720/4);
+    id0->box_->size(1280/4, 720/4);
     ImageDisplay *id1 = new ImageDisplay();
-    id1->box_->resize(340, 232, 1280/4, 720/4);
+    id1->box_->size(1280/4, 720/4);
+    voltage.init(&motorPower, &usbLink);
+    decisionPanel.init();
+    pack->end();
     win->end();
     win->show();
-    id0->set_source(vcapL);
-    id1->set_source(vcapR);
+    ImageInvalidate *ii = new ImageInvalidate(postCapture, avc, id0, id1);
 }
 
 std::string camL("/dev/video0");
@@ -196,49 +254,20 @@ int main(int argc, char const **argv)
     }
     ucinfo.rd = g_usb;
     ucinfo.wr = &g_dummyWr;
-    vcapL = new VideoCapture(camL);
-    vcapR = new VideoCapture(camR);
-    make_window(vcapL, vcapR);
-
-    //  playback?
-    CaptureFile *pb = 0;
-    if (playback.size())
+    AsyncVideoCapture *avc = new AsyncVideoCapture(camL, camR);
+    if (!avc->open())
     {
-        std::cerr << "Playback from file: " << playback << std::endl;
-        if (playback == capture)
-        {
-            std::cerr << "Can't playback the same file that's captured." << std::endl;
-            return 1;
-        }
-        pb = new CaptureFile(playback, false);
-        if (!pb->open())
-        {
-            std::cerr << "Can't open playback file: " << playback << std::endl;
-            return 1;
-        }
-        ucinfo.rd = pb;
+        std::cerr << "Can't open video capture: " << camL << ", " << camR << std::endl;
+        return 1;
     }
-
-    //  capture?
-    CaptureFile *ca = 0;
-    if (capture.size())
-    {
-        std::cerr << "Capture to file: " << capture << std::endl;
-        ca = new CaptureFile(capture, true);
-        if (!ca->open())
-        {
-            std::cerr << "Can't open capture file: " << capture << std::endl;
-            return 1;
-        }
-        ucinfo.wr = ca;
-    }
+    make_window(avc, &postCapture_);
 
     //  Set up processing pump
-    Fl::add_fd(pb ? pb->fd_ : g_usb->fd_, on_uc, &ucinfo);
-    Fl::add_timeout(0.025, &cap_callback, 0);
+    Fl::add_fd(g_usb->fd_, on_uc, &ucinfo);
+    Fl::add_timeout(0.025, &cap_callback, avc);
     //Fl::add_timeout(0.25, &time_callback, 0);
     Decisions *d = new Decisions(
-        &motorPower, &estop, &sensors, &usbLink, vcapL, vcapR, &postCapture_);
+        &motorPower, &estop, &sensors, &usbLink, avc, &postCapture_, &decisionPanel);
     return Fl::run();
 }
 

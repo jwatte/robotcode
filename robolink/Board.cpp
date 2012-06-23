@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include "Board.h"
+#include "UsbComm.h"
 
 static Board *boardIds_[bidNumBoards];
 //  This breaks the open/closed principle
@@ -58,6 +59,13 @@ void Board::dead(unsigned char code)
     online_ = false;
     code_ = code;
     invalidate();
+}
+
+extern UsbComm *g_usb;
+
+void Board::write_reg(unsigned char reg, unsigned char n, void const *d)
+{
+    g_usb->write_reg(id_, reg, n, d);
 }
 
 

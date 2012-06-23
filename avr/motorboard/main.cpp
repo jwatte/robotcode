@@ -83,8 +83,10 @@ void read_tuning()
     eeprom_read_block(&g_tuning, (void const *)EE_TUNING, sizeof(g_tuning));
     if (g_tuning.cksum != calc_cksum(sizeof(g_tuning)-1, &g_tuning)) {
         memset(&g_tuning, 0, sizeof(g_tuning));
-        g_tuning.d_steer = 0;
+        g_tuning.d_steer = -16;
         g_tuning.m_power = 128;
+        g_actual_state.w_trim_steer = g_write_state.w_trim_steer = g_tuning.d_steer;
+        g_actual_state.w_trim_power = g_write_state.w_trim_power = g_tuning.m_power;
         write_tuning();
     }
     g_actual_state.w_trim_steer = g_write_state.w_trim_steer = g_tuning.d_steer;

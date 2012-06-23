@@ -24,6 +24,7 @@ public:
     virtual void on_nak();
     char const *label();
     virtual void dead(unsigned char code);
+    void write_reg(unsigned char reg, unsigned char n, void const *d);
 
     char data_[64];
     BoardId id_;

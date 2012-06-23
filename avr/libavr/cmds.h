@@ -59,6 +59,7 @@ struct info_SensorInput {
     unsigned char w_laser[3];
     unsigned char r_ir[3];
     unsigned char r_us[3];
+    unsigned char r_iter;
 };
 
 struct info_USBInterface {

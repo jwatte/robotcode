@@ -212,15 +212,17 @@ void schedule()
     unsigned short now = read_timer();
     for (unsigned char ch = 0; ch != MAX_AFTERS; ++ch)
     {
+        uint8_t idi = disable_interrupts();
         if (!g_afters[ch].func)
         {
+            restore_interrupts(idi);
             continue;
         }
-        uint8_t idi = disable_interrupts();
         if ((short)(now - g_afters[ch].at_time) >= 0)
         {
             void (*func)(void*) = g_afters[ch].func;
             void *data = g_afters[ch].data;
+            g_afters[ch].at_time = 0;
             g_afters[ch].func = 0;
             g_afters[ch].data = 0;
             restore_interrupts(idi);
@@ -300,11 +302,11 @@ ISR(USART_RX_vect) {
 }
 
 unsigned char _uart_txbuf[32];
-char _uart_txptr;
-char _uart_txend;
+volatile char _uart_txptr;
+volatile char _uart_txend;
 unsigned char _uart_rxbuf[32];
-char _uart_rxptr;
-char _uart_rxend;
+volatile char _uart_rxptr;
+volatile char _uart_rxend;
 
 static void usart_rx_vect() {
 again:
@@ -402,6 +404,10 @@ void uart_send_all(unsigned char ch, void const *data)
         unsigned char sent = uart_send(ch, data);
         data = (char const *)data + sent;
         ch -= sent;
+        if (ch > 0) {
+            //  wait for some time
+            udelay(100);
+        }
     }
 }
 
@@ -435,49 +441,6 @@ unsigned char uart_read(unsigned char n, void *data) {
 
 #endif
 
-
-
-void adc_setup(bool use_aref) {
-    power_adc_enable();
-    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1);  //  enable, prescaler @ 0.25 MHz @ 16 MHz
-    ADMUX = (use_aref ? 0 : (1 << REFS0)) | (1 << ADLAR);
-}
-
-void (*_adc_cb)(unsigned char val) = 0;
-
-void _adc_result(void *cb) {
-    void (*comp)(unsigned char) = _adc_cb;
-    _adc_cb = 0;
-    (*comp)(ADCH);
-}
-
-ISR(ADC_vect) {
-    if (!_adc_cb) {
-        fatal(FATAL_ADC_BADCALL);
-    }
-    after(0, _adc_result, 0);
-    ADCSRA = ADCSRA & ~((1 << ADSC) | (1 << ADATE) | (1 << ADIE));
-}
-
-bool adc_busy() {
-    unsigned char adcsra = ADCSRA;
-    return (_adc_cb != 0) || ((adcsra & (1 << ADSC)) != 0);
-}
-
-void adc_read(unsigned char channel, void (*cb)(unsigned char val)) {
-    if (adc_busy()) {
-        fatal(FATAL_ADC_BUSY);
-    }
-    if (channel > 5) {
-        fatal(FATAL_ADC_BAD_CHANNEL);
-    }
-    _adc_cb = cb;
-    ADMUX = (ADMUX & 0xf0) | channel;
-    DIDR0 |= (1 << channel);  //  disable ADC input as digital
-    ADC_DDR &= ~(1 << channel);
-    ADC_PORT &= ~(1 << channel);
-    ADCSRA = ADCSRA | (1 << ADSC) | (1 << ADIF) | (1 << ADIE);  //  start conversion, clear interrupt flag, enable interrupt
-}
 
 
 /* pinchange interrupts */

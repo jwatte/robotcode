@@ -17,6 +17,7 @@ UsbComm::UsbComm(std::string const &name)
     strncpy(name_, name.c_str(), sizeof(name_));
     name_[sizeof(name_)-1] = 0;
     fd_ = -1;
+    stalled_ = false;
 }
 
 UsbComm::~UsbComm()
@@ -75,6 +76,7 @@ void UsbComm::setup()
     tios.c_oflag = 0;
     tios.c_cflag = CS8 | CREAD | CLOCAL;
     tios.c_lflag = 0;
+    memset(tios.c_cc, 0, sizeof(tios.c_cc));
     cfmakeraw(&tios);
     cfsetispeed(&tios, B115200);
     cfsetospeed(&tios, B115200);
@@ -120,4 +122,40 @@ void UsbComm::message(unsigned char row, unsigned char col, std::string const &m
         }
     }
 }
+
+void UsbComm::write_reg(unsigned char node, unsigned char reg, unsigned char n, void const *d)
+{
+    assert(n <= 32);
+    char msg[36];
+    msg[0] = 'W';
+    msg[1] = node;
+    msg[2] = n;
+    memcpy(&msg[3], d, n);
+    char const *w = msg;
+    int tw = 3 + n;
+    while (tw > 0) {
+        int i = write(fd_, w, tw);
+        if (i < 0) {
+            int en = errno;
+            if (en != EWOULDBLOCK) {
+                perror("UsbComm::message()");
+                throw new std::runtime_error(std::string("Could not write to UsbComm: ") + strerror(en));
+            }
+            else if (!stalled_) {
+                stalled_ = true;
+                std::cerr << "Stalling UsbComm write" << std::endl;
+                ::usleep(100);
+            }
+            else {
+                return;
+            }
+        }
+        else {
+            stalled_ = false;
+            tw -= i;
+            w += i;
+        }
+    }
+}
+
 

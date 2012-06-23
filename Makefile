@@ -1,5 +1,5 @@
 
-APPS:=robolink simplegps serial
+APPS:=robolink simplegps serial capdump
 
 CPP_OPT:=-ggdb -O0 -fvar-tracking-assignments
 CPP_CFLAGS:=$(sort $(CPP_OPT) $(filter-out -O%,$(shell fltk-config --use-images --cxxflags)))
@@ -32,6 +32,7 @@ clean:
 PART_motorboard:=atmega328p
 PART_estop:=atmega328p
 PART_usbboard:=atmega328p
+PART_commusb:=atmega328p
 PART_sensorboard:=atmega328p
 PART_blink:=atmega328p
 PART_display:=atmega328p
@@ -40,6 +41,7 @@ PART_readcompass:=atmega328p
 fuses_motorboard:	fuses_8
 fuses_estop:	fuses_8
 fuses_usbboard:	fuses_16
+fuses_commusb:	fuses_16
 fuses_sensorboard:	fuses_8
 fuses_blink:	fuses_12
 fuses_display:	fuses_20

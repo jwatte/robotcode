@@ -20,11 +20,16 @@
    R <sensor> <distance>  Distance reading from ranging sensor
    X <len> <text>         Debug text
 
+   x                      Command denied
+   o                      Command accepted
+   e                      Command error
+
    Host->Usbboard
    W <node> <len> <data>  Write data to given node
  */
 
 #define SYNC_BYTE ((char)0xed)
+#define CMD_SENDING 0xff
 
 info_USBInterface g_info;
 
@@ -78,13 +83,17 @@ class MyMaster : public ITWIMaster {
             boards[requestState]->on_data(n, data);
         }
         virtual void xmit_complete() {
-            boards[requestState]->on_xmit();
+            if (requestFrom != CMD_SENDING) {
+                boards[requestState]->on_xmit();
+            }
+            else {
+                requestFrom = 0;
+            }
         }
         virtual void nack() {
             unsigned char ch[3] = { (unsigned char)SYNC_BYTE, 'N', requestFrom };
             uart_send_all(3, ch);
             requestFrom = 0;
-            ++requestState;
             after(50, request_from_boards, 0);
         }
         void got_board_data(unsigned char n, void const *data, unsigned char boardId) {
@@ -298,7 +307,7 @@ void request_from_usbboard(void *)
     char data[4] = { SYNC_BYTE, 'D', NodeUSBInterface, (char)sizeof(g_info) };
     uart_send_all(4, data);
     uart_send_all(sizeof(g_info), &g_info);
-    after(2000, request_from_usbboard, 0);
+    after(1000, request_from_usbboard, 0);
 }
 
 
@@ -324,13 +333,46 @@ void poll_voltage(void *)
     after(500, &poll_voltage, 0);
 }
 
+bool twiSending = false;
+char ogtwi[TWI_MAX_SIZE + 2];
+void send_ogtwi(void *)
+{
+    if (twiMaster.requestFrom) {
+        after(1, send_ogtwi, 0);
+        return;
+    }
+    if (twi->is_busy()) {
+        after(0, send_ogtwi, 0);
+        return;
+    }
+    uart_send_all(2, "\xedo");
+    twiSending = false;
+    twiMaster.requestFrom = CMD_SENDING;
+    twi->send_to(ogtwi[0], &ogtwi[2], ogtwi[1]);
+}
+
 unsigned char parse_in_cmd(unsigned char n, char const *buf) {
     for (unsigned char ch = 0; ch < n; ++ch) {
         if (buf[ch] == 'W') {
             if (n - ch >= 3) {
-                if (n - ch >= 3 + buf[ch + 2]) {
+                unsigned char dlen = buf[ch + 2];
+                if (n - ch >= 3 + dlen) {
                     //  got a full cmd
-                    twi->send_to(buf[ch + 2], &buf[ch + 3], buf[ch + 1]);
+                    if (dlen > TWI_MAX_SIZE) {
+                        uart_send_all(2, "\xede");
+                    }
+                    else if (twiSending) {
+                        uart_send_all(2, "\xedx");
+                    }
+                    else {
+                        twiSending = true;
+                        const char *dptr = &buf[ch + 3];
+                        unsigned char dnode = buf[1];
+                        memcpy(&ogtwi[2], dptr, dlen);
+                        ogtwi[0] = dnode;
+                        ogtwi[1] = dlen;
+                        after(0, send_ogtwi, 0);
+                    }
                     return ch + 3 + buf[ch + 2];
                 }
             }
@@ -343,6 +385,7 @@ unsigned char parse_in_cmd(unsigned char n, char const *buf) {
 char ser_buf[35];
 
 void poll_serial(void *ptr) {
+    return;
     unsigned char left = sizeof(ser_buf) - ((char *)ptr - ser_buf);
     unsigned char n = uart_available();
     if (n > left) {
@@ -370,6 +413,6 @@ void setup(void) {
     after(0, request_from_boards, 0);
     after(2000, request_from_usbboard, 0);
     after(0, poll_voltage, 0);
-    //after(0, poll_serial, ser_buf);
+    after(0, poll_serial, ser_buf);
 }
 

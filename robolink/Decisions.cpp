@@ -14,6 +14,7 @@ Decisions::Decisions(
     Talker *t, 
     DecisionPanel *panel)
 {
+    motorPowerBoard_ = mpb;
     t->add_listener(this);
     allowed_.set(&mpb->allowed_);
     cliffDetect_.set(&sens->cliffDetect_);
@@ -52,6 +53,10 @@ void Decisions::invalidate()
             gas = gas * rightWedge_.get() / 50;
         }
     }
+    unsigned char d[2] = {
+        gas >> 1, turn >> 1
+    };
+    motorPowerBoard_->write_reg(0, 2, d);
     DecisionPanelData dpd;
     dpd.gas_ = gas;
     dpd.turn_ = turn;

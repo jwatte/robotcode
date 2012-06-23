@@ -31,6 +31,7 @@
 #include "Decisions.h"
 #include "args.h"
 #include "DecisionPanel.h"
+#include "CaptureFile.h"
 
 
 
@@ -88,16 +89,21 @@ void on_uc(int fd, void *ucp)
     ir->setRTimestamp(n);
     wr->setWTimestamp(n);
     int ch = 0;
-    while ((ch = ir->read1()) >= 0)
-    {
+    while ((ch = ir->read1()) >= 0) {
         wr->write1(ch);
         p.on_char(ch);
     }
 }
 
-Talker postCapture_;
-int captureN_;
-double captureStart_;
+static Talker postCapture_;
+static int captureN_;
+static double captureStart_;
+
+struct CCInfo {
+    AsyncVideoCapture *acap;
+    IWriter *wr;
+};
+static CCInfo ccinfo;
 
 //  My God! This looks like polling!
 //  The reason it's like this, is that FLTK doesn't provide
@@ -107,9 +113,11 @@ double captureStart_;
 //  the USB camera will never run ahead of processing by more 
 //  than a frame, so if I'm processing at 10 Hz, I still won't 
 //  have more than a frame's worth of latency.
-void cap_callback(void *ac)
+void cap_callback(void *cc)
 {
-    AsyncVideoCapture *acap = (AsyncVideoCapture *)ac;
+    CCInfo *cci = (CCInfo *)cc;
+    AsyncVideoCapture *acap = cci->acap;
+    IWriter *wr = cci->wr;
     if (acap->gotFrame()) {
         double t = now();
         if (captureN_ == 30 || (t - captureStart_ > 4.9)) {
@@ -124,9 +132,18 @@ void cap_callback(void *ac)
             captureStart_ = t;
         }
         ++captureN_;
+        VideoFrame *vf = acap->next();
+        /*
+        size_t sz;
+        void const *vp;
+        vp = vf->data(sz, 0);
+        wr->writeImage(0, vp, sz);
+        vp = vf->data(sz, 1);
+        wr->writeImage(1, vp, sz);
+        */
         postCapture_.invalidate();
     }
-    Fl::add_timeout(0.005, &cap_callback, ac);
+    Fl::add_timeout(0.005, &cap_callback, cc);
 }
 
 void time_callback(void *)
@@ -158,7 +175,7 @@ public:
     }
     void invalidate()
     {
-        VideoFrame *vf = avc_->next();
+        VideoFrame *vf = avc_->current();
         left_->invalidate(vf, VideoFrame::IndexLeft);
         right_->invalidate(vf, VideoFrame::IndexRight);
     }
@@ -234,41 +251,59 @@ class DummyWr : public IWriter {
 public:
     virtual void setWTimestamp(double) {}
     virtual void write1(int) {}
+    virtual void writeImage(int, void const *, size_t) {}
 };
 DummyWr g_dummyWr;
 
 int main(int argc, char const **argv)
 {
-    --argc;
-    ++argv;
-    if (!parse_args(argc, argv, set_option))
-    {
-        std::cerr << "Errors parsing arguments." << std::endl;
-        exit(1);
-    }
-    g_usb = new UsbComm(usb);
-    if (!g_usb->open())
-    {
-        std::cerr << "Can't open USB: " << usb << std::endl;
-        return 1;
-    }
-    ucinfo.rd = g_usb;
-    ucinfo.wr = &g_dummyWr;
-    AsyncVideoCapture *avc = new AsyncVideoCapture(camL, camR);
-    if (!avc->open())
-    {
-        std::cerr << "Can't open video capture: " << camL << ", " << camR << std::endl;
-        return 1;
-    }
-    make_window(avc, &postCapture_);
+    try {
+        --argc;
+        ++argv;
+        if (!parse_args(argc, argv, set_option)) {
+            std::cerr << "Errors parsing arguments." << std::endl;
+            exit(1);
+        }
+        g_usb = new UsbComm(usb);
+        ucinfo.rd = g_usb;
+        ucinfo.wr = &g_dummyWr;
+        ccinfo.wr = &g_dummyWr;
+        if (capture.size()) {
+            CaptureFile *cf = new CaptureFile(capture, true);
+            if (!cf->open()) {
+                std::cerr << "Could not create file: " << capture << std::endl;
+                return 1;
+            }
+            ucinfo.wr = cf;
+            ccinfo.wr = cf;
+        }
+        if (!g_usb->open()) {
+            std::cerr << "Can't open USB: " << usb << std::endl;
+            return 1;
+        }
+        AsyncVideoCapture *avc = new AsyncVideoCapture(camL, camR);
+        if (!avc->open()) {
+            std::cerr << "Can't open video capture: " << camL << ", " << camR << std::endl;
+            return 1;
+        }
+        ccinfo.acap = avc;
+        make_window(avc, &postCapture_);
 
-    //  Set up processing pump
-    Fl::add_fd(g_usb->fd_, on_uc, &ucinfo);
-    Fl::add_timeout(0.025, &cap_callback, avc);
-    //Fl::add_timeout(0.25, &time_callback, 0);
-    Decisions *d = new Decisions(
-        &motorPower, &estop, &sensors, &usbLink, avc, &postCapture_, &decisionPanel);
-    return Fl::run();
+        //  Set up processing pump
+        Fl::add_fd(g_usb->fd_, on_uc, &ucinfo);
+        Fl::add_timeout(0.025, &cap_callback, &ccinfo);
+        //Fl::add_timeout(0.25, &time_callback, 0);
+        Decisions *d = new Decisions(
+            &motorPower, &estop, &sensors, &usbLink, avc, &postCapture_, &decisionPanel);
+        return Fl::run();
+    }
+    catch (std::exception const &x) {
+        std::cerr << "Exception: " << x.what() << std::endl;
+    }
+    catch (...) {
+        std::cerr << "unknown throw" << std::endl;
+    }
+    return 1;
 }
 
 

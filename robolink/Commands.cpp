@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include <assert.h>
+#include <iostream>
 
 #include "Commands.h"
 #include "Board.h"
@@ -19,12 +20,18 @@
  X <len> <text>         Debug text
 
  Host->Usbboard
+ 
+ W <node> <len> <data>  Send data to node
+ o                      command completed
+ x                      command not accepted (busy)
+ e                      command error
 
 
  */
 
 #define SYNC_BYTE ((char)0xed)
 bool syncerror = false;
+
 
 struct format {
     char code;
@@ -53,6 +60,7 @@ void do_nodedata(char const *buf, int nsize)
 
 void do_nodenak(char const *buf, int nsize)
 {
+    std::cerr << "Nak node " << (int)buf[1] << std::endl;
     Board *b = Board::board_by_id((BoardId)buf[1]);
     b->on_nak();
 }
@@ -70,7 +78,14 @@ void do_debug(char const *buf, int nsize)
     fprintf(stderr, "debug %.*s", nsize-2, buf+2);
 }
 
+void do_nak(char const *buf, int nsize)
+{
+    std::cerr << "USB send: NAK" << std::endl;
+}
 
+void do_ack(char const *buf, int nsize)
+{
+}
 
 format codes[] = {
     { 'O', 1, 0, do_online },
@@ -79,7 +94,9 @@ format codes[] = {
     { 'N', 2, 0, do_nodenak },
     { 'R', 3, 0, do_range },
     { 'V', 2, 0, do_voltage },
-    { 'X', 2, 1, do_debug }
+    { 'X', 2, 1, do_debug },
+    { 'x', 1, 0, do_nak },
+    { 'o', 1, 0, do_ack },
 };
 
 int decode(char const *buf, int size)

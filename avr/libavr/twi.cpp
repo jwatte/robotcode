@@ -14,15 +14,12 @@ ITWISlave *_twi_slave;
 ITWIMaster *_twi_master;
 
 
-#define READY_SLAVE ((1 << TWEN) | (1 << TWEA) | (1 << TWIE) | (1 << TWINT))
-#define UNREADY_SLAVE ((1 << TWEN) | (1 << TWIE) | (1 << TWINT))
-#define READY_MASTER ((1 << TWEN) | (1 << TWEA) | (1 << TWIE) | (1 << TWINT))
-#define UNREADY_MASTER ((1 << TWEN) | (1 << TWIE) | (1 << TWINT))
-
 
 static void send_nak(void *);
-static void got_data(void *);
+static void got_data_m(void *);
 static void done_sending(void *);
+static void ask_for_data(void *);
+static void got_data_s(void *);
 
 
 class TWI : public TWIMaster {
@@ -61,7 +58,9 @@ public:
         m_ptr = 0;
         m_end = n;
         //  please let me know when you have a start condition
-        TWCR |= (1 << TWSTA) | (1 << TWIE) | (1 << TWEA);
+        TWCR = (TWCR
+            | (1 << TWSTA) | (1 << TWIE) | (1 << TWINT))
+            & ~(1 << TWSTO);
     }
 
     void request_from(unsigned char addr, unsigned char count) {
@@ -75,7 +74,9 @@ public:
         m_addr = (addr << 1) | 1;
         m_end = count;
         //  please let me know when you have a start condition
-        TWCR |= (1 << TWSTA) | (1 << TWIE);
+        TWCR = (TWCR
+            | (1 << TWSTA) | (1 << TWIE) | (1 << TWINT))
+            & ~(1 << TWSTO);
     }
 
     uint8_t on_nak(uint8_t twcr) {
@@ -95,6 +96,7 @@ public:
         return twcr;
     }
 
+
     uint8_t on_mt_addr(uint8_t twcr) {
         //  write request
         return on_mt_data(twcr);
@@ -111,6 +113,7 @@ public:
         return twcr;
     }
 
+
     uint8_t on_mr_addr(uint8_t twcr) {
         twcr |= (1 << TWEA);
         return twcr;
@@ -121,24 +124,55 @@ public:
         twcr &= ~(1 << TWEA);
         if (m_ptr == m_end) {
             twcr |= (1 << TWSTO);
-            after(0, got_data, 0);
+            after(0, got_data_m, 0);
         }
         else if (m_ptr < m_end - 1) {
             twcr |= (1 << TWEA);
         }
         return twcr;
     }
+    
 
     uint8_t on_sr_addr(uint8_t twcr) {
+        s_end = sizeof(s_buf);
+        s_ptr = 0;
         return twcr;
     }
 
     uint8_t on_sr_data(bool ack, uint8_t twcr) {
+        if (s_ptr < s_end) {
+            s_buf[s_ptr] = TWDR;
+            s_ptr++;
+        }
+        if (s_ptr >= s_end - 1) {
+            twcr &= ~(1 << TWEA);
+        }
         return twcr;
     }
 
     uint8_t on_sr_end(uint8_t twcr) {
+        after(0, got_data_s, 0);
+        twcr &= ~(1 << TWEA);
         return twcr;
+    }
+
+
+    uint8_t on_st_addr(uint8_t twcr) {
+        ask_for_data(0);
+        return twcr;
+    }
+
+    uint8_t on_st_sent(uint8_t twcr) {
+        ++s_ptr;
+        TWDR = s_buf[s_ptr];
+        if (s_ptr >= s_end - 1) {
+            twcr &= ~(1 << TWEA);
+        }
+        return twcr;
+    }
+
+    uint8_t on_st_end(bool ack, uint8_t twcr) {
+        return twcr | (1 << TWEA);
     }
 };
 
@@ -153,14 +187,28 @@ static void send_nak(void *) {
     _twi_master->nack();
 }
 
-static void got_data(void *) {
+static void got_data_m(void *) {
     unsigned char n;
     {
         IntDisable idi;
         n = _twi.m_ptr;
         _twi.m_addr = 0; _twi.m_ptr = _twi.m_end = 0;
+        if (_twi_slave) {
+            TWCR |= (1 << TWEA);
+        }
     }
     _twi_master->data_from_slave(n, _twi.m_buf);
+}
+
+static void got_data_s(void *) {
+    unsigned char n;
+    {
+        IntDisable idi;
+        n = _twi.s_ptr;
+        _twi.s_ptr = _twi.s_end = 0;
+        TWCR |= (1 << TWEA);
+    }
+    _twi_slave->data_from_master(n, _twi.s_buf);
 }
 
 static void done_sending(void *) {
@@ -175,6 +223,20 @@ static void done_sending(void *) {
         _twi.m_ptr = _twi.m_end = 0;
     }
     _twi_master->xmit_complete();
+}
+
+static void ask_for_data(void *p) {
+    IntDisable idi;
+    _twi.s_end = sizeof(_twi.s_buf);
+    _twi_slave->request_from_master(_twi.s_buf, _twi.s_end);
+    _twi.s_ptr = 0;
+    if (_twi.s_end > TWI_MAX_SIZE) {
+        fatal(FATAL_TWI_TOO_BIG);
+    }
+    TWDR = _twi.s_end ? _twi.s_buf[0] : 0xff;
+    if (p) {
+        TWCR |= (1 << TWINT);
+    }
 }
 
 ISR(TWI_vect) {
@@ -225,11 +287,24 @@ ISR(TWI_vect) {
     case 0xa0:
         twcr = _twi.on_sr_end(twcr);
         break;
-    case 0x68:  //  lost arbitration, addressed
+    case 0xa8:
+        twcr = _twi.on_st_addr(twcr);
+        break;
+    case 0xb8:
+        twcr = _twi.on_st_sent(twcr);
+        break;
+    case 0xc0:  //  NAK received
+        twcr = _twi.on_st_end(false, twcr);
+        break;
+    case 0xc8:
+        twcr = _twi.on_st_end(true, twcr);
+        break;
+    case 0x68:  //  lost arbitration, addressed as SR
     case 0x70:  //  general call
     case 0x78:  //  lost arbitration, general call
     case 0x90:  //  general call data
     case 0x98:  //  general call data + nak
+    case 0xb0:  //  lost arbitration, addressed as ST
     case 0xf8:
     case 0x0:
     default:
@@ -262,7 +337,7 @@ TWIMaster *start_twi_master(ITWIMaster *m)
     return &_twi;
 }
 
-/*  Call start_twi_slave() to become a slave. If you were a master, that's shut down. */
+/*  Call start_twi_slave() to become a slave. */
 void start_twi_slave(ITWISlave *s, unsigned char addr)
 {
     _twi_slave = s;
@@ -279,6 +354,7 @@ void stop_twi()
 {
     TWCR = 0;
     DDRC &= ~0x30;
+    TWAR = 0;
     power_twi_disable();
     _twi_master = 0;
     _twi_slave = 0;

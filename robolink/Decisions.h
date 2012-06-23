@@ -35,6 +35,7 @@ public:
     void invalidate();
 
     DecisionPanel *panel_;
+    MotorPowerBoard *motorPowerBoard_;
 };
 
 #endif  //  Decisions_h

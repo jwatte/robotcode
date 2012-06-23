@@ -14,6 +14,7 @@ class IWriter {
 public:
     virtual void setWTimestamp(double ts) = 0;
     virtual void write1(int) = 0;
+    virtual void writeImage(int ix, void const *data, size_t sz) = 0;
 };
 
 class UsbComm : public IReader {
@@ -27,9 +28,11 @@ public:
     int read1();
 
     void message(unsigned char row, unsigned char col, std::string const &msg);
+    void write_reg(unsigned char node, unsigned char reg, unsigned char n, void const *d);
 
     char name_[128];
     int fd_;
+    bool stalled_;
 
     void setup();
 };

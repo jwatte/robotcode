@@ -75,6 +75,7 @@ unsigned char nPing = 0;
 
 void read_ping(void *)
 {
+    ++g_actualData.r_iter;
     g_actualData.r_us[nPing] = pings[nPing].inches();
     nPing = (nPing + 1);
     if (nPing == 3) {
@@ -109,6 +110,7 @@ unsigned char ir_inches(unsigned char val)
 
 void on_ir(unsigned char val)
 {
+    ++g_actualData.r_iter;
     irVal[nIr] = val;
     g_actualData.r_ir[nIr] = ir_inches(val);
     nIr = (nIr + 1);

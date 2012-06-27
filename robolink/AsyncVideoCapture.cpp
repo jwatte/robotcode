@@ -22,6 +22,8 @@ AsyncVideoCapture::~AsyncVideoCapture()
     if (captureThread_)
     {
         running_ = false;
+        captureSignal_.set();
+        std::cerr << "Waiting for captureThread_" << std::endl;
         captureThread_->join();
         delete captureThread_;
         delete left_;
@@ -76,24 +78,42 @@ VideoFrame *AsyncVideoCapture::next()
 
 void AsyncVideoCapture::capture_func()
 {
-    while (running_)
-    {
-        captureSignal_.wait();
-        if (frameNum_ == lastNum_)
-        {
-            //  capture a frame
-            left_->step();
-            double t = now();
-            right_->step();
-            int fn = (frameNum_ + 1) & 1;
-            frame_[fn].setCaptureTime(t);
-            frame_[fn].setData(VideoFrame::IndexLeft, 
-                left_->get_jpg(), left_->get_size());
-            frame_[fn].setData(VideoFrame::IndexRight,
-                right_->get_jpg(), right_->get_size());
-            ++frameNum_;
+    try {
+        while (running_) {
+            captureSignal_.wait();
+            if (!running_) {
+                break;
+            }
+            if (frameNum_ == lastNum_) {
+                //  capture a frame
+                if (!left_->step()) {
+                    throw std::runtime_error("Failure capturing left frame.");
+                }
+                double t = now();
+                if (!right_->step()) {
+                    throw std::runtime_error("Failure capturing right frame.");
+                }
+                int fn = (frameNum_ + 1) & 1;
+                frame_[fn].setCaptureTime(t);
+                frame_[fn].setData(VideoFrame::IndexLeft, 
+                    left_->get_jpg(), left_->get_size());
+                frame_[fn].setData(VideoFrame::IndexRight,
+                    right_->get_jpg(), right_->get_size());
+                ++frameNum_;
+            }
         }
     }
+    catch (std::exception const &x) {
+        std::cerr << "AsyncVideoCapture::capture_func(): " << x.what() << std::endl;
+        running_ = false;
+        VideoCapture *vc = left_;
+        left_ = 0;
+        delete vc;
+        vc = right_;
+        right_ = 0;
+        delete vc;
+    }
+    std::cerr << "Existing AsyncVideoCapture::capture_func()" << std::endl;
 }
 
 

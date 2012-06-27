@@ -34,36 +34,36 @@ class Ping4 : public IPinChangeNotify {
         //  hook up pin change interrupt
         on_pinchange(pinPulse_, this);
     }
-        unsigned char pinTrigger_;
-        unsigned char pinPulse_;
-        unsigned short value_;
-        unsigned short readTimer_;
-        void startRead() {
-            //  trigger read signal
-            IntDisable idi;
-            digitalWrite(pinTrigger_, HIGH);
-            udelay(11);
-            digitalWrite(pinTrigger_, LOW);
+    unsigned char pinTrigger_;
+    unsigned char pinPulse_;
+    unsigned short value_;
+    unsigned short readTimer_;
+    void startRead() {
+        //  trigger read signal
+        IntDisable idi;
+        digitalWrite(pinTrigger_, HIGH);
+        udelay(11);
+        digitalWrite(pinTrigger_, LOW);
+    }
+    void pin_change(unsigned char level) {
+        if (level) {
+            readTimer_ = uread_timer();
+            PORTB |= 0x4;
         }
-        void pin_change(unsigned char level) {
-            if (level) {
-                readTimer_ = uread_timer();
-                PORTB |= 0x4;
-            }
-            else {
-                value_ = uread_timer() - readTimer_;
-                PORTB &= ~0x4;
-            }
+        else {
+            value_ = uread_timer() - readTimer_;
+            PORTB &= ~0x4;
         }
-        unsigned char inches() const {
-            //  12 inches (1 foot) in a millisecond
-            unsigned char inchVal = value_ * 12 / 1000;
-            if (inchVal > 200) {
-                //  more than 5 meters, I don't yet detect it
-                inchVal = 0;
-            }
-            return inchVal & 0xff;
+    }
+    unsigned char inches() const {
+        //  12 inches (1 foot) in a millisecond
+        unsigned char inchVal = value_ * 12 / 1000;
+        if (inchVal > 200) {
+            //  more than 5 meters, I don't yet detect it
+            inchVal = 255;
         }
+        return inchVal;
+    }
 };
 
 Ping4 pings[3] = {
@@ -86,7 +86,6 @@ void read_ping(void *)
 }
 
 unsigned char nIr;
-unsigned char irVal[3];
 
 #define MIN_IR_VAL 60
 #define MAX_IR_VAL 180
@@ -111,7 +110,6 @@ unsigned char ir_inches(unsigned char val)
 void on_ir(unsigned char val)
 {
     ++g_actualData.r_iter;
-    irVal[nIr] = val;
     g_actualData.r_ir[nIr] = ir_inches(val);
     nIr = (nIr + 1);
     if (nIr == 3) {

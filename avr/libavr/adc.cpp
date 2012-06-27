@@ -1,6 +1,9 @@
 #include "libavr.h"
 #include "pins_avr.h"
 
+//  How long to settle the ADC after switching the input mux
+#define SETTLE_US 10
+
 void adc_setup(bool use_aref) {
     power_adc_enable();
     ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1);  //  enable, prescaler @ 0.25 MHz @ 16 MHz
@@ -40,7 +43,7 @@ void adc_read(unsigned char channel, void (*cb)(unsigned char val)) {
     }
     _adc_cb = cb;
     ADMUX = (ADMUX & 0xf0) | channel;
-    udelay(6); //  give the charge cap some time to settle
+    udelay(SETTLE_US); //  give the charge cap some time to settle
     DIDR0 |= (1 << channel);  //  disable ADC input as digital
     ADC_DDR &= ~(1 << channel);
     ADC_PORT &= ~(1 << channel);

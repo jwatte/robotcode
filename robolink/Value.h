@@ -3,7 +3,7 @@
 
 #include "Talker.h"
 
-template<typename T>
+template<typename T, int Old = 0, int New = 1>
 class Value : public Talker
 {
 public:
@@ -17,7 +17,7 @@ public:
         T const &tref = *(T const*)((char const *)src + offset_);
         if (tref != oldValue_)
         {
-            oldValue_ = tref;
+            oldValue_ = (oldValue_ * Old + tref * New) / (Old + New);
             invalidate();
         }
     }

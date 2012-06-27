@@ -4,6 +4,10 @@
 
 #include <string>
 
+namespace boost {
+    class thread;
+}
+
 class IReader {
 public:
     virtual void setRTimestamp(double ts) = 0;
@@ -31,10 +35,16 @@ public:
     void write_reg(unsigned char node, unsigned char reg, unsigned char n, void const *d);
 
     char name_[128];
-    int fd_;
+    volatile int fd_;
     bool stalled_;
+    enum { PIPE_SIZE = 1024 };
+    volatile unsigned char pipe_[PIPE_SIZE];
+    volatile unsigned int head_;
+    volatile unsigned int tail_;
+    boost::thread *thread_;
 
     void setup();
+    void read_thread();
 };
 
 #endif  //  UsbComm_h

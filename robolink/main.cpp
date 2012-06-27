@@ -80,7 +80,7 @@ struct UC_Info {
 };
 static UC_Info ucinfo;
 
-void on_uc(int fd, void *ucp)
+void on_uc(void *ucp)
 {
     UC_Info *uci = (UC_Info *)ucp;
     IReader *ir = uci->rd;
@@ -290,12 +290,20 @@ int main(int argc, char const **argv)
         make_window(avc, &postCapture_);
 
         //  Set up processing pump
-        Fl::add_fd(g_usb->fd_, on_uc, &ucinfo);
+        Fl::add_timeout(0.010, &on_uc, &ucinfo);
         Fl::add_timeout(0.025, &cap_callback, &ccinfo);
         //Fl::add_timeout(0.25, &time_callback, 0);
         Decisions *d = new Decisions(
             &motorPower, &estop, &sensors, &usbLink, avc, &postCapture_, &decisionPanel);
-        return Fl::run();
+        Fl::run();
+        std::cerr << "Quitting application" << std::endl;
+        delete avc;
+        for (int i = 3; i < 1024; ++i) {
+            //  yay! hack!
+            ::alarm(1);
+            ::close(i);
+        }
+        std::cerr << "Done closing file descriptors." << std::endl;
     }
     catch (std::exception const &x) {
         std::cerr << "Exception: " << x.what() << std::endl;

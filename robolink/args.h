@@ -66,7 +66,11 @@ template<typename SetOption>
 bool parse_args(int &argc, char const ** &argv, SetOption const &so)
 {
     bool allOk = true;
-    bool readFile = false;
+    {
+        std::string s(getenv("HOME"));
+        s += "/.config/robolink.cfg";
+        read_config_file(s.c_str(), so);
+    }
     while (argc > 0)
     {
         if ((*argv)[0] == '-')
@@ -104,7 +108,6 @@ bool parse_args(int &argc, char const ** &argv, SetOption const &so)
         }
         else
         {
-            readFile = true;
             if (!read_config_file(*argv, so))
             {
                 allOk = false;
@@ -112,13 +115,6 @@ bool parse_args(int &argc, char const ** &argv, SetOption const &so)
         }
         --argc;
         ++argv;
-    }
-    if (!readFile)
-    {
-        std::string s(getenv("HOME"));
-        s += "/.config/robolink.cfg";
-        readFile = true;
-        read_config_file(s.c_str(), so);
     }
     return allOk;
 }

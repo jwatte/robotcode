@@ -8,24 +8,27 @@
 #include <stdio.h>
 
 #define LED_PIN (0|5)
+#define SERIAL_INDICATOR (1 << 4)
+#define RESET_SENSOR (1 << 2)
+#define RESET_MOTOR (1 << 3)
+
+#define BAUD_RATE 115200
 
 /* UART protocol:
 
-   Each cmd prefixed by sync byte value 0xed
-   Usbboard->Host
-   O                      On, running
-   F <code>               Fatal death, will reboot in 8 seconds
-   D <node> <len> <data>  Data polled from node
-   N <node>               Nak from node when polling
-   R <sensor> <distance>  Distance reading from ranging sensor
-   X <len> <text>         Debug text
+    0xed <len> <cmd> <data>
+    <len> excludes the ed byte and the len byte itself.
+    The maximum value of <len> is 30
 
-   x                      Command denied
-   o                      Command accepted
-   e                      Command error
+    Board -> Host
+    cmd arg1 arg2 data
+    O                           board is online
+    N   node      data          data from node
+    F   node code               node fatalled
 
-   Host->Usbboard
-   W <node> <len> <data>  Write data to given node
+    Host -> Board
+    m   node      data          send message to node
+
  */
 
 #define SYNC_BYTE ((unsigned char)0xed)
@@ -34,12 +37,41 @@
 info_USBInterface g_info;
 TWIMaster *twi;
 
+#define MAXCMD 30
+static unsigned char cmdbuf[2+MAXCMD];
 
-void data_out(unsigned char n, void const *s) {
-    PORTD |= (1 << 4);
-    uart_send_all(n, s);
-    PORTD &= ~(1 << 4);
+static void cmd_start(char ch) {
+    PORTD |= SERIAL_INDICATOR;
+    cmdbuf[0] = 0xed;
+    cmdbuf[1] = 1;
+    cmdbuf[2] = ch;
 }
+static void cmd_add(uint8_t len, void const *data) {
+    if (cmdbuf[0] != 0xed) {
+        fatal(FATAL_BAD_SERIAL);
+    }
+    if (cmdbuf[1] + len > MAXCMD) {
+        fatal(FATAL_TOO_BIG_SERIAL);
+    }
+    memcpy(&cmdbuf[2+cmdbuf[1]], data, len);
+    cmdbuf[1] += len;
+}
+static void cmd_finish() {
+    uart_send_all(cmdbuf[1] + 2, cmdbuf);
+    cmdbuf[0] = 0;
+    PORTD &= ~SERIAL_INDICATOR;
+}
+
+void send_data_from(unsigned char from, unsigned char n, void const *data) {
+    if (n > TWI_MAX_SIZE) {
+        fatal(FATAL_TOO_BIG_SERIAL);
+    }
+    cmd_start('D');
+    cmd_add(1, &from);
+    cmd_add(n, data);
+    cmd_finish();
+}
+
 
 class ITWIUser : public ITWIMaster {
 public:
@@ -67,22 +99,19 @@ ITWIUser *ITWIUser::first_;
 
 class MyMaster : public ITWIMaster {
 public:
-        virtual void data_from_slave(unsigned char n, void const *data)
-        {
+        virtual void data_from_slave(unsigned char n, void const *data) {
             if (!user_) {
                 fatal(FATAL_UNEXPECTED);
             }
             user_->data_from_slave(n, data);
         }
-        virtual void xmit_complete()
-        {
+        virtual void xmit_complete() {
             if (!user_) {
                 fatal(FATAL_UNEXPECTED);
             }
             user_->xmit_complete();
         }
-        virtual void nack()
-        {
+        virtual void nack() {
             if (!user_) {
                 fatal(FATAL_UNEXPECTED);
             }
@@ -111,16 +140,11 @@ void ITWIUser::data_from_slave(unsigned char n, void const *data) {
         (master.user_->*cb_)();
     }
     else if (from_) {
-        unsigned char d[TWI_MAX_SIZE + 4];
-        d[0] = SYNC_BYTE;
-        d[1] = 'D';
-        d[2] = from_;
-        d[3] = n;
-        memcpy(&d[4], data, n);
-        data_out(4 + n, d);
+        send_data_from(from_, n, data);
     }
     complete();
 }
+
 void ITWIUser::xmit_complete() {
     if (master.user_ && cb_) {
         (master.user_->*cb_)();
@@ -129,6 +153,7 @@ void ITWIUser::xmit_complete() {
         complete();
     }
 }
+
 void ITWIUser::nack() {
     //  just do nothing
     complete();
@@ -320,13 +345,7 @@ public:
     }
 
     void send_data() {
-        unsigned char d[sizeof(imu_) + 4];
-        d[0] = SYNC_BYTE;
-        d[1] = 'D';
-        d[2] = NodeIMU;
-        d[3] = sizeof(imu_);
-        memcpy(&d[4], &imu_, sizeof(imu_));
-        data_out(4 + sizeof(imu_), d);
+        send_data_from(NodeIMU, sizeof(imu_), &imu_);
     }
 
     void regwr(unsigned char reg, unsigned char val, unsigned char addr) {
@@ -347,16 +366,20 @@ void blink(bool on) {
 
 
 void setup() {
-    DDRD |= (1 << 4);
-    PORTD &= ~(1 << 4);
+    //  reset other boards by pulling reset low
+    PORTD &= ~(SERIAL_INDICATOR | RESET_SENSOR | RESET_MOTOR);
+    DDRD |= SERIAL_INDICATOR | RESET_SENSOR | RESET_MOTOR;
     fatal_set_blink(&blink);
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, HIGH);
     setup_timers(F_CPU);
-    uart_setup(115200, F_CPU);
+    uart_setup(BAUD_RATE, F_CPU);
     adc_setup(false);
+    //  turn reset into an input, to be voltage independent
+    DDRD &= ~(RESET_SENSOR | RESET_MOTOR);
     twi = start_twi_master(&master);
-    data_out(2, "\xedO");
+    cmd_start('O');
+    cmd_finish();
     motorBoard.enqueue();
     sensorBoard.enqueue();
     imu.enqueue();

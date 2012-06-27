@@ -34,6 +34,7 @@ void fatal(int err)
 #if HAS_UART
     if (_uart_init) {
         uart_force_out(0xed);
+        uart_force_out(0x02);
         uart_force_out('F');
         uart_force_out(err);
     }
@@ -367,7 +368,7 @@ void uart_setup(unsigned long brate, unsigned long f_cpu) {
             UBRR0H = 0;
             UBRR0L = (bsu.UBRRn * scale) >> 8;
             UCSR0A = (1 << U2X0);
-            UCSR0C = (3 << UCSZ00);
+            UCSR0C = (3 << UCSZ00) | (1 << USBS0); //  two stop bits
             UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
             _uart_init = true;
             return;

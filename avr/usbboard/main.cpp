@@ -359,10 +359,10 @@ unsigned char parse_in_cmd(unsigned char n, char const *buf) {
                 if (n - ch >= 3 + dlen) {
                     //  got a full cmd
                     if (dlen > TWI_MAX_SIZE) {
-                        uart_send_all(2, "\xede");
+                        uart_send_all(2, "\xed" "e");
                     }
                     else if (twiSending) {
-                        uart_send_all(2, "\xedx");
+                        uart_send_all(2, "\xed" "x");
                     }
                     else {
                         twiSending = true;

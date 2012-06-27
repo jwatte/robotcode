@@ -33,6 +33,7 @@ PART_motorboard:=atmega328p
 PART_estop:=atmega328p
 PART_usbboard:=atmega328p
 PART_commusb:=atmega328p
+PART_testuart:=atmega328p
 PART_sensorboard:=atmega328p
 PART_blink:=atmega328p
 PART_display:=atmega328p
@@ -40,8 +41,9 @@ PART_readcompass:=atmega328p
 
 fuses_motorboard:	fuses_8
 fuses_estop:	fuses_8
-fuses_usbboard:	fuses_16
+#fuses_usbboard:	fuses_16
 fuses_commusb:	fuses_16
+fuses_testuart:	fuses_16
 fuses_sensorboard:	fuses_8
 fuses_blink:	fuses_12
 fuses_display:	fuses_20
@@ -93,6 +95,7 @@ endef
 
 %:	bld/avrbin/%.hex fuses_%
 	avrdude -u -V -p $(call translate_part,$(PART_$@)) -b 115200 -B 1 $(AVR_PROG) -U flash:w:$<:i
+	avr-size bld/avrbin/$@
 
 fuses_8:
 	# 8 MHz, internal osc, 2.7V brown-out, 65k + 4.1ms boot delay

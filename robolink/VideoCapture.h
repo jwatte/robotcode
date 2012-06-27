@@ -13,7 +13,7 @@ public:
     ~VideoCapture();
 
     //  This may call invalidate() and signal listeners
-    void step();
+    bool step();
 
     //  Callable from within the invalidate callback
     void *get_jpg() const;

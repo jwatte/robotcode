@@ -53,13 +53,15 @@ VideoCapture::~VideoCapture()
     free(jpg_);
 }
 
-void VideoCapture::step()
+bool VideoCapture::step()
 {
     size_ = JPG_SIZE - PADDING;
     if (capture_one_frame_and_re_enqueue(fd_, info_, (char *)jpg_ + PADDING, size_) >= 0)
     {
         invalidate();
+        return true;
     }
+    return false;
 }
 
 void *VideoCapture::get_jpg() const

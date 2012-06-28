@@ -20,7 +20,7 @@ class Board : public Talker
 public:
     Board(BoardId id);
     virtual ~Board();
-    virtual void on_data(char const *data, int nsize);
+    virtual void on_data(unsigned char const *data, int nsize);
     virtual void on_nak();
     char const *label();
     virtual void dead(unsigned char code);
@@ -39,7 +39,7 @@ class MotorPowerBoard : public Board
 {
 public:
     MotorPowerBoard();
-    virtual void on_data(char const *data, int nsize);
+    virtual void on_data(unsigned char const *data, int nsize);
 
     Value<unsigned char> voltage_;
     Value<char> power_;
@@ -51,7 +51,7 @@ class UsbLinkBoard : public Board
 {
 public:
     UsbLinkBoard();
-    virtual void on_data(char const *data, int nsize);
+    virtual void on_data(unsigned char const *data, int nsize);
 
     Value<unsigned char> voltage_;
 };
@@ -60,7 +60,7 @@ class SensorBoard : public Board
 {
 public:
     SensorBoard();
-    virtual void on_data(char const *data, int nsize);
+    virtual void on_data(unsigned char const *data, int nsize);
 
     Value<unsigned char> cliffDetect_;
     Value<unsigned char> leftDetect_;
@@ -74,7 +74,7 @@ class IMUBoard : public Board
 {
 public:
     IMUBoard();
-    virtual void on_data(char const *data, int nsize);
+    virtual void on_data(unsigned char const *data, int nsize);
 
     Value<short> magX_;
     Value<short> magY_;

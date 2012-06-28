@@ -11,210 +11,133 @@
 #include <boost/bind.hpp>
 #include <stdexcept>
 
+#include "Signal.h"
 #include "UsbComm.h"
+#include <libusb.h>
 
 
 #define BAUD_RATE B38400
 
-UsbComm::UsbComm(std::string const &name) :
-    head_(0),
-    tail_(0),
-    thread_(0)
+UsbComm::UsbComm(std::string const &devName, IPacketDestination *dst) :
+  name_(devName),
+  dest_(dst),
+  running_(false),
+  thread_(0),
+  ctx_(0),
+  dh_(0)
 {
-    strncpy(name_, name.c_str(), sizeof(name_));
-    name_[sizeof(name_)-1] = 0;
-    fd_ = -1;
-    stalled_ = false;
 }
 
 UsbComm::~UsbComm()
 {
-    close();
+  close();
 }
 
 bool UsbComm::open()
 {
-    if (fd_ < 0)
-    {
-        fd_ = ::open(name_, O_RDWR);
-        if (fd_ < 0)
-        {
-            perror("open()");
-            return false;
-        }
-        setup();
-        thread_ = new boost::thread(boost::bind(&UsbComm::read_thread, this));
-    }
-    return true;
+  if (dh_ != 0) {
+    close();
+  }
+  if (libusb_init(&ctx_) < 0) {
+    throw std::runtime_error("Error opening libusb");
+  }
+  //    todo: parse vid/pid out of name_
+  dh_ = libusb_open_device_with_vid_pid(ctx_, 0xf000, 0x0001);
+  if (dh_ == 0) {
+    throw std::runtime_error("Could not find USB device 0xf000/0x0001.");
+  }
+  running_ = true;
+  thread_ = new boost::thread(boost::bind(&UsbComm::read_func, this));
+  return true;
 }
-
-void UsbComm::read_thread()
-{
-    int wfd = ::open("serial.bin", O_RDWR | O_CREAT | O_TRUNC, 0664);
-    while (fd_ >= 0) {
-        int diff = PIPE_SIZE - (int)(head_ - tail_);
-        if (diff > 0) {
-            unsigned char volatile *rpos = &pipe_[head_ & -PIPE_SIZE];
-            int r = sizeof(pipe_) - (head_ & -PIPE_SIZE);
-            if (r == PIPE_SIZE) {
-                r = diff;
-                rpos = &pipe_[0];
-            }
-            if (r > diff) {
-                r = diff;
-            }
-            if (r > 8) {
-                r = 8;
-            }
-            int n = ::read(fd_, const_cast<unsigned char *>(rpos), r);
-            if (n > 0) {
-                std::cerr << "read(" << fd_ << ", " << r << ") = " << n << std::endl;
-                ::write(wfd, const_cast<unsigned char *>(rpos), n);
-            }
-            if (n > 0) {
-                head_ += n;
-            }
-            else {
-                int en = errno;
-                if (n == 0 || en == EWOULDBLOCK || en == EAGAIN) {
-                    ::usleep(1000);
-                }
-                else {
-                    perror("UsbComm::read_thread()");
-                    break;
-                }
-            }
-        }
-    }
-    std::cerr << "read_thread(): quitting" << std::endl;
-    fsync(wfd);
-    ::close(wfd);
-}
-
 
 void UsbComm::close()
 {
-    if (fd_ >= 0) {
-        ::close(fd_);
-        fd_ = -1;
-        if (thread_) {
-            thread_->join();
-            thread_ = 0;
+  running_ = false;
+  wakeup_.set();
+  if (thread_) {
+    thread_->join();
+    delete thread_;
+    thread_ = 0;
+  }
+  if (dh_) {
+    libusb_close(dh_);
+    dh_ = 0;
+  }
+  if (ctx_) {
+    libusb_exit(ctx_);
+    ctx_ = 0;
+  }
+}
+
+void UsbComm::transmit()
+{
+    boost::unique_lock<boost::mutex> lock(lock_);
+    while (Packet *p = received_.dequeue()) {
+        dest_->on_packet(p);
+    }
+}
+
+/* the user wants to send something to a board */
+void UsbComm::on_packet(Packet *p)
+{
+  p->destroy();
+}
+
+#define RECV_ENDPOINT 2
+
+class Transfer {
+public:
+    Transfer(Signal &sig) : sig_(sig), xfer_(0), pack_(0) {
+        xfer_ = libusb_alloc_transfer(0);
+        busy_ = false;
+    }
+    ~Transfer() {
+        libusb_free_transfer(xfer_);
+        if (pack_) {
+            pack_->destroy();
         }
     }
-}
-
-void UsbComm::setRTimestamp(double ts)
-{
-    //  do nothing
-}
-
-int UsbComm::read1()
-{
-    if (fd_ < 0)
-    {
-        return -1;
-    }
-    if ((int)(head_ - tail_) > 0) {
-        int ret = pipe_[tail_ & -PIPE_SIZE];
-        ++tail_;
-        return ret;
-    }
-    return -1;
-}
-
-void UsbComm::setup()
-{
-    termios tios;
-    tcgetattr(fd_, &tios);
-    tios.c_iflag = IGNBRK | IGNPAR;
-    tios.c_oflag = 0;
-    tios.c_cflag = CS8 | CREAD;
-    tios.c_lflag = 0;
-    memset(tios.c_cc, 0, sizeof(tios.c_cc));
-    tios.c_cc[VMIN] = 8;
-    tios.c_cc[VTIME] = 0;
-    cfmakeraw(&tios);
-    cfsetispeed(&tios, BAUD_RATE);
-    cfsetospeed(&tios, BAUD_RATE);
-    tcsetattr(fd_, TCSANOW, &tios);
-}
-
-void UsbComm::message(unsigned char row, unsigned char col, std::string const &msg)
-{
-    return; // todo: remove me
-    if (col >= 40) {
-        throw std::runtime_error(std::string("Bad column in UsbComm::message(): ")
-            + boost::lexical_cast<std::string>(col));
-        return;
-    }
-    if (row >= 4) {
-        throw std::runtime_error(std::string("Bad row in UsbComm::message(): ")
-            + boost::lexical_cast<std::string>(row));
-        return;
-    }
-    size_t s = msg.size();
-    if (s > 40 - col) {
-        s = 40 - col;
-    }
-    char const *str = msg.c_str();
-    while (s > 0) {
-        unsigned char n = (unsigned char)(s & 0xff);
-        if (n > 14) {
-            n = 14;
-        }
-        char msg[19];
-        msg[0] = 'W';
-        msg[1] = 0x11;  //  display node
-        msg[2] = n + 2; //  row, col, data
-        msg[3] = row;
-        msg[4] = col;
-        memcpy(&msg[5], str, n);
-        str += n;
-        col += n;
-        s -= n;
-        int i = write(fd_, msg, 5 + n);
-        if (i < 0) {
-            perror("UsbComm::message()");
-            break;
+    void recv(libusb_device_handle *dh) {
+        std::cerr << "recv()" << std::endl;
+        pack_ = Packet::create();
+        busy_ = true;
+        libusb_fill_bulk_transfer(xfer_, dh, RECV_ENDPOINT, pack_->buffer(), pack_->max_size(),
+                &Transfer::callback, this, 1000); //  a second is a long time!
+        int err = libusb_submit_transfer(xfer_);
+        if (err != 0) {
+            std::cerr << "libusb_submit_transfer(): " << err << ": " << libusb_error_name(err) << std::endl;
         }
     }
-}
+    static void callback(libusb_transfer *x) {
+        ((Transfer *)x->user_data)->on_callback();
+    }
+    void on_callback() {
+        busy_ = false;
+        sig_.set();
+    }
+    Signal &sig_;
+    libusb_transfer *xfer_;
+    Packet *pack_;
+    bool busy_;
+};
 
-void UsbComm::write_reg(unsigned char node, unsigned char reg, unsigned char n, void const *d)
+void UsbComm::read_func()
 {
-    return; //  todo: remove me
-    assert(n <= 32);
-    char msg[36];
-    msg[0] = 'W';
-    msg[1] = node;
-    msg[2] = n;
-    memcpy(&msg[3], d, n);
-    char const *w = msg;
-    int tw = 3 + n;
-    while (tw > 0) {
-        int i = write(fd_, w, tw);
-        if (i < 0) {
-            int en = errno;
-            if (en != EWOULDBLOCK && en != EAGAIN) {
-                perror("UsbComm::write_reg()");
-                throw new std::runtime_error(std::string("Could not write to UsbComm: ") + strerror(en));
+    Transfer xfer(wakeup_);
+    while (running_) {
+        if (!xfer.busy_) {
+            if (xfer.pack_) {
+                std::cerr << "got packet" << std::endl;
+                boost::unique_lock<boost::mutex> lock(lock_);
+                received_.enqueue(xfer.pack_);
+                xfer.pack_ = 0;
             }
-            else if (!stalled_) {
-                stalled_ = true;
-                std::cerr << "Stalling UsbComm write" << std::endl;
-                ::usleep(100);
-            }
-            else {
-                return;
-            }
+            xfer.recv(dh_);
         }
-        else {
-            stalled_ = false;
-            tw -= i;
-            w += i;
-        }
+        wakeup_.wait();
     }
+    std::cerr << "UsbComm::read_func() exiting" << std::endl;
+    libusb_cancel_transfer(xfer.xfer_);
 }
-
 

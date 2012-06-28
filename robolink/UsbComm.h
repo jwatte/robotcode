@@ -3,48 +3,43 @@
 #define UsbComm_h
 
 #include <string>
+#include "Packet.h"
+#include "Signal.h"
 
 namespace boost {
     class thread;
 }
+struct libusb_context;
+struct libusb_device_handle;
 
-class IReader {
+class UsbComm : public IPacketDestination {
 public:
-    virtual void setRTimestamp(double ts) = 0;
-    virtual int read1() = 0;
-};
+  UsbComm(std::string const &devName, IPacketDestination *dst);
+  ~UsbComm();
 
-class IWriter {
-public:
-    virtual void setWTimestamp(double ts) = 0;
-    virtual void write1(int) = 0;
-    virtual void writeImage(int ix, void const *data, size_t sz) = 0;
-};
+  /* start receiving packets */
+  bool open();
+  /* stop accepting new packets */
+  void close();
+  /* transmit received packets to the destination */
+  void transmit();
+  /* send a packet to the USB board */
+  void on_packet(Packet *p);
 
-class UsbComm : public IReader {
-public:
-    UsbComm(std::string const &name);
-    ~UsbComm();
-    bool open();
-    void close();
+private:
 
-    void setRTimestamp(double ts);
-    int read1();
+  void read_func();
 
-    void message(unsigned char row, unsigned char col, std::string const &msg);
-    void write_reg(unsigned char node, unsigned char reg, unsigned char n, void const *d);
-
-    char name_[128];
-    volatile int fd_;
-    bool stalled_;
-    enum { PIPE_SIZE = 1024 };
-    volatile unsigned char pipe_[PIPE_SIZE];
-    volatile unsigned int head_;
-    volatile unsigned int tail_;
-    boost::thread *thread_;
-
-    void setup();
-    void read_thread();
+  std::string name_;
+  IPacketDestination *dest_;
+  int fd_;
+  bool running_;
+  boost::thread *thread_;
+  libusb_context *ctx_;
+  libusb_device_handle *dh_;
+  boost::mutex lock_;
+  Pipe<Packet, 8> received_;
+  Signal wakeup_;
 };
 
 #endif  //  UsbComm_h

@@ -2,8 +2,8 @@
 APPS:=robolink simplegps serial capdump
 
 CPP_OPT:=-ggdb -O0 -fvar-tracking-assignments
-CPP_CFLAGS:=$(sort $(CPP_OPT) $(filter-out -O%,$(shell fltk-config --use-images --cxxflags)))
-CPP_LFLAGS:=-ljpeg $(sort $(CPP_OPT) $(shell fltk-config --use-images --ldflags)) -lv4l2 -lgps -lboost_thread
+CPP_CFLAGS:=$(sort $(CPP_OPT) $(filter-out -O%,$(shell fltk-config --use-images --cxxflags))) -I/usr/local/include/libusb-1.0
+CPP_LFLAGS:=-ljpeg $(sort $(CPP_OPT) $(shell fltk-config --use-images --ldflags)) -lv4l2 -lgps -lboost_thread /usr/local/lib/libusb-1.0.so
 CPP_SRCS:=$(foreach app,$(APPS),$(wildcard $(app)/*.cpp))
 CPP_OBJS:=$(patsubst %.cpp,bld/obj/%.o,$(CPP_SRCS))
 

@@ -21,7 +21,6 @@
 #include <FL/Fl_Output.H>
 
 #include "UsbComm.h"
-#include "Commands.h"
 #include "Board.h"
 #include "Parser.h"
 #include "BoardTile.h"
@@ -31,7 +30,6 @@
 #include "Decisions.h"
 #include "args.h"
 #include "DecisionPanel.h"
-#include "CaptureFile.h"
 
 
 
@@ -74,25 +72,9 @@ double now()
 }
 
 
-struct UC_Info {
-    IReader *rd;
-    IWriter *wr;
-};
-static UC_Info ucinfo;
-
 void on_uc(void *ucp)
 {
-    UC_Info *uci = (UC_Info *)ucp;
-    IReader *ir = uci->rd;
-    IWriter *wr = uci->wr;
-    double n = now();
-    ir->setRTimestamp(n);
-    wr->setWTimestamp(n);
-    int ch = 0;
-    while ((ch = ir->read1()) >= 0) {
-        wr->write1(ch);
-        p.on_char(ch);
-    }
+  ((UsbComm *)ucp)->transmit();
 }
 
 static Talker postCapture_;
@@ -101,7 +83,6 @@ static double captureStart_;
 
 struct CCInfo {
     AsyncVideoCapture *acap;
-    IWriter *wr;
 };
 static CCInfo ccinfo;
 
@@ -117,7 +98,6 @@ void cap_callback(void *cc)
 {
     CCInfo *cci = (CCInfo *)cc;
     AsyncVideoCapture *acap = cci->acap;
-    IWriter *wr = cci->wr;
     if (acap->gotFrame()) {
         double t = now();
         if (captureN_ == 30 || (t - captureStart_ > 4.9)) {
@@ -154,7 +134,7 @@ void time_callback(void *)
     time(&t);
     strftime(buf, 30, "%H:%M:%S", localtime_r(&t, &tmm));
     fprintf(stderr, "time=%s\n", buf);
-    g_usb->message(0, 0, buf);
+    //g_usb->message(0, 0, buf);
     Fl::add_timeout(0.25, &time_callback, 0);
 }
 
@@ -247,14 +227,6 @@ bool set_option(std::string const &key, std::string const &value)
     return false;
 }
 
-class DummyWr : public IWriter {
-public:
-    virtual void setWTimestamp(double) {}
-    virtual void write1(int) {}
-    virtual void writeImage(int, void const *, size_t) {}
-};
-DummyWr g_dummyWr;
-
 int main(int argc, char const **argv)
 {
     try {
@@ -264,19 +236,7 @@ int main(int argc, char const **argv)
             std::cerr << "Errors parsing arguments." << std::endl;
             exit(1);
         }
-        g_usb = new UsbComm(usb);
-        ucinfo.rd = g_usb;
-        ucinfo.wr = &g_dummyWr;
-        ccinfo.wr = &g_dummyWr;
-        if (capture.size()) {
-            CaptureFile *cf = new CaptureFile(capture, true);
-            if (!cf->open()) {
-                std::cerr << "Could not create file: " << capture << std::endl;
-                return 1;
-            }
-            ucinfo.wr = cf;
-            ccinfo.wr = cf;
-        }
+        g_usb = new UsbComm(usb, &p);
         if (!g_usb->open()) {
             std::cerr << "Can't open USB: " << usb << std::endl;
             return 1;
@@ -290,7 +250,7 @@ int main(int argc, char const **argv)
         make_window(avc, &postCapture_);
 
         //  Set up processing pump
-        Fl::add_timeout(0.010, &on_uc, &ucinfo);
+        Fl::add_timeout(0.010, &on_uc, g_usb);
         Fl::add_timeout(0.025, &cap_callback, &ccinfo);
         //Fl::add_timeout(0.25, &time_callback, 0);
         Decisions *d = new Decisions(

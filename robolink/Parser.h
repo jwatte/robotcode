@@ -1,16 +1,17 @@
 #if !defined(Parser_h)
 #define Parser_h
 
-class Parser {
-public:
-    Parser();
-    ~Parser();
-    void on_char(char ch);
-    virtual int check_buf();
+#include "Packet.h"
 
-    int bufptr_;
-    char buf_[64];
+class Parser : public IPacketDestination {
+public:
+  Parser();
+  ~Parser();
+
+  void on_packet(Packet *p);
 };
+
+extern int decode(unsigned char const *buf, int size);
 
 #endif  //  Parser_h
 

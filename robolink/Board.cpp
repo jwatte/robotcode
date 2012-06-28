@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+#include <iostream>
 
 #include "Board.h"
 #include "UsbComm.h"
@@ -33,7 +34,7 @@ Board::~Board()
     boardIds_[id_] = 0;
 }
 
-void Board::on_data(char const *data, int nsize)
+void Board::on_data(unsigned char const *data, int nsize)
 {
     if (nsize > sizeof(data_))
     {
@@ -61,11 +62,8 @@ void Board::dead(unsigned char code)
     invalidate();
 }
 
-extern UsbComm *g_usb;
-
 void Board::write_reg(unsigned char reg, unsigned char n, void const *d)
 {
-    g_usb->write_reg(id_, reg, n, d);
 }
 
 
@@ -95,7 +93,7 @@ MotorPowerBoard::MotorPowerBoard() :
 {
 }
 
-void MotorPowerBoard::on_data(char const *data, int nsize)
+void MotorPowerBoard::on_data(unsigned char const *data, int nsize)
 {
     Board::on_data(data, nsize);
     voltage_.step(data_);
@@ -111,7 +109,7 @@ UsbLinkBoard::UsbLinkBoard() :
 {
 }
 
-void UsbLinkBoard::on_data(char const *data, int nsize)
+void UsbLinkBoard::on_data(unsigned char const *data, int nsize)
 {
     Board::on_data(data, nsize);
     voltage_.step(data_);
@@ -131,7 +129,7 @@ SensorBoard::SensorBoard() :
 {
 }
 
-void SensorBoard::on_data(char const *data, int nsize)
+void SensorBoard::on_data(unsigned char const *data, int nsize)
 {
     Board::on_data(data, nsize);
     cliffDetect_.step(data);
@@ -157,7 +155,7 @@ IMUBoard::IMUBoard() :
 {
 }
 
-void IMUBoard::on_data(char const *data, int nsize)
+void IMUBoard::on_data(unsigned char const *data, int nsize)
 {
     Board::on_data(data, nsize);
     magX_.step(data);

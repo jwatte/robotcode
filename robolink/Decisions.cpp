@@ -54,7 +54,7 @@ void Decisions::invalidate()
         }
     }
     unsigned char d[2] = {
-        gas >> 1, turn >> 1
+        (uint8_t)(gas >> 1), (uint8_t)(turn >> 1)
     };
     motorPowerBoard_->write_reg(0, 2, d);
     DecisionPanelData dpd;

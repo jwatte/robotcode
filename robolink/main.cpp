@@ -113,6 +113,7 @@ void cap_callback(void *cc)
         }
         ++captureN_;
         VideoFrame *vf = acap->next();
+        (void)vf;
         /*
         size_t sz;
         void const *vp;
@@ -195,6 +196,7 @@ void make_window(AsyncVideoCapture *avc, Talker *postCapture)
     win->end();
     win->show();
     ImageInvalidate *ii = new ImageInvalidate(postCapture, avc, id0, id1);
+    (void)ii;
 }
 
 std::string camL("/dev/video0");
@@ -255,6 +257,7 @@ int main(int argc, char const **argv)
         //Fl::add_timeout(0.25, &time_callback, 0);
         Decisions *d = new Decisions(
             &motorPower, &estop, &sensors, &usbLink, avc, &postCapture_, &decisionPanel);
+        (void)d;
         Fl::run();
         std::cerr << "Quitting application" << std::endl;
         delete avc;

@@ -36,7 +36,7 @@ Board::~Board()
 
 void Board::on_data(unsigned char const *data, int nsize)
 {
-    if (nsize > sizeof(data_))
+    if ((size_t)nsize > sizeof(data_))
     {
         fprintf(stderr, "on_data(): nsize %d too big!\n", nsize);
         nsize = sizeof(data_);

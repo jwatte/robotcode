@@ -8,7 +8,7 @@
    as only one thread will be calling enqueue(), 
    and only one (other) thread will be calling dequeue().
  */
-template<typename T, size_t N>
+template<typename T, int N>
 class Pipe {
 public:
   Pipe() : head_(0), tail_(0) {

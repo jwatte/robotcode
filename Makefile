@@ -1,7 +1,7 @@
 
-APPS:=robolink simplegps serial capdump
+APPS:=robolink simplegps serial capdump simpleusb
 
-CPP_OPT:=-ggdb -O0 -fvar-tracking-assignments
+CPP_OPT:=-ggdb -O0 -fvar-tracking-assignments -Wall -Werror -std=gnu++0x
 CPP_CFLAGS:=$(sort $(CPP_OPT) $(filter-out -O%,$(shell fltk-config --use-images --cxxflags))) -I/usr/local/include/libusb-1.0
 CPP_LFLAGS:=-ljpeg $(sort $(CPP_OPT) $(shell fltk-config --use-images --ldflags)) -lv4l2 -lgps -lboost_thread /usr/local/lib/libusb-1.0.so
 CPP_SRCS:=$(foreach app,$(APPS),$(wildcard $(app)/*.cpp))
@@ -12,7 +12,7 @@ LIBAVR_SRCS:=$(filter avr/libavr/%,$(AVR_SRCS))
 AVR_SRCS:=$(filter-out avr/libavr/%,$(AVR_SRCS))
 AVR_OBJS:=$(patsubst avr/%.cpp,bld/avrobj/%.o,$(AVR_SRCS))
 AVR_BINS:=$(patsubst avr/%/,%,$(sort $(dir $(AVR_SRCS))))
-AVR_CFLAGS:=-Wall -Wno-switch -Os -O3 -mcall-prologues -Iavr/libavr -std=gnu++0x -flto -ffunction-sections
+AVR_CFLAGS:=-Wall -Werror -Wno-switch -Os -O3 -mcall-prologues -Iavr/libavr -std=gnu++0x -flto -ffunction-sections
 AVR_LFLAGS:=-Lbld/avrbin -lc -flto -Wl,-flto
 
 AVR_PARTS:=attiny84a atmega328p

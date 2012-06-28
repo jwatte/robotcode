@@ -203,7 +203,7 @@ extern "C" {
 
     int enqueue_all_buffers(int fd, capture_info *ci)
     {
-        for (int i = 0; i != ci->rbuf.count; ++i) {
+        for (size_t i = 0; i != ci->rbuf.count; ++i) {
             if (v4l2_ioctl(fd, VIDIOC_QBUF, &ci->vbufs[i]) < 0) {
                 int en = errno;
                 error = "ioctl(VIDIOC_QBUF) failed: ";
@@ -275,7 +275,7 @@ extern "C" {
     {
         if (capi) {
             if (capi->bufs) {
-                for (int i = 0; i != capi->rbuf.count; ++i) {
+                for (size_t i = 0; i != capi->rbuf.count; ++i) {
                     munmap(capi->bufs[i].ptr, capi->bufs[i].size);
                 }
                 delete[] capi->bufs;

@@ -8,8 +8,8 @@ class Value : public Talker
 {
 public:
     Value(unsigned char offset) :
-        offset_(offset),
-        oldValue_(T())
+        oldValue_(T()),
+        offset_(offset)
     {
     }
     void step(void const *src)
@@ -34,14 +34,14 @@ class ValueShadow : public Listener
 public:
     ValueShadow() :
         src_(0),
-        dirty_(false),
-        value_(T())
+        value_(T()),
+        dirty_(false)
     {
     }
     ValueShadow(Value<T> *src) :
         src_(0),
-        dirty_(false),
-        value_(T())
+        value_(T()),
+        dirty_(false)
     {
         set(src);
     }

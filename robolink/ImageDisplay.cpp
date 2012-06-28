@@ -133,7 +133,7 @@ void ImageDisplay::invalidate(VideoFrame *vf, unsigned int ix)
             {
                 n = 0;
                 unsigned char *src = ary[j];
-                for (int i = 0; i < cinfo.output_width; i += 4)
+                for (size_t i = 0; i < cinfo.output_width; i += 4)
                 {
                     *oq++ = src[0];
                     *oq++ = src[1];

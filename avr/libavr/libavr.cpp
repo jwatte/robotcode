@@ -122,6 +122,11 @@ unsigned short read_timer()
     return g_lastMillisecondValue;
 }
 
+unsigned short read_timer_fast() {
+    return g_lastMillisecondValue;
+}
+
+
 void setup_timers(unsigned long f_cpu)
 {
     actual_f_cpu = f_cpu;
@@ -174,6 +179,7 @@ void delay(unsigned short ms)
 
 struct AfterRec
 {
+    AfterRec *next;
     unsigned short at_time;
     void (*func)(void *data);
     void *data;
@@ -181,27 +187,27 @@ struct AfterRec
 
 #define MAX_AFTERS 20
 AfterRec g_afters[MAX_AFTERS];
+AfterRec *g_curq;
+AfterRec *g_freeq;
 
-void at(unsigned short time, void (*func)(void *data), void *data)
-{
-    IntDisable idi;
-    for (unsigned char ch = 0; ch != MAX_AFTERS; ++ch)
-    {
-        if (!g_afters[ch].func)
-        {
-            g_afters[ch].at_time = time;
-            g_afters[ch].func = func;
-            g_afters[ch].data = data;
-            return;
-        }
+void at(unsigned short time, void (*func)(void *data), void *data) {
+    unsigned char idi = disable_interrupts();
+    AfterRec *rec = g_freeq;
+    if (!rec) {
+        fatal(FATAL_OUT_OF_AFTERS);
     }
-    fatal(FATAL_OUT_OF_AFTERS);
+    g_freeq = rec->next;
+    rec->func = func;
+    rec->data = data;
+    rec->at_time = time;
+    rec->next = g_curq;
+    g_curq = rec;
+    restore_interrupts(idi);
 }
 
 void after(unsigned short delay, void (*func)(void *data), void *data)
 {
-    if (delay > 32767)
-    {
+    if (delay > 32767) {
         fatal(FATAL_TOO_LONG_DELAY);
     }
     at(read_timer() + delay, func, data);
@@ -211,40 +217,42 @@ void schedule()
 {
     wdt_reset();
     unsigned short now = read_timer();
-    for (unsigned char ch = 0; ch != MAX_AFTERS; ++ch)
-    {
-        uint8_t idi = disable_interrupts();
-        if (!g_afters[ch].func)
-        {
+    AfterRec *to_run = 0;
+    unsigned char idi;
+
+    idi = disable_interrupts();
+    to_run = g_curq;
+    g_curq = 0;
+
+    while (to_run) {
+        if ((short)(now - to_run->at_time) >= 0) {
             restore_interrupts(idi);
-            continue;
-        }
-        if ((short)(now - g_afters[ch].at_time) >= 0)
-        {
-            void (*func)(void*) = g_afters[ch].func;
-            void *data = g_afters[ch].data;
-            g_afters[ch].at_time = 0;
-            g_afters[ch].func = 0;
-            g_afters[ch].data = 0;
-            restore_interrupts(idi);
-            (*func)(data);
+            (*to_run->func)(to_run->data);
+            idi = disable_interrupts();
+            AfterRec *to_free = to_run;
+            to_run = to_run->next;
             wdt_reset();
             unsigned short then = read_timer();
 #if defined(MAX_TASK_TIME)
-            if (then - now > MAX_TASK_TIME)
-            {
+            if (then - now > MAX_TASK_TIME) {
                 eeprom_write_word((word *)EE_TOO_LONG_TASK_PTR, (word)func);
                 eeprom_write_word((word *)EE_TOO_LONG_TASK_PRE, (word)now);
                 eeprom_write_word((word *)EE_TOO_LONG_TASK_POST, (word)then);
                 fatal(FATAL_TASK_TOOK_TOO_LONG);
             }
 #endif
+            to_free->next = g_freeq;
+            g_freeq = to_free;
             now = then;
         }
         else {
-            restore_interrupts(idi);
+            AfterRec *to_link = to_run;
+            to_run = to_run->next;
+            to_link->next = g_curq;
+            g_curq = to_link;
         }
     }
+    restore_interrupts(idi);
 }
 
 
@@ -553,14 +561,62 @@ void on_pinchange(unsigned char pin, IPinChangeNotify *pcn)
         pcCtlReg(pin) &= ~pcCtlBit(pin);
     }
 }
+
+void register_pcint(unsigned char ix, unsigned char mask, void (*func)()) {
+    IntDisable idi;
+    switch (ix) {
+    case 0:
+        _pcint0_vect_func = func;
+        if (func && mask) {
+            PCMSK0 = mask;
+            PCICR |= (1 << PCIE0);
+        }
+        else {
+            PCMSK0 = 0;
+            PCICR &= ~(1 << PCIE0);
+        }
+        break;
+    case 1:
+        _pcint1_vect_func = func;
+        if (func && mask) {
+            PCMSK1 = mask;
+            PCICR |= (1 << PCIE1);
+        }
+        else {
+            PCMSK1 = 0;
+            PCICR &= ~(1 << PCIE1);
+        }
+        break;
+    case 2:
+        _pcint2_vect_func = func;
+        if (func && mask) {
+            PCMSK2 = mask;
+            PCICR |= (1 << PCIE2);
+        }
+        else {
+            PCMSK2 = 0;
+            PCICR &= ~(1 << PCIE2);
+        }
+        break;
+    default:
+        fatal(FATAL_BAD_ARGS);
+    }
+}
 #endif
 
+void setup_after() {
+    for (unsigned char ch = 0; ch != MAX_AFTERS; ++ch) {
+        g_afters[ch].next = g_freeq;
+        g_freeq = &g_afters[ch];
+    }
+}
 
 /* boot stuff */
 
 void setup_boot_code() {
     disable_interrupts();
     setup_watchdog();
+    setup_after();
     setup_timers();
     //  force interrupts on
     restore_interrupts(0x80);

@@ -44,6 +44,8 @@ typedef bool boolean;
 extern void setup_timers(unsigned long f_cpu = F_CPU);
 extern unsigned short uread_timer();
 extern unsigned short read_timer();
+//  return an approximation of the millisecond timer (the last snapshot)
+extern unsigned short read_timer_fast();
 extern void udelay(unsigned short us);
 extern void delay(unsigned short ms);
 
@@ -105,6 +107,7 @@ class IPinChangeNotify {
         virtual void pin_change(unsigned char bitValue) = 0;
 };
 extern void on_pinchange(unsigned char pin, IPinChangeNotify *pcn);
+extern void register_pcint(unsigned char ix, unsigned char mask, void (*func)());
 
 /* your replacement for "main" -- you implement this, and typically 
    set up tasks to run using after(). */

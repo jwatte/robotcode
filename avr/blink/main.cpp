@@ -1,17 +1,23 @@
-#define F_CPU 12000000
+#define F_CPU 8000000
 #include <libavr.h>
 #include <pins_avr.h>
 
-#define BLINK_PIN (16|5)
-
 void blink(void *p)
 {
-    digitalWrite(BLINK_PIN, p ? HIGH : LOW);
+    if (p) {
+        PORTD |= 0xc0;
+        PORTB |= (1 << 5);
+    }
+    else {
+        PORTD &= ~0xc0;
+        PORTB &= ~(1 << 5);
+    }
     after(200, blink, p ? NULL : (void *)1);
 }
 
 void setup() {
     setup_timers(F_CPU);
-    pinMode(BLINK_PIN, OUTPUT);
+    DDRD |= 0x0c0;
+    DDRB |= (1 << 5);
     after(200, blink, 0);
 }

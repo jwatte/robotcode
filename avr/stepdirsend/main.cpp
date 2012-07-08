@@ -13,6 +13,7 @@
 #define LED_ALL 0xC0
 
 #define DEBUG_PIN 0x10
+#define IOBIT_MASK 0x0C
 
 
 void blink(bool on) {
@@ -27,6 +28,8 @@ void blink(bool on) {
 
 unsigned short counts[6];
 unsigned char old_step = 0x00;
+unsigned short iobits = 0;
+unsigned short oldbits = 0;
 
 unsigned char buf[32];
 unsigned char buf_ptr = 0;
@@ -55,6 +58,7 @@ void read_pinstate(void *) {
     unsigned char dir = DIR_PORT; //  step
     unsigned char step = STEP_PORT; //  direction
     unsigned char mask = 1;
+    iobits |= (PIND & IOBIT_MASK);
     for (unsigned char bit = 0; bit < 6; ++bit) {
         //  if this pin transitioned from low to high
         if ((step & mask) && !(old_step & mask)) {
@@ -114,32 +118,50 @@ unsigned short calc_cksum(unsigned short *val, unsigned char cnt) {
 
 void send_update(void *p) {
     after(50, send_update, p);
-    PORTD |= LED_GREEN;
+    if (iobits == oldbits) {
+        //  also clears "got a pulse" light
+        PORTD |= LED_GREEN;
+    }
+    else {
+        oldbits = iobits;
+        //  turns on light
+        PORTD &= ~LED_GREEN;
+    }
     short diff = (short)(read_timer_fast() - led_timeout);
     if (diff > 0) {
         //  turn off yellow "ack" led
         PORTD &= ~LED_YELLOW;
     }
-    unsigned char sbuf[16] = { 0xed, 14 };
+    unsigned char sbuf[18] = { 0xed, 16 };
     memcpy(&sbuf[2], counts, 12);
-    unsigned short cksum = calc_cksum((unsigned short *)sbuf, 7);
-    memcpy(&sbuf[14], &cksum, 2);
-    uart_send_all(16, sbuf);
+    memcpy(&sbuf[14], &iobits, 2);
+    iobits = 0;
+    unsigned short cksum = calc_cksum((unsigned short *)sbuf, 8);
+    memcpy(&sbuf[16], &cksum, 2);
+    uart_send_all(18, sbuf);
 }
+
+unsigned char reset_packet[3] = {
+    0xed,
+    1,
+    'r'
+};
 
 void setup() {
     fatal_set_blink(blink);
-    DDRD |= 0xc0 | DEBUG_PIN;
-    PORTD |= 0xc0 | DEBUG_PIN;
+    DDRD = LED_ALL | DEBUG_PIN;
+    //  pull-ups on iobits
+    PORTD |= LED_ALL | DEBUG_PIN | IOBIT_MASK;
     setup_timers(F_CPU);
     uart_setup(BAUDRATE);
     power_adc_enable();
     DDRB &= ~0x3f;  //  direction, input
     DDRC &= ~0x3f;  //  step, input
-    PORTC &= ~0x3f;  //  no pull-up
-    PORTB &= ~0x3f;  //  no pull-up
+    PORTC |= 0x3f;  //  pull-up
+    PORTB |= 0x3f;  //  pull-up
     MCUCR &= ~(1 << PUD);
     after(50, send_update, 0);
     after(0, read_pinstate, 0);
+    uart_send_all(3, reset_packet);
 }
 

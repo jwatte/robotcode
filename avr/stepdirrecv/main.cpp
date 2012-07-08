@@ -11,8 +11,10 @@
 #define LED_BLUE 0x80
 #define LED_YELLOW 0x40
 #define LED_RED 0x20
-#define DEBUG_PIN 0x10
 #define LED_ALL 0xE0
+
+#define DEBUG_PIN 0x10
+#define IOBIT_MASK 0x0C
 
 
 
@@ -49,9 +51,11 @@ unsigned short counts[6];
 unsigned short targets[6];
 unsigned short steprates[6];
 unsigned short stepphases[6];
+unsigned short iobits = 0;
 
 unsigned long blue_timeout;
 bool debugpin;
+bool first = true;
 
 void toggle_debug() {
     debugpin = !debugpin;
@@ -77,16 +81,32 @@ unsigned char ack_packet[3] = {
 };
 
 void decode_packet() {
-    unsigned short cs, ccs;
-    if (buf[1] != 14) {
+    unsigned short cs, ccs, newbits;
+    if (buf[1] == 1 && buf[2] == 'r') {
+        //  reset from board
+        first = true;
+        PORTD |= LED_ALL;
+        return;
+    }
+    if (buf[1] != 16) {
         goto bad_packet;
     }
-    memcpy(&cs, &buf[14], 2);
-    ccs = calc_cksum((unsigned short *)buf, 7);
+    memcpy(&cs, &buf[16], 2);
+    ccs = calc_cksum((unsigned short *)buf, 8);
     if (cs != ccs) {
         goto bad_packet;
     }
     memcpy(targets, &buf[2], 12);
+    memcpy(&newbits, &buf[14], 2);
+    if (newbits != iobits) {
+        iobits = newbits;
+        PORTD |= (iobits & IOBIT_MASK) | LED_RED;
+        PORTD &= (iobits | ~IOBIT_MASK);
+    }
+    if (first) {
+        first = false;
+        memcpy(counts, targets, 12);
+    }
     for (unsigned char i = 0; i != 6; ++i) {
         short diff = (short)(targets[i] - counts[i]);
         if (diff < -10000) {
@@ -217,6 +237,7 @@ void main_loop(void *) {
     blue_timeout += delta;
     if (blue_timeout > 2000000) {
         PORTD |= LED_BLUE;
+        first = true;
     }
     after(0, main_loop, 0);
     STEP_PORT = steps;
@@ -231,18 +252,19 @@ unsigned char online_packet[3] = {
 
 void setup() {
     fatal_set_blink(blink);
-    DDRD |= LED_ALL | DEBUG_PIN;
-    PORTD |= LED_ALL;
+    DDRD |= LED_ALL | DEBUG_PIN | IOBIT_MASK;
+    PORTD = LED_ALL;
     setup_timers(F_CPU);
     uart_setup(BAUDRATE);
     uart_send_all(3, online_packet);
     power_adc_enable();
-    DDRB |= 0x3f;  //  direction, input
-    DDRC |= 0x3f;  //  step, input
+    DDRB |= 0x3f;  //  direction, output
+    DDRC |= 0x3f;  //  step, output
     PORTC &= ~0x3f;  //  Start low
     PORTB &= ~0x3f;  //  Start low
     MCUCR &= ~(1 << PUD);
     after(0, main_loop, 0);
+    //  turn off red and yellow
     PORTD &= ~(LED_RED | LED_YELLOW);
 }
 

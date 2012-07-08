@@ -8,16 +8,20 @@
 #define DIR_PORT PINC
 #define STEP_PORT PINB
 
+#define LED_YELLOW 0x80
+#define LED_GREEN 0x40
+#define LED_ALL 0xC0
+
 #define DEBUG_PIN 0x10
 
 
 void blink(bool on) {
-    DDRD |= 0xc0;
+    DDRD |= LED_ALL;
     if (on) {
-        PORTD |= 0xc0;
+        PORTD |= LED_ALL;
     }
     else {
-        PORTD &= ~0xc0;
+        PORTD &= ~LED_ALL;
     }
 }
 
@@ -31,7 +35,7 @@ unsigned short led_timeout;
 void handle_packet() {
     if (buf[1] == 1 && buf[2] == 'a') {
         led_timeout = read_timer_fast() + 120;
-        PORTD |= 0x80;
+        PORTD |= LED_YELLOW;
     }
 }
 
@@ -48,13 +52,13 @@ void read_pinstate(void *) {
         debugpin = true;
     }
     after(0, read_pinstate, 0);
-    return;
     unsigned char dir = DIR_PORT; //  step
     unsigned char step = STEP_PORT; //  direction
     unsigned char mask = 1;
     for (unsigned char bit = 0; bit < 6; ++bit) {
         //  if this pin transitioned from low to high
         if ((step & mask) && !(old_step & mask)) {
+            PORTD &= ~LED_GREEN;
             if (dir & mask) {
                 counts[bit]++;
             }
@@ -66,7 +70,6 @@ void read_pinstate(void *) {
     }
     old_step = step;
     if (uart_available()) {
-        PORTD |= 0x80;
         unsigned char ch = uart_getch();
         if (buf_ptr == 0) {
             if (ch != 0xed) {
@@ -111,18 +114,17 @@ unsigned short calc_cksum(unsigned short *val, unsigned char cnt) {
 
 void send_update(void *p) {
     after(50, send_update, p);
-    PORTD &= ~0x40;
+    PORTD |= LED_GREEN;
     short diff = (short)(read_timer_fast() - led_timeout);
     if (diff > 0) {
         //  turn off yellow "ack" led
-        PORTD &= ~0x80;
+        PORTD &= ~LED_YELLOW;
     }
     unsigned char sbuf[16] = { 0xed, 14 };
     memcpy(&sbuf[2], counts, 12);
     unsigned short cksum = calc_cksum((unsigned short *)sbuf, 7);
     memcpy(&sbuf[14], &cksum, 2);
     uart_send_all(16, sbuf);
-    PORTD |= 0x40;
 }
 
 void setup() {
@@ -134,8 +136,8 @@ void setup() {
     power_adc_enable();
     DDRB &= ~0x3f;  //  direction, input
     DDRC &= ~0x3f;  //  step, input
-    PORTC |= 0x3f;  //  pull-up
-    PORTB |= 0x3f;  //  pull-up
+    PORTC &= ~0x3f;  //  no pull-up
+    PORTB &= ~0x3f;  //  no pull-up
     MCUCR &= ~(1 << PUD);
     after(50, send_update, 0);
     after(0, read_pinstate, 0);

@@ -38,8 +38,7 @@ private:
   libusb_context *ctx_;
   libusb_device_handle *dh_;
   boost::mutex lock_;
-  Pipe<Packet, 8> received_;
-  Signal wakeup_;
+  Pipe<Packet, 64> received_;
 };
 
 #endif  //  UsbComm_h

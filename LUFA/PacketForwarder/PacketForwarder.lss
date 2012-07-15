@@ -310,7 +310,7 @@ void clock_prescale_set(clock_div_t __x)
 
     UBRR1H = 0;
  1b8:	80 e1       	ldi	r24, 0x10	; 16
-    UBRR1L = 16;    //  B115000
+    UBRR1L = 16;    //  B115200
  1ba:	80 93 cc 00 	sts	0x00CC, r24
  1be:	82 e0       	ldi	r24, 0x02	; 2
 

@@ -56,12 +56,42 @@ inline regtype &pcCtlReg(uint8_t pin) {
 #define HAS_UART 0
 #define HAS_SPI 0
 #define NATIVE_TWI 0
+#define HAVE_16BIT_TIMER1 1
 #define ADC_DDR DDRA
 #define ADC_PORT PORTA
+#define NUM_PCINTS 2
 #define PIN_PCINT0 PINA
 #define PIN_PCINT1 PINB
 #define TIMER1_OVF_vect TIM1_OVF_vect
 #define TIMER1_COMPA_vect TIM1_COMPA_vect
+
+
+#elif defined(__AVR_ATtiny85__)
+
+#define pinToPortRegOut(pin) \
+    (((pin & 0x18) == 0) ? PORTB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+#define pinToPortRegIn(pin) \
+    (((pin & 0x18) == 0) ? PINB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+#define pinToPortDirReg(pin) \
+    (((pin & 0x18) == 0) ? DDRB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+#define pcMaskReg(pin) \
+    (((pin & 0x18) == 0) ? PCMSK : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+#define pcCtlBit(pin) \
+    (1 << (((pin & 0x18) == 0) ? PCIE :(fatal(FATAL_BAD_PIN), *(regtype *)0)))
+
+inline regtype &pcCtlReg(uint8_t pin) {
+    return GIMSK;
+}
+
+#define HAS_UTFT 0
+#define HAS_UART 0
+#define HAS_SPI 0
+#define NATIVE_TWI 0
+#define HAVE_16BIT_TIMER1 0
+#define ADC_DDR DDRB
+#define ADC_PORT PORTB
+#define NUM_PCINTS 1
+#define PIN_PCINT0 PINB
 
 
 #elif defined(__AVR_ATmega328P__)
@@ -86,8 +116,10 @@ inline regtype &pcCtlReg(uint8_t pin) {
 #define HAS_UART 1
 #define HAS_SPI 1
 #define NATIVE_TWI 1
+#define HAVE_16BIT_TIMER1 1
 #define ADC_DDR DDRC
 #define ADC_PORT PORTC
+#define NUM_PCINTS 3
 #define PIN_PCINT0 PINB
 #define PIN_PCINT1 PINC
 #define PIN_PCINT2 PIND

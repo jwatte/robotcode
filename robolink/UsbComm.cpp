@@ -16,7 +16,7 @@
 #include <libusb.h>
 
 
-#define BAUD_RATE B38400
+#define BAUD_RATE B115200
 
 UsbComm::UsbComm(std::string const &devName, IPacketDestination *dst) :
   name_(devName),
@@ -44,7 +44,21 @@ bool UsbComm::open()
   //    todo: parse vid/pid out of name_
   dh_ = libusb_open_device_with_vid_pid(ctx_, 0xf000, 0x0001);
   if (dh_ == 0) {
-    throw std::runtime_error("Could not find USB device 0xf000/0x0001.");
+    throw std::runtime_error("Could not find USB device 0xf000/0x0001 for comm board.");
+  }
+  libusb_device_descriptor ldd;
+  int er;
+  er = libusb_get_device_descriptor(libusb_get_device(dh_), &ldd);
+  if (er < 0) {
+    throw std::runtime_error("Could not find USB descriptor for comm board.");
+  }
+  er = libusb_set_configuration(dh_, 1);
+  if (er < 0) {
+    throw std::runtime_error("Could not set configuration on comm board.");
+  }
+  er = libusb_claim_interface(dh_, 0);
+  if (er < 0) {
+    throw std::runtime_error("Could not claim USB interface for comm board. Is another process using it?");
   }
   running_ = true;
   thread_ = new boost::thread(boost::bind(&UsbComm::read_func, this));
@@ -54,7 +68,6 @@ bool UsbComm::open()
 void UsbComm::close()
 {
   running_ = false;
-  wakeup_.set();
   if (thread_) {
     thread_->join();
     delete thread_;
@@ -84,11 +97,11 @@ void UsbComm::on_packet(Packet *p)
   p->destroy();
 }
 
-#define RECV_ENDPOINT 2
+#define RECV_ENDPOINT 0x82
 
 class Transfer {
 public:
-    Transfer(Signal &sig) : sig_(sig), xfer_(0), pack_(0) {
+    Transfer() : xfer_(0), pack_(0) {
         xfer_ = libusb_alloc_transfer(0);
         busy_ = false;
     }
@@ -99,24 +112,27 @@ public:
         }
     }
     void recv(libusb_device_handle *dh) {
-        std::cerr << "recv()" << std::endl;
         pack_ = Packet::create();
         busy_ = true;
+        xfer_->dev_handle = dh;
         libusb_fill_bulk_transfer(xfer_, dh, RECV_ENDPOINT, pack_->buffer(), pack_->max_size(),
                 &Transfer::callback, this, 1000); //  a second is a long time!
         int err = libusb_submit_transfer(xfer_);
         if (err != 0) {
             std::cerr << "libusb_submit_transfer(): " << err << ": " << libusb_error_name(err) << std::endl;
+            pack_->destroy();
+            pack_ = 0;
+            usleep(10000);
+            busy_ = false;
         }
     }
     static void callback(libusb_transfer *x) {
         ((Transfer *)x->user_data)->on_callback();
     }
     void on_callback() {
+        pack_->set_size(xfer_->actual_length);
         busy_ = false;
-        sig_.set();
     }
-    Signal &sig_;
     libusb_transfer *xfer_;
     Packet *pack_;
     bool busy_;
@@ -124,18 +140,23 @@ public:
 
 void UsbComm::read_func()
 {
-    Transfer xfer(wakeup_);
+    Transfer xfer;
     while (running_) {
         if (!xfer.busy_) {
             if (xfer.pack_) {
-                std::cerr << "got packet" << std::endl;
                 boost::unique_lock<boost::mutex> lock(lock_);
-                received_.enqueue(xfer.pack_);
+                if (!received_.enqueue(xfer.pack_)) {
+                    std::cerr << "Warning: input queue full; dropping packet." << std::endl;
+                    xfer.pack_->destroy();
+                }
                 xfer.pack_ = 0;
+                //  collect a little more data per batch
+                usleep(8000);
             }
             xfer.recv(dh_);
         }
-        wakeup_.wait();
+        //  Mmm! Polling!
+        libusb_handle_events(ctx_);
     }
     std::cerr << "UsbComm::read_func() exiting" << std::endl;
     libusb_cancel_transfer(xfer.xfer_);

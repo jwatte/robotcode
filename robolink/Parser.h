@@ -9,6 +9,9 @@ public:
   ~Parser();
 
   void on_packet(Packet *p);
+
+  unsigned char buf[258];
+  unsigned int bufsz;
 };
 
 extern int decode(unsigned char const *buf, int size);

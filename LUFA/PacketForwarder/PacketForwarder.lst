@@ -1922,7 +1922,7 @@
   57:PacketForwarder.c ****     UBRR1H = 0;
  198               		.loc 2 57 0
  199 0056 1092 CD00 		sts 205,__zero_reg__
-  58:PacketForwarder.c ****     UBRR1L = 16;    //  B115000
+  58:PacketForwarder.c ****     UBRR1L = 16;    //  B115200
  200               		.loc 2 58 0
  201 005a 80E1      		ldi r24,lo8(16)
  202 005c 8093 CC00 		sts 204,r24
@@ -3376,29 +3376,29 @@
  897               		.file 9 "../../../LUFA-120219/LUFA/Drivers/USB/Core/AVR8/../Device.h"
 DEFINED SYMBOLS
                             *ABS*:0000000000000000 PacketForwarder.c
-     /tmp/ccqwesJy.s:2      *ABS*:000000000000003e __SP_H__
-     /tmp/ccqwesJy.s:3      *ABS*:000000000000003d __SP_L__
-     /tmp/ccqwesJy.s:4      *ABS*:000000000000003f __SREG__
-     /tmp/ccqwesJy.s:5      *ABS*:0000000000000000 __tmp_reg__
-     /tmp/ccqwesJy.s:6      *ABS*:0000000000000001 __zero_reg__
-     /tmp/ccqwesJy.s:12     .text.LEDs_SetAllLEDs:0000000000000000 LEDs_SetAllLEDs
-     /tmp/ccqwesJy.s:37     .text.DebugWrite:0000000000000000 DebugWrite
-     /tmp/ccqwesJy.s:115    .text.SetupHardware:0000000000000000 SetupHardware
-     /tmp/ccqwesJy.s:227    .text.EVENT_USB_Device_Connect:0000000000000000 EVENT_USB_Device_Connect
-     /tmp/ccqwesJy.s:245    .text.EVENT_USB_Device_Disconnect:0000000000000000 EVENT_USB_Device_Disconnect
-     /tmp/ccqwesJy.s:263    .text.EVENT_USB_Device_ConfigurationChanged:0000000000000000 EVENT_USB_Device_ConfigurationChanged
-     /tmp/ccqwesJy.s:361    .text.StartTransmit:0000000000000000 StartTransmit
+     /tmp/ccExaO4D.s:2      *ABS*:000000000000003e __SP_H__
+     /tmp/ccExaO4D.s:3      *ABS*:000000000000003d __SP_L__
+     /tmp/ccExaO4D.s:4      *ABS*:000000000000003f __SREG__
+     /tmp/ccExaO4D.s:5      *ABS*:0000000000000000 __tmp_reg__
+     /tmp/ccExaO4D.s:6      *ABS*:0000000000000001 __zero_reg__
+     /tmp/ccExaO4D.s:12     .text.LEDs_SetAllLEDs:0000000000000000 LEDs_SetAllLEDs
+     /tmp/ccExaO4D.s:37     .text.DebugWrite:0000000000000000 DebugWrite
+     /tmp/ccExaO4D.s:115    .text.SetupHardware:0000000000000000 SetupHardware
+     /tmp/ccExaO4D.s:227    .text.EVENT_USB_Device_Connect:0000000000000000 EVENT_USB_Device_Connect
+     /tmp/ccExaO4D.s:245    .text.EVENT_USB_Device_Disconnect:0000000000000000 EVENT_USB_Device_Disconnect
+     /tmp/ccExaO4D.s:263    .text.EVENT_USB_Device_ConfigurationChanged:0000000000000000 EVENT_USB_Device_ConfigurationChanged
+     /tmp/ccExaO4D.s:361    .text.StartTransmit:0000000000000000 StartTransmit
                             *COM*:0000000000000001 tx_tail
                             *COM*:0000000000000080 tx_buf
-     /tmp/ccqwesJy.s:421    .text.__vector_24:0000000000000000 __vector_24
+     /tmp/ccExaO4D.s:421    .text.__vector_24:0000000000000000 __vector_24
                             *COM*:0000000000000001 tx_head
-     /tmp/ccqwesJy.s:495    .text.__vector_23:0000000000000000 __vector_23
+     /tmp/ccExaO4D.s:495    .text.__vector_23:0000000000000000 __vector_23
                             *COM*:0000000000000001 rx_head
                             *COM*:0000000000000080 rx_buf
                             *COM*:0000000000000001 rx_tail
                             *COM*:0000000000000001 num_ovf
-     /tmp/ccqwesJy.s:581    .text.PacketForwarder_Task:0000000000000000 PacketForwarder_Task
-     /tmp/ccqwesJy.s:853    .text.startup.main:0000000000000000 main
+     /tmp/ccExaO4D.s:581    .text.PacketForwarder_Task:0000000000000000 PacketForwarder_Task
+     /tmp/ccExaO4D.s:853    .text.startup.main:0000000000000000 main
 
 UNDEFINED SYMBOLS
 USB_Init

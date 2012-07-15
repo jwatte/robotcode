@@ -75,6 +75,7 @@ double now()
 void on_uc(void *ucp)
 {
   ((UsbComm *)ucp)->transmit();
+  Fl::add_timeout(0.010, &on_uc, g_usb);
 }
 
 static Talker postCapture_;

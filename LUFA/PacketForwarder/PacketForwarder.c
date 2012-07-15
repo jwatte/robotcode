@@ -55,7 +55,7 @@ void SetupHardware(void) {
     UCSR1D = 0;
 
     UBRR1H = 0;
-    UBRR1L = 16;    //  B115000
+    UBRR1L = 16;    //  B115200
 
     UCSR1A = (1 << U2X1);
     UCSR1C = (1 << USBS1) | (1 << UCSZ11) | (1 << UCSZ10); //  CS8, IGNPAR, STOP2

@@ -9,6 +9,9 @@
 #include "Parser.h"
 
 
+#define SYNC_BYTE ((unsigned char)0xed)
+
+
 Parser::Parser()
 {
 }
@@ -19,7 +22,49 @@ Parser::~Parser()
 
 void Parser::on_packet(Packet *p)
 {
-    decode(p->buffer(), p->size());
+    /*
+    std::cerr << "on_packet()";
+    for (unsigned char const *ptr = (unsigned char const *)p->buffer(),
+        *end = (unsigned char const *)p->buffer() + p->size();
+        ptr != end; ++ptr) {
+        std::cerr << " " << std::hex << (int)*ptr;
+    }
+    std::cerr << std::endl;
+    */
+    unsigned int psz = p->size();
+    unsigned char const *pbuf = p->buffer();
+    while (psz > 0) {
+        unsigned int sz = psz;
+        if (sz + bufsz > sizeof(buf)) {
+            sz = sizeof(buf) - bufsz;
+        }
+        memcpy(&buf[bufsz], pbuf, sz);
+        bufsz += sz;
+        pbuf += sz;
+        psz -= sz;
+        if (bufsz < 3) {
+            break;
+        }
+        unsigned int skip = 0;
+        for (unsigned int i = 0; i < bufsz-2; ++i) {
+            if (buf[i] == SYNC_BYTE && buf[i+1] <= (bufsz - i - 2)) {
+                decode(&buf[i], buf[i+1]+2);
+                i += buf[i+1] + 1;
+                skip = i + 1;
+            }
+        }
+        if (skip == 0) {
+            while (skip < bufsz && buf[skip] != SYNC_BYTE) {
+                ++skip;
+            }
+        }
+        if (skip > 0) {
+            if (skip < bufsz) {
+                memmove(&buf[0], &buf[skip], bufsz - skip);
+            }
+            bufsz -= skip;
+        }
+    }
     p->destroy();
 }
 
@@ -36,8 +81,6 @@ void Parser::on_packet(Packet *p)
   N Node          Nak from Node
 
  */
-
-#define SYNC_BYTE ((unsigned char)0xed)
 
 
 struct format {
@@ -82,6 +125,7 @@ int decode(unsigned char const *buf, int size)
 {
     if (size < 3) {
         //  short packet
+        std::cerr << "Short packet (" << size << " bytes)" << std::endl;
         return 0;
     }
     if (buf[0] != SYNC_BYTE) {

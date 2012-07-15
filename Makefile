@@ -1,5 +1,5 @@
 
-APPS:=robolink simplegps serial capdump simpleusb
+APPS:=robolink simplegps simpleusb
 
 CPP_OPT:=-ggdb -O0 -fvar-tracking-assignments -Wall -Werror -std=gnu++0x
 CPP_CFLAGS:=$(sort $(CPP_OPT) $(filter-out -O%,$(shell fltk-config --use-images --cxxflags))) -I/usr/local/include/libusb-1.0
@@ -12,10 +12,10 @@ LIBAVR_SRCS:=$(filter avr/libavr/%,$(AVR_SRCS))
 AVR_SRCS:=$(filter-out avr/libavr/%,$(AVR_SRCS))
 AVR_OBJS:=$(patsubst avr/%.cpp,bld/avrobj/%.o,$(AVR_SRCS))
 AVR_BINS:=$(patsubst avr/%/,%,$(sort $(dir $(AVR_SRCS))))
-AVR_CFLAGS:=-Wall -Werror -Wno-switch -Os -O3 -mcall-prologues -Iavr/libavr -std=gnu++0x -flto -ffunction-sections
-AVR_LFLAGS:=-Lbld/avrbin -lc -flto -Wl,-flto
+AVR_CFLAGS:=-Wall -Werror -Wno-switch -Os -O3 -mcall-prologues -Iavr/libavr -std=gnu++0x -ffunction-sections
+AVR_LFLAGS:=-Lbld/avrbin -lc
 
-AVR_PARTS:=attiny84a atmega328p
+AVR_PARTS:=attiny84a atmega328p attiny85
 AVR_PROG_PORT?=/dev/_avrisp2
 AVR_PROG:=-c avrisp2 -P $(AVR_PROG_PORT)
 AVR_OBJS+=$(foreach i,$(AVR_PARTS),$(patsubst avr/libavr/%.cpp,bld/avrobj/libavr_$i/%.o,$(LIBAVR_SRCS)))
@@ -40,6 +40,7 @@ PART_stepdirsend:=atmega328p
 PART_stepdirrecv:=atmega328p
 PART_display:=atmega328p
 PART_readcompass:=atmega328p
+PART_test85:=attiny85
 
 fuses_motorboard:	fuses_8
 fuses_estop:	fuses_8
@@ -52,6 +53,7 @@ fuses_stepdirsend:	fuses_8
 fuses_stepdirrecv:	fuses_8
 fuses_display:	fuses_20
 fuses_readcompass:	fuses_16
+fuses_test85:	fuses_8_85
 
 define mkapp
 bld/bin/$(1):	$(filter bld/obj/$(1)/%,$(CPP_OBJS))
@@ -92,6 +94,7 @@ bld/obj/%.o:	%.cpp
 	g++ $(CPP_CFLAGS) -c $< -o $@ -MMD
 
 TRANSLATE_attiny84a:=t84
+TRANSLATE_attiny85:=t85
 TRANSLATE_atmega328p:=m328p
 define translate_part
 $(if $(TRANSLATE_$(1)),$(TRANSLATE_$(1)),$(1))
@@ -108,6 +111,10 @@ fuses_8:
 fuses_tiny_8:
 	# 8 MHz, internal osc, 2.7V brown-out, 65k + 4.1ms boot delay
 	avrdude -e -u -V -p t84 -b 115200 -B 200 $(AVR_PROG) -U lfuse:w:0xD2:m -U hfuse:w:0xDD:m -U efuse:w:0x01:m
+
+fuses_8_85:
+	# 8 MHz, internal osc, 2.7V brown-out, 65k + 4.1ms boot delay
+	avrdude -e -u -V -p t85 -b 115200 -B 200 $(AVR_PROG) -U lfuse:w:0xD2:m -U hfuse:w:0xDD:m -U efuse:w:0xFF:m
 
 fuses_16:
 	# 16 MHz, crystal osc, 2.7V brown-out, 16k + 4.1ms boot delay

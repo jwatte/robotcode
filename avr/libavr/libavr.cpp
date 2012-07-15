@@ -67,6 +67,7 @@ void fatal(int err)
 }
 
 
+#if HAVE_16BIT_TIMER1
 /* timer API */
 
 unsigned short g_lastTimer1Value;
@@ -174,6 +175,7 @@ void delay(unsigned short ms)
         /* do nothing */
     }
 }
+#endif  //  HAVE_16BIT_TIMER1
 
 /* task API */
 
@@ -254,7 +256,6 @@ void schedule()
     }
     restore_interrupts(idi);
 }
-
 
 /* watchdog API */
 
@@ -568,48 +569,54 @@ void register_pcint(unsigned char ix, unsigned char mask, void (*func)()) {
     case 0:
         _pcint0_vect_func = func;
         if (func && mask) {
-            PCMSK0 = mask;
-            PCICR |= (1 << PCIE0);
+            pcMaskReg(0) = mask;
+            pcCtlReg(0) |= pcCtlBit(0);
         }
         else {
-            PCMSK0 = 0;
-            PCICR &= ~(1 << PCIE0);
+            pcMaskReg(0) = 0;
+            pcCtlReg(0) &= ~pcCtlBit(0);
         }
         break;
+#if NUM_PCINTS > 1
     case 1:
         _pcint1_vect_func = func;
         if (func && mask) {
-            PCMSK1 = mask;
-            PCICR |= (1 << PCIE1);
+            pcMaskReg(8) = mask;
+            pcCtlReg(0) |= pcCtlBit(8);
         }
         else {
-            PCMSK1 = 0;
-            PCICR &= ~(1 << PCIE1);
+            pcMaskReg(8) = 0;
+            pcCtlReg(0) &= ~pcCtlBit(8);
         }
         break;
+#endif
+#if NUM_PCINTS > 2
     case 2:
         _pcint2_vect_func = func;
         if (func && mask) {
-            PCMSK2 = mask;
-            PCICR |= (1 << PCIE2);
+            pcMaskReg(16) = mask;
+            pcCtlReg(0) |= pcCtlBit(16);
         }
         else {
-            PCMSK2 = 0;
-            PCICR &= ~(1 << PCIE2);
+            pcMaskReg(16) = 0;
+            pcCtlReg(0) &= ~pcCtlBit(16);
         }
         break;
+#endif
     default:
         fatal(FATAL_BAD_ARGS);
     }
 }
 #endif
 
+#if defined(HAVE_16BIT_TIMER1)
 void setup_after() {
     for (unsigned char ch = 0; ch != MAX_AFTERS; ++ch) {
         g_afters[ch].next = g_freeq;
         g_freeq = &g_afters[ch];
     }
 }
+#endif
 
 /* boot stuff */
 

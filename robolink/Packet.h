@@ -17,7 +17,7 @@ public:
   /* If empty, return NULL, else remove and return the next element in the queue */
   T *dequeue() {
     if (head_ - tail_ > 0) {
-      T *ret = pipe_[head_ & (N-1)];
+      T *ret = pipe_[tail_ & (N-1)];
       ++tail_;
       return ret;
     }
@@ -26,7 +26,7 @@ public:
   /* If full, return false, else accept the element into the queue */
   bool enqueue(T *t) {
     if (head_ - tail_ < N) {
-      pipe_[head_] = t;
+      pipe_[head_ & (N - 1)] = t;
       ++head_;
       return true;
     }
@@ -49,6 +49,7 @@ public:
   unsigned int max_size() const { return sizeof(data_); }
   void set(void const *src, unsigned int cnt);
   void add(void const *src, unsigned int cnt);
+  void set_size(unsigned int sz) { size_ = sz; }
 
 private:
   ~Packet();

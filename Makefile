@@ -2,8 +2,8 @@
 APPS:=robolink simplegps simpleusb
 
 CPP_OPT:=-ggdb -O0 -fvar-tracking-assignments -Wall -Werror -std=gnu++0x
-CPP_CFLAGS:=$(sort $(CPP_OPT) $(filter-out -O%,$(shell fltk-config --use-images --cxxflags))) -I/usr/local/include/libusb-1.0
-CPP_LFLAGS:=-ljpeg $(sort $(CPP_OPT) $(shell fltk-config --use-images --ldflags)) -lv4l2 -lgps -lboost_thread /usr/local/lib/libusb-1.0.so
+CPP_CFLAGS:=$(sort $(CPP_OPT) $(filter-out -D_FORTIFY_SOURCE%,$(filter-out -O%,$(shell fltk-config --use-images --cxxflags)))) -I/usr/local/include/libusb-1.0
+CPP_LFLAGS:=-ljpeg $(sort $(CPP_OPT) $(shell fltk-config --use-images --ldflags)) -lv4l2 -lgps -lboost_thread -lboost_system /usr/local/lib/libusb-1.0.so
 CPP_SRCS:=$(foreach app,$(APPS),$(wildcard $(app)/*.cpp))
 CPP_OBJS:=$(patsubst %.cpp,bld/obj/%.o,$(CPP_SRCS))
 

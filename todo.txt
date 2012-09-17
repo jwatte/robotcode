@@ -1,0 +1,16 @@
+
+- video capture and other displays blinking in the window
+- "premature end of JPEG file" intermittent error
+- distance sensors jitter a lot
+- main battery power sensor doesn't work
+- remote power for motor boards
+- mount cameras permanently
+- mount reset button
+- cover/protection/cable management
+- integrate IMU sensor for heading/movement
+- integrate GPS sensor for position/heading
+- remote UI for configuration
+- follow simple plan
+- follow GPS
+- follow cameras
+- front touch sensor

@@ -1,5 +1,5 @@
 
-APPS:=robolink simplegps simpleusb
+APPS:=robolink rl2 simplegps simpleusb
 
 CPP_OPT:=-ggdb -O0 -fvar-tracking-assignments -Wall -Werror -std=gnu++0x
 CPP_CFLAGS:=$(sort $(CPP_OPT) $(filter-out -D_FORTIFY_SOURCE%,$(filter-out -O%,$(shell fltk-config --use-images --cxxflags)))) -I/usr/local/include/libusb-1.0

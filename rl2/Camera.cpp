@@ -20,11 +20,12 @@ Camera::Camera(std::string const &devname, unsigned int capWidth, unsigned int c
     imageGrabbed_(0),
     capWidth_(capWidth),
     capHeight_(capHeight),
-    lastReturned_(1),
-    nextWaiting_(1),
-    lastQueued_(1),
     inQueue_(0),
+    //  number of returned images must be 1 less than total number,
+    //  to allow one to be in use by the main/displaying thread
     imageReturned_(Camera::NUM_BUFS - 1),
+    nextImgToDisplay_(0), // nextImgToUse_ -> nextImgToDisplay_
+    nextImgToUse_(0),
     fps_(30),
     fpsStep_(30),
     underflows_(0),
@@ -111,15 +112,15 @@ void Camera::step() {
     fpsStep_ = fpsStep_ * 0.75 + 0.25 * 1000000.0 / std::max(delta.total_microseconds(), 1L);
     if (imageGrabbed_.nonblocking_available()) {
         imageGrabbed_.acquire();
-        imageProperty_->set(forGrabbing_[lastQueued_]);
-        lastQueued_ += 1;
-        if (lastQueued_ == NUM_BUFS) {
-            lastQueued_ = 0;
+        imageProperty_->set(forGrabbing_[nextImgToDisplay_]);
+        nextImgToDisplay_ += 1;
+        if (nextImgToDisplay_ == NUM_BUFS) {
+            nextImgToDisplay_ = 0;
         }
         fpsProperty_->set(fps_);
         fpsStepProperty_->set(fpsStep_);
         underflowsProperty_->set(underflows_);
-        //  release whatever is oldest in the queue
+        //  release whatever is oldest in the queue -- nextImgToUse_
         imageReturned_.release();
     }
 }
@@ -147,11 +148,7 @@ void Camera::stop_capture() {
 void Camera::poll_and_queue() {
     while (imageReturned_.nonblocking_available()) {
         imageReturned_.acquire();
-        queue(lastReturned_);
-        lastReturned_ += 1;
-        if (lastReturned_ == NUM_BUFS) {
-            lastReturned_ = 0;
-        }
+        queue();
     }
 }
 
@@ -195,7 +192,20 @@ void Camera::process() {
     std::cerr << "Camera::process() end" << std::endl;
 }
 
-void Camera::queue(size_t ix) {
+void Camera::queue() {
+    size_t ix = NUM_BUFS;
+    for (size_t i = 0; i != NUM_BUFS; ++i) {
+        if (!bufs_[nextVbufToUse_].queued) {
+            bufs_[nextVbufToUse_].queued = true;
+            ix = nextVbufToUse_;
+            break;
+        }
+        nextVbufToUse_ += 1;
+        if (nextVbufToUse_ == NUM_BUFS) {
+            nextVbufToUse_ = 0;
+        }
+    }
+    assert(ix != NUM_BUFS);
     if (v4l2_ioctl(fd_, VIDIOC_QBUF, &vbufs_[ix]) < 0) {
         int en = errno;
         std::string error = "ioctl(VIDIOC_QBUF) failed: ";
@@ -203,6 +213,10 @@ void Camera::queue(size_t ix) {
         throw std::runtime_error(error);
     }
     inQueue_ += 1;
+    /*
+    char buf[2] = { (char)(inQueue_ + '0'), 0 };
+    std::cerr << buf << std::flush;
+    */
 }
 
 void Camera::wait() {
@@ -216,21 +230,18 @@ void Camera::wait() {
         error += strerror(en);
         throw std::runtime_error(error);
     }
+    bufs_[vbuf.index].queued = false;
 
-    //  provide the data
-    size_t ix = nextWaiting_;
-    nextWaiting_ += 1;
-    if (nextWaiting_ == NUM_BUFS) {
-        nextWaiting_ = 0;
-    }
-    vbufs_[ix] = vbuf;
-
-    /* process data here -- decode JPEG? dump to file? */
+    /* shuffle the data over to the output buffer here */
     unsigned int osz = vbuf.bytesused;
     void *iptr = bufs_[vbuf.index].ptr;
-    void *optr = forGrabbing_[ix]->alloc_compressed(osz);
+    void *optr = forGrabbing_[nextImgToUse_]->alloc_compressed(osz);
     memcpy(optr, iptr, osz);
-    forGrabbing_[ix]->complete_compressed(osz);
+    forGrabbing_[nextImgToUse_]->complete_compressed(osz);
+    nextImgToUse_ += 1;
+    if (nextImgToUse_ == NUM_BUFS) {
+        nextImgToUse_ = 0;
+    }
 }
 
 void Camera::configure_dev() {
@@ -247,6 +258,7 @@ void Camera::configure_dev() {
         error += strerror(en);
         throw std::runtime_error(error);
     }
+    /* pring frame rate information
     v4l2_streamparm sprm;
     memset(&sprm, 0, sizeof(sprm));
     sprm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -258,6 +270,7 @@ void Camera::configure_dev() {
         std::cerr << "  extendedmode=" << sprm.parm.capture.extendedmode << std::endl;
         std::cerr << "  readbuffers =" << sprm.parm.capture.readbuffers << std::endl;
     }
+    */
     struct v4l2_format fmt;
     memset(&fmt, 0, sizeof(fmt));
     fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;

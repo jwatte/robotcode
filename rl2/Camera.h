@@ -30,7 +30,7 @@ private:
     //  processing thread
     static void thread_fn(void *arg);
     void process();
-    void queue(size_t ix);
+    void queue();
     void wait();
 
     //  dev handling
@@ -40,7 +40,14 @@ private:
     void stop_capture();
     void poll_and_queue();
 
-    enum { NUM_BUFS = 3 };
+    //  When NUM_BUFS is 3, the number of queued buffers to the driver switches
+    //  between 0 and 1. 0 queued buffers is obviously bad, as it means I drop
+    //  a frame. When NUM_BUFS is 4, I alternate between 1 and 2 buffers in the
+    //  driver. This means there's always a buffer that's currently being
+    //  captured into. The other 2 buffers? 1 buffer is just released to the
+    //  client, and 1 buffer is the one the client was using previously and
+    //  will release, so, they are all accounted for.
+    enum { NUM_BUFS = 4 };
     semaphore imageGrabbed_;
     boost::shared_ptr<Image> forGrabbing_[NUM_BUFS];
     boost::system_time lastTime_;
@@ -48,20 +55,22 @@ private:
     boost::mutex guard_;
     unsigned int capWidth_;
     unsigned int capHeight_;
-    unsigned int lastReturned_;
-    unsigned int nextWaiting_;
-    unsigned int lastQueued_;
     unsigned int inQueue_;
     semaphore imageReturned_;
+    unsigned int nextImgToDisplay_;
+    unsigned int nextImgToReturn_;
+    unsigned int nextImgToUse_;
+    unsigned int nextVbufToUse_;
     double fps_;
     double fpsStep_;
     long underflows_;
     v4l2_requestbuffers rbufs_;
     v4l2_buffer vbufs_[NUM_BUFS];
     struct buffer {
-        buffer() : ptr(0), size(0) {}
+        buffer() : ptr(0), size(0), queued(false) {}
         void *ptr;
         size_t size;
+        bool queued;
     } bufs_[NUM_BUFS];
 
     boost::shared_ptr<Property> imageProperty_;

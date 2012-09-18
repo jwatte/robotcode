@@ -1,12 +1,14 @@
 {
-    "video0":{
-        "device":"/dev/video0",
+/*
+    "left":{
+        "device":"/dev/_Lcam",
         "width":1920,
         "height":1080
     },
-//    "video1":{
-//        "device":"/dev/video1",
-//        "width":640,
-//        "height":480
-//    }
+*/
+    "right":{
+        "device":"/dev/_Rcam",
+        "width":1920,
+        "height":1080
+    }
 }

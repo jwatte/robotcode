@@ -34,8 +34,9 @@ PropertyDisplay::PropertyDisplay(int x, int y, int w, int h,
     flimage_(0) {
     begin();
     if (prop->type() == TypeImage) {
-        name_ = new Fl_Box(x, y, w, 20);
-        box_ = new Fl_Box(x, y + 20, w, h);
+        name_ = new Fl_Box(x, y, w, 15);
+        box_ = new Fl_Box(x, y + 10, w, h);
+        box_->align(FL_ALIGN_CENTER | FL_ALIGN_INSIDE);
     }
     else {
         name_ = new Fl_Box(x, y, 120, 20);
@@ -100,6 +101,7 @@ void PropertyDisplay::update_image() {
             Image::BytesPerPixel);
     }
     box_->image(flimage_);
+    box_->damage(0xff);
 }
 
 

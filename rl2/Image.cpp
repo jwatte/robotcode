@@ -1,6 +1,7 @@
 #include "Image.h"
 #include <stdexcept>
 #include <cstring>
+#include <iostream>
 #include <jpeglib.h>
 #include <assert.h>
 
@@ -12,7 +13,8 @@ extern unsigned int huff_size;
 
 Image::Image() :
     width_(0),
-    height_(0) {
+    height_(0),
+    dirty_(0) {
 }
 
 Image::~Image() {
@@ -37,32 +39,37 @@ void Image::complete_compressed(size_t size) {
     }
     unsigned char *dstart = (unsigned char *)&compressed_[huff_size];
     memmove(&compressed_[0], dstart, ptr - dstart);
-    memcpy(ptr, huff_table, huff_size);
-    decompress(size + huff_size);
-    make_thumbnail();
+    memcpy(ptr - huff_size, huff_table, huff_size);
+    dirty_ = size;
 }
 
 size_t Image::width() const {
+    undirty();
     return width_;
 }
 
 size_t Image::height() const {
+    undirty();
     return height_;
 }
 
 size_t Image::width_t() const {
+    undirty();
     return width_ >> 2;
 }
 
 size_t Image::height_t() const {
+    undirty();
     return height_ >> 2;
 }
 
 void const *Image::bits(ImageBits ib) const {
+    undirty();
     return &vec(ib)[0];
 }
 
 size_t Image::size(ImageBits ib) const {
+    undirty();
     return vec(ib).size();
 }
 
@@ -71,15 +78,26 @@ std::vector<char> const &Image::vec(ImageBits ib) const {
         case CompressedBits:
             return compressed_;
         case FullBits:
+            undirty();
             return uncompressed_;
         case ThumbnailBits:
+            undirty();
             return thumbnail_;
         default:
             throw std::runtime_error("Unknown ImageBits in Image");
     }
 }
 
-void Image::decompress(size_t size) {
+void Image::undirty() const {
+    if (dirty_) {
+        decompress(dirty_ + huff_size);
+        make_thumbnail();
+        dirty_ = 0;
+    }
+}
+
+
+void Image::decompress(size_t size) const {
     jpeg_decompress_struct cinfo;
     memset(&cinfo, 0, sizeof(cinfo));
     jpeg_error_mgr jerr;
@@ -88,7 +106,6 @@ void Image::decompress(size_t size) {
     jpeg_mem_src(&cinfo, (unsigned char *)&compressed_[0], size);
     jpeg_read_header(&cinfo, TRUE);
     jpeg_start_decompress(&cinfo);
-    assert(cinfo.output_width == cinfo.output_scanline * BytesPerPixel);
     width_ = cinfo.output_width;
     height_ = cinfo.output_height;
     uncompressed_.resize(width_ * height_ * BytesPerPixel);
@@ -108,7 +125,7 @@ void Image::decompress(size_t size) {
     jpeg_destroy_decompress(&cinfo);
 }
 
-void Image::make_thumbnail() {
+void Image::make_thumbnail() const {
     thumbnail_.resize(uncompressed_.size() >> 4);
     unsigned char *base = (unsigned char *)&uncompressed_[0];
     size_t rowbytes = BytesPerPixel * width_;

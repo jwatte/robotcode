@@ -5,23 +5,23 @@
 
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/mman.h>
 
 #include <boost/date_time/posix_time/posix_time.hpp>
-
-#include <libv4l2.h>
-#include <linux/videodev2.h>
-
 
 static std::string str_image("image");
 static std::string str_fps("fpscap");
 static std::string str_fpsstep("fpsstep");
 static std::string str_underflows("underflows");
 
-Camera::Camera(std::string const &devname) :
+Camera::Camera(std::string const &devname, unsigned int capWidth, unsigned int capHeight) :
     devname_(devname),
     fd_(::v4l2_open(devname.c_str(), O_RDWR)),
     imageGrabbed_(0),
+    capWidth_(capWidth),
+    capHeight_(capHeight),
     lastReturned_(1),
+    nextWaiting_(1),
     lastQueued_(1),
     inQueue_(0),
     imageReturned_(Camera::NUM_BUFS - 1),
@@ -34,6 +34,9 @@ Camera::Camera(std::string const &devname) :
     underflowsProperty_(new PropertyImpl<long>(str_underflows)) {
     if (fd_ < 0) {
         throw std::runtime_error("Could not open camera: " + devname);
+    }
+    for (size_t i = 0; i != NUM_BUFS; ++i) {
+        forGrabbing_[i] = boost::shared_ptr<Image>(new Image());
     }
     configure_dev();
     configure_buffers();
@@ -49,7 +52,18 @@ Camera::~Camera() {
 }
 
 boost::shared_ptr<Module> Camera::open(boost::shared_ptr<Settings> const &set) {
-    return boost::shared_ptr<Module>(new Camera(set->get_value("device")->get_string()));
+    int capWidth = 1920;
+    int capHeight = 1080;
+    auto v = set->get_value("width");
+    if (!!v) {
+        capWidth = v->get_integer();
+    }
+    v = set->get_value("height");
+    if (!!v) {
+        capHeight = v->get_integer();
+    }
+    return boost::shared_ptr<Module>(new Camera(set->get_value("device")->get_string(),
+        capWidth, capHeight));
 }
 
 std::string const &Camera::name() {
@@ -76,7 +90,18 @@ boost::shared_ptr<Property> Camera::get_property_at(size_t ix) {
 }
 
 void Camera::thread_fn(void *arg) {
-    reinterpret_cast<Camera *>(arg)->process();
+    Camera *c = reinterpret_cast<Camera *>(arg);
+    try {
+        c->process();
+    }
+    catch (std::runtime_error const &x) {
+        std::cerr << "Camera " << c->devname_ << " thread exception: " << x.what() << std::endl;
+        throw;
+    }
+    catch (...) {
+        std::cerr << "Camera " << c->devname_ << " unknown exception." << std::endl;
+        throw;
+    }
 }
 
 void Camera::step() {
@@ -99,6 +124,37 @@ void Camera::step() {
     }
 }
 
+void Camera::start_capture() {
+    int strm = 1;
+    if (v4l2_ioctl(fd_, VIDIOC_STREAMON, &strm) < 0) {
+        int en = errno;
+        std::string error = "ioctl(VIDIOC_STREAMON) failed: ";
+        error += strerror(en);
+        throw std::runtime_error(error);
+    }
+}
+
+void Camera::stop_capture() {
+    int strm = 1;
+    if (v4l2_ioctl(fd_, VIDIOC_STREAMOFF, &strm) < 0) {
+        int en = errno;
+        std::string error = "ioctl(VIDIOC_STREAMOFF) failed: ";
+        error += strerror(en);
+        throw std::runtime_error(error);
+    }
+}
+
+void Camera::poll_and_queue() {
+    while (imageReturned_.nonblocking_available()) {
+        imageReturned_.acquire();
+        queue(lastReturned_);
+        lastReturned_ += 1;
+        if (lastReturned_ == NUM_BUFS) {
+            lastReturned_ = 0;
+        }
+    }
+}
+
 void Camera::process() {
     lastTime_ = boost::get_system_time();
     sched_param parm = { .sched_priority = 30 };
@@ -106,16 +162,13 @@ void Camera::process() {
         std::string err(strerror(errno));
         std::cerr << "Camera::process(): pthread_setschedparam(): " << err << std::endl;
     }
+
+    poll_and_queue();
+    start_capture();
+
     bool inUnderflow = false;
     while (!thread_->interruption_requested()) {
-        while (imageReturned_.nonblocking_available()) {
-            imageReturned_.acquire();
-            queue(forGrabbing_[lastReturned_]);
-            lastReturned_ += 1;
-            if (lastReturned_ == NUM_BUFS) {
-                lastReturned_ = 0;
-            }
-        }
+        poll_and_queue();
         if (inQueue_) {
             inUnderflow = false;
             //  wait for fd
@@ -138,20 +191,51 @@ void Camera::process() {
             boost::this_thread::sleep(boost::posix_time::milliseconds(5));
         }
     }
+    stop_capture();
     std::cerr << "Camera::process() end" << std::endl;
 }
 
-void Camera::queue(boost::shared_ptr<Image> const &img) {
+void Camera::queue(size_t ix) {
+    if (v4l2_ioctl(fd_, VIDIOC_QBUF, &vbufs_[ix]) < 0) {
+        int en = errno;
+        std::string error = "ioctl(VIDIOC_QBUF) failed: ";
+        error += strerror(en);
+        throw std::runtime_error(error);
+    }
     inQueue_ += 1;
 }
 
 void Camera::wait() {
-    boost::this_thread::yield();
+    v4l2_buffer vbuf;
+    memset(&vbuf, 0, sizeof(vbuf));
+    vbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    vbuf.memory = V4L2_MEMORY_MMAP;
+    if (v4l2_ioctl(fd_, VIDIOC_DQBUF, &vbuf) < 0) {
+        int en = errno;
+        std::string error = "ioctl(VIDIOC_DQBUF) failed: ";
+        error += strerror(en);
+        throw std::runtime_error(error);
+    }
+
+    //  provide the data
+    size_t ix = nextWaiting_;
+    nextWaiting_ += 1;
+    if (nextWaiting_ == NUM_BUFS) {
+        nextWaiting_ = 0;
+    }
+    vbufs_[ix] = vbuf;
+
+    /* process data here -- decode JPEG? dump to file? */
+    unsigned int osz = vbuf.bytesused;
+    void *iptr = bufs_[vbuf.index].ptr;
+    void *optr = forGrabbing_[ix]->alloc_compressed(osz);
+    memcpy(optr, iptr, osz);
+    forGrabbing_[ix]->complete_compressed(osz);
 }
 
 void Camera::configure_dev() {
     struct v4l2_capability cap;
-    if (v4l2_ioctl(fd, VIDIOC_QUERYCAP, &cap) < 0) {
+    if (v4l2_ioctl(fd_, VIDIOC_QUERYCAP, &cap) < 0) {
         int en = errno;
         std::string error = "ioctl(VIDIOC_QUERYCAP) failed: ";
         error += strerror(en);
@@ -163,16 +247,34 @@ void Camera::configure_dev() {
         error += strerror(en);
         throw std::runtime_error(error);
     }
+    v4l2_streamparm sprm;
+    memset(&sprm, 0, sizeof(sprm));
+    sprm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    if (v4l2_ioctl(fd_, VIDIOC_G_PARM, &sprm) >= 0) {
+        std::cerr << "  capability  =" << sprm.parm.capture.capability << std::endl;
+        std::cerr << "  capturemode =" << sprm.parm.capture.capturemode << std::endl;
+        std::cerr << "  timeperframe=" << sprm.parm.capture.timeperframe.numerator
+            << "/" << sprm.parm.capture.timeperframe.denominator << std::endl;
+        std::cerr << "  extendedmode=" << sprm.parm.capture.extendedmode << std::endl;
+        std::cerr << "  readbuffers =" << sprm.parm.capture.readbuffers << std::endl;
+    }
     struct v4l2_format fmt;
     memset(&fmt, 0, sizeof(fmt));
     fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    fmt.fmt.pix.width = 1280;
-    fmt.fmt.pix.height = 720;
+    if (v4l2_ioctl(fd_, VIDIOC_G_FMT, &fmt) < 0) {
+        int en = errno;
+        std::string error = "ioctl(VIDIOC_G_FMT) failed: ";
+        error += strerror(en);
+        throw std::runtime_error(error);
+    }
+    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    fmt.fmt.pix.width = capWidth_;
+    fmt.fmt.pix.height = capHeight_;
     fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
     fmt.fmt.pix.field = V4L2_FIELD_ANY;
-    fmt.fmt.pix.bytesperline = 1280*720*3;
-    fmt.fmt.pix.sizeimage = 1280*720*3;
-    if (v4l2_ioctl(fd, VIDIOC_S_FMT, &fmt) < 0) {
+    fmt.fmt.pix.bytesperline = capWidth_ * capHeight_ * 2;
+    fmt.fmt.pix.sizeimage = fmt.fmt.pix.bytesperline;
+    if (v4l2_ioctl(fd_, VIDIOC_S_FMT, &fmt) < 0) {
         int en = errno;
         std::string error = "ioctl(VIDIOC_S_FMT) failed: ";
         error += strerror(en);
@@ -185,43 +287,40 @@ void Camera::configure_buffers() {
     rbufs_.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     rbufs_.memory = V4L2_MEMORY_MMAP;
     rbufs_.count = NUM_BUFS;
-    if (v4l2_ioctl(fd, VIDIOC_REQBUFS, &rbufs_) < 0) {
+    if (v4l2_ioctl(fd_, VIDIOC_REQBUFS, &rbufs_) < 0) {
         int en = errno;
         std::string error = "ioctl(VIDIOC_REQBUFS) failed: ";
         error += strerror(en);
         throw std::runtime_error(error);
     }
     memset(vbufs_, 0, sizeof(vbufs_));
-    for (unsigned int i = 0, n = NUM_BUFS; ++i) {
+    for (unsigned int i = 0, n = NUM_BUFS; i != n; ++i) {
         struct v4l2_buffer vbuf;
         memset(&vbuf, 0, sizeof(vbuf));
         vbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         vbuf.memory = V4L2_MEMORY_MMAP;
         vbuf.index = i;
-        if (v4l2_ioctl(fd, VIDIOC_QUERYBUF, &vbuf) < 0) {
+        if (v4l2_ioctl(fd_, VIDIOC_QUERYBUF, &vbuf) < 0) {
             int en = errno;
             std::string error = "ioctl(VIDIOC_QUERYBUF) failed: ";
             error += strerror(en);
             throw std::runtime_error(error);
         }
-        .... must re-do the interface for compressed data in Image ....
-        forGrabbing_[i]->alloc_compressed(1280*720*4+4096);
-        capi->bufs[i].size = vbuf.length;
-        capi->bufs[i].ptr = mmap(
+        bufs_[i].size = vbuf.length;
+        bufs_[i].ptr = mmap(
                 0, 
                 vbuf.length, 
                 PROT_READ | PROT_WRITE, 
                 MAP_SHARED, 
-                fd, 
+                fd_, 
                 vbuf.m.offset);
-        if (MAP_FAILED == capi->bufs[i].ptr) {
+        if ((void *)MAP_FAILED == bufs_[i].ptr) {
             int en = errno;
-            error = "mmap() failed: ";
+            std::string error = "mmap() failed: ";
             error += strerror(en);
-            return -1;
+            throw std::runtime_error(error);
         }
-        capi->vbufs[i] = vbuf;
-
+        vbufs_[i] = vbuf;
     }
 }
 

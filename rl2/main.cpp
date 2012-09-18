@@ -110,7 +110,7 @@ int main(int argc, char const *argv[]) {
         }
     }
 
-    Fl::visual(FL_RGB);
+    Fl::visual(FL_RGB|FL_DOUBLE);
     fl_register_images();
     boost::shared_ptr<ModuleList> modules(ModuleList::create());
     sched_param parm = { .sched_priority = 10 };

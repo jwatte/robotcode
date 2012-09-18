@@ -6,10 +6,10 @@
 #include "Module.h"
 
 
-#include <FL/Fl_Window.H>
+#include <FL/Fl_Double_Window.H>
 
 PropertyWindow::PropertyWindow(WindowOwner *owner, boost::shared_ptr<Module> mod) :
-    cast_as_impl<OwnedWindow, PropertyWindow>(owner, new Fl_Window(486, 512, mod->name().c_str())),
+    cast_as_impl<OwnedWindow, PropertyWindow>(owner, new Fl_Double_Window(486, 512, mod->name().c_str())),
     mod_(mod) {
     win()->begin();
     browser_ = new PropertyBrowser<info>(0, 0, 486, 512);
@@ -23,7 +23,7 @@ void PropertyWindow::build() {
         info j;
         j.prop = mod_->get_property_at(i);
         j.disp = boost::shared_ptr<PropertyDisplay>(PropertyDisplay::create(j.prop));
-        j.disp->position(0, top);
+        j.disp->position(3, top);
         top += j.disp->h();
         browser_->add(j);
     }

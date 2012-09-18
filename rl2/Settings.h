@@ -13,7 +13,9 @@ public:
     std::string const &get_name() const;
     bool is_string() const;
     bool is_Settings() const;
+    bool is_integer() const;
     std::string const &get_string() const;
+    int get_integer() const;
 
     bool has_name(std::string const &name) const;
     boost::shared_ptr<Settings> const &get_value(std::string const &name) const;
@@ -34,15 +36,22 @@ private:
     Settings(std::string const &name, std::string const &value);
     void must_be_string(char const *fn) const;
     void must_be_Settings(char const *fn) const;
+    void must_be_integer(char const *fn) const;
     void parse(input &in);
     void parse_object(input &in);
     std::string parse_string(input &in);
     std::string name_;
-    bool isString_;
+    enum DataType {
+        dtObject,
+        dtString,
+        dtInteger
+    };
+    DataType type_;
     std::map<std::string, boost::shared_ptr<Settings>> sub_;
     mutable std::map<std::string, boost::shared_ptr<Settings>>::const_iterator subIter_;
     mutable size_t subIterN_;
     std::string value_;
+    int iValue_;
     static boost::shared_ptr<Settings> const none;
 };
 

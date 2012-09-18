@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 
-int main(int argc, char const *argv[])
+int main2(int argc, char const *argv[])
 {
   char const *ifn = argv[1] ? argv[1] : "output.cap";
   int fd = open(ifn, O_RDONLY);

@@ -105,7 +105,7 @@ void config_dev(int fd, capture_info *capi)
 
 void enqueue_all_buffers(int fd, capture_info *ci)
 {
-  for (int i = 0; i != ci->rbuf.count; ++i) {
+  for (size_t i = 0; i != ci->rbuf.count; ++i) {
     if (v4l2_ioctl(fd, VIDIOC_QBUF, &ci->vbufs[i]) < 0) {
       perror("ioctl(VIDIOC_QBUF) failed");
       exit(1);
@@ -152,8 +152,13 @@ void sig_handler(int)
   running = false;
 }
 
+extern int main2(int argc, char const *argv[]);
+
 int main(int argc, char const *argv[])
 {
+  if (argv[1] && !strcmp(argv[1], "--dump")) {
+    return main2(argc-1, argv+1);
+  }
   timeval tv_start, tv_now;
   int fd = open_dev(argv[1] ? argv[1] : "/dev/video0");
   char const *ofn = (argv[1] && argv[2]) ? argv[2] : "output.cap";

@@ -12,6 +12,7 @@ public:
     OwnedWindow(WindowOwner *owner, Fl_Window *win);
     ~OwnedWindow();
 
+    virtual void release();
     virtual void show();
 
     Fl_Window *win() { return win_; }

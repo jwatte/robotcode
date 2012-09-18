@@ -11,13 +11,13 @@ boost::shared_ptr<Settings> const Settings::none;
 
 Settings::Settings(std::string const &name) :
     name_(name),
-    isString_(false),
+    type_(dtObject),
     subIterN_((size_t)-1) {
 }
 
 Settings::Settings(std::string const &name, std::string const &value) :
     name_(name), 
-    isString_(true), 
+    type_(dtString),
     subIterN_((size_t)-1),
     value_(value) {
 }
@@ -55,12 +55,16 @@ boost::shared_ptr<Settings> Settings::load(std::string const &file) {
 void Settings::parse(input &in) {
     std::string tok(in.token());
     if (tok == "\"") {
-        isString_ = true;
+        type_ = dtString;
         value_ = parse_string(in);
     }
     else if (tok == "{") {
-        isString_ = false;
+        type_ = dtObject;
         parse_object(in);
+    }
+    else if (tok[0] == '-' || (tok[0] >= '0' && tok[0] <= '9')) {
+        type_ = dtInteger;
+        iValue_ = boost::lexical_cast<int>(tok);
     }
     else {
         throw std::runtime_error(
@@ -88,7 +92,7 @@ std::string Settings::parse_string(input &in) {
 }
 
 void Settings::parse_object(input &in) {
-    isString_ = false;
+    type_ = dtObject;
     while (true) {
         std::string tok(in.token());
         if (tok == ",") {
@@ -117,16 +121,25 @@ std::string const &Settings::get_name() const {
 }
 
 bool Settings::is_string() const {
-    return isString_;
+    return type_ == dtString;
 }
 
 bool Settings::is_Settings() const {
-    return !isString_;
+    return type_ == dtObject;
+}
+
+bool Settings::is_integer() const {
+    return type_ == dtInteger;
 }
 
 std::string const &Settings::get_string() const {
     must_be_string("get_string()");
     return value_;
+}
+
+int Settings::get_integer() const {
+    must_be_integer("get_integer()");
+    return iValue_;
 }
 
 
@@ -166,14 +179,20 @@ std::string const &Settings::get_name_at(size_t ix) const {
 }
 
 void Settings::must_be_string(char const *fn) const {
-    if (!isString_) {
+    if (type_ != dtString) {
         throw std::runtime_error(std::string("Must be a string in Settings::") + fn + "; key " + name_);
     }
 }
 
 void Settings::must_be_Settings(char const *fn) const {
-    if (isString_) {
+    if (type_ != dtObject) {
         throw std::runtime_error(std::string("Must be a Settings in Settings::") + fn + "; key " + name_);
+    }
+}
+
+void Settings::must_be_integer(char const *fn) const {
+    if (type_ != dtInteger) {
+        throw std::runtime_error(std::string("Must be an integer in Settings::") + fn + "; key " + name_);
     }
 }
 
@@ -184,15 +203,53 @@ Settings::input::input(char const *p, char const *e) :
 }
 
 std::string Settings::input::token() {
+next_line:
     while (pos < end && isspace(*pos)) {
         if (*pos == 10) {
             ++line;
         }
         ++pos;
     }
+    /* skip line comments */
+    if (*pos == '/' && pos[1] == '/') {
+        pos += 2;
+        while (pos < end && *pos != 10) {
+            ++pos;
+        }
+        goto next_line;
+    }
+    /* skip long comments */
+    if (*pos == '/' && pos[1] == '*') {
+        pos += 2;
+        while (pos < end) {
+            //  todo: this stops at end-comment in strings!
+            if (*pos == '*' && pos[1] == '/') {
+                pos += 2;
+                goto next_line;
+            }
+            if (*pos == 10) {
+                ++line;
+            }
+            ++pos;
+        }
+    }
     if (*pos == '"' || *pos == '{' || *pos == '}' || *pos == ':' || *pos == ',') {
         pos += 1;
         return std::string(pos - 1, pos);
+    }
+    else if ((*pos >= '0' && *pos <= '9') || (*pos == '-')) {
+        char const *spos = pos;
+        ++pos;
+        while (pos < end) {
+            if (*pos < '0' || *pos > '9') {
+                break;
+            }
+            ++pos;
+        }
+        if (pos == spos) {
+            throw std::runtime_error("Unexpected minus (-)");
+        }
+        return std::string(spos, pos);
     }
     else {
         throw std::runtime_error("Syntax error in input at '" +

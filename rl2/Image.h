@@ -31,16 +31,18 @@ public:
     void const *bits(ImageBits) const;
     size_t size(ImageBits) const;
 private:
-    size_t width_;
-    size_t height_;
-    std::vector<char> compressed_;
-    std::vector<char> uncompressed_;
-    std::vector<char> thumbnail_;
+    mutable size_t width_;
+    mutable size_t height_;
+    mutable size_t dirty_;
+    mutable std::vector<char> compressed_;
+    mutable std::vector<char> uncompressed_;
+    mutable std::vector<char> thumbnail_;
 
     std::vector<char> const &vec(ImageBits ib) const;
 
-    void decompress(size_t size);
-    void make_thumbnail();
+    void undirty() const;
+    void decompress(size_t size) const;
+    void make_thumbnail() const;
 };
 
 #endif  //  rl2_Image_h

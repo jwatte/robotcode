@@ -3,6 +3,7 @@
 #include "str.h"
 #include "ModuleList.h"
 #include "Camera.h"
+#include "USBLink.h"
 #include "Settings.h"
 #include "BrowserWindow.h"
 
@@ -87,6 +88,30 @@ void setup_cameras(boost::shared_ptr<ModuleList> const &modules) {
     }
 }
 
+void setup_usblinks(boost::shared_ptr<ModuleList> const &modules) {
+    std::string usblinks("usblinks.js");
+    get_arg("usblinks", usblinks);
+    if (usblinks.size()) {
+        boost::shared_ptr<Settings> settings = Settings::load(usblinks);
+        if (!settings) {
+            return;
+        }
+        for (size_t i = 0, n = settings->num_names(); i != n; ++i) {
+            std::string const &name(settings->get_name_at(i));
+            std::cerr << "setting up usblink " << name << std::endl;
+            boost::shared_ptr<Settings> const &value(settings->get_value(name));
+            boost::shared_ptr<Module> usb(USBLink::open(value));
+            if (!usb) {
+                std::cerr << "Could not load USBLink: " << usblinks << ": " << name << std::endl;
+            }
+            else {
+                modules->add(usb);
+            }
+        }
+    }
+}
+
+
 void setup_browser_window(boost::shared_ptr<ModuleList> const &modules) {
     (new BrowserWindow(modules))->show();
 }
@@ -126,6 +151,7 @@ int main(int argc, char const *argv[]) {
 
     try {
         setup_cameras(modules);
+        setup_usblinks(modules);
         setup_browser_window(modules);
         main_loop();
     }

@@ -9,7 +9,8 @@ template<typename T>
 class PropertyImpl : public cast_as_impl<ListenableImpl<Property>, PropertyImpl<T>> {
 public:
     PropertyImpl(std::string const &name) :
-        name_(name) {
+        name_(name),
+        value_(property_type<T>::default_value()) {
     }
     PropertyType type() {
         return property_type<T>::instance().get_type();
@@ -29,8 +30,10 @@ public:
             throw std::runtime_error("Invalid type in PropertyImpl::set_value() "
                 "for '" + name_ + "'");
         }
-        value_ = *(T *)t;
-        this->on_change();
+        if (value_ != *(T *)t) {
+            value_ = *(T *)t;
+            this->on_change();
+        }
     }
 protected:
     std::string const &name_;

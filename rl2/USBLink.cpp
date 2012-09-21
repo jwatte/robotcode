@@ -2,9 +2,15 @@
 #include "USBLink.h"
 #include "Settings.h"
 #include "PropertyImpl.h"
+#include "Board.h"
 #include <libusb.h>
 #include <boost/bind.hpp>
 #include <stdexcept>
+#include <sstream>
+
+#include "protocol.h"
+
+
 
 class Transfer {
 public:
@@ -79,13 +85,52 @@ void USBLink::step() {
         Packet *pack = xfer_->ack_pack();
         ++inPackets_;
         return_.release();
-        if (pack->size() == 0) {
+        size_t size = pack->size();
+        if (size == 0) {
             errPackets_++;
         }
-        pack->destroy();
+        else {
+            bool drop = false;
+            if (sendBufEnd_ + size > sizeof(sendBuf_)) {
+                if (sendBufEnd_ + size - sendBufBegin_ > sizeof(sendBuf_)) {
+                    ++dropPackets_;
+                    //  drop it
+                    drop = true;
+                }
+                else {
+                    memmove(sendBuf_, &sendBuf_[sendBufBegin_], sendBufEnd_-sendBufBegin_);
+                    sendBufEnd_ -= sendBufBegin_;
+                    sendBufBegin_ = 0;
+                }
+            }
+            if (!drop) {
+                memcpy(&sendBuf_[sendBufEnd_], pack->buffer(), size);
+                sendBufEnd_ += size;
+                assert(sendBufEnd_ <= sizeof(sendBuf_));
+            }
+            unsigned int ptr = sendBufBegin_, end = sendBufEnd_;
+            while (ptr != end) {
+                if (sendBuf_[ptr] != BEGIN_PACKET) {
+                    ++errBytes_;
+                    ++ptr;
+                }
+                else {
+                    /* not enough data to fill a packet yet? */
+                    if ((end - ptr < 3) ||
+                        ((unsigned int)(end - ptr) < (unsigned int)(sendBuf_[ptr + 1] + 2))) {
+                        break;
+                    }
+                    dispatch_cmd(&sendBuf_[ptr + 2], sendBuf_[ptr + 1]);
+                    ptr += 2 + sendBuf_[ptr + 1];
+                }
+            }
+            sendBufBegin_ = ptr;
+        }
         inPacketsProperty_->set<long>(inPackets_);
         outPacketsProperty_->set<long>(outPackets_);
         errPacketsProperty_->set<long>(errPackets_);
+        dropPacketsProperty_->set<long>(dropPackets_);
+        errBytesProperty_->set<long>(errBytes_);
     }
 }
 
@@ -117,13 +162,16 @@ std::string const &USBLink::name() {
 }
 
 size_t USBLink::num_properties() {
-    return 2;
+    return 5;
 }
 
 boost::shared_ptr<Property> USBLink::get_property_at(size_t ix) {
     switch (ix) {
     case 0: return inPacketsProperty_;
     case 1: return outPacketsProperty_;
+    case 2: return errPacketsProperty_;
+    case 3: return dropPacketsProperty_;
+    case 4: return errBytesProperty_;
     default:
         throw std::runtime_error("index out of range in USBLink::get_property_at()");
     }
@@ -146,6 +194,8 @@ USBLink::~USBLink() {
 static std::string str_in_packets("in_packets");
 static std::string str_out_packets("out_packets");
 static std::string str_err_packets("err_packets");
+static std::string str_drop_packets("drop_packets");
+static std::string str_err_bytes("err_bytes");
 
 USBLink::USBLink(std::string const &vid, std::string const &pid, std::string const &endpoint) :
     vid_(vid),
@@ -159,9 +209,15 @@ USBLink::USBLink(std::string const &vid, std::string const &pid, std::string con
     inPackets_(0),
     outPackets_(0),
     errPackets_(0),
+    dropPackets_(0),
+    errBytes_(0),
     inPacketsProperty_(new PropertyImpl<long>(str_in_packets)),
     outPacketsProperty_(new PropertyImpl<long>(str_out_packets)),
     errPacketsProperty_(new PropertyImpl<long>(str_err_packets)),
+    dropPacketsProperty_(new PropertyImpl<long>(str_drop_packets)),
+    errBytesProperty_(new PropertyImpl<long>(str_err_bytes)),
+    sendBufBegin_(0),
+    sendBufEnd_(0),
     name_(vid + ":" + pid) {
     if (libusb_init(&ctx_) < 0) {
         throw std::runtime_error("Error opening libusb for " + name_);
@@ -196,4 +252,52 @@ USBLink::USBLink(std::string const &vid, std::string const &pid, std::string con
         boost::bind(&USBLink::thread_fn, this)));
 }
 
+void USBLink::dispatch_cmd(unsigned char const *ptr, unsigned char sz) {
+    if (*ptr == CMD_BOARD_UPDATE) {
+        if (sz < 2) {
+            std::cerr << "invalid board packet length" << std::endl;
+            ++errPackets_;
+            return;
+        }
+        dispatch_board(ptr[1], ptr+2, sz - 2);
+        return;
+    }
+    std::stringstream ss;
+    for (unsigned char ch = 0; ch < sz; ++ch) {
+        ss << " " << std::hex << std::right << std::setw(2) << "0x" << (int)ptr[ch];
+    }
+    std::cout << ss.str() << std::endl;
+}
+
+void USBLink::dispatch_board(unsigned char board, unsigned char const *info, unsigned char sz) {
+    boost::shared_ptr<Module> brd;
+    switch (board) {
+        case MOTOR_BOARD:
+        case SENSOR_BOARD:
+        case USB_BOARD:
+        case IMU_BOARD:
+            if (board < boards_.size()) {
+                brd = boards_[board];
+                if (!!brd) {
+                    brd->cast_as<Board>()->on_data(info, sz);
+                }
+            }
+            break;
+        default:
+            std::cerr << "unknown board identifier in packet" << std::endl;
+            ++errPackets_;
+            break;
+    }
+}
+
+void USBLink::set_board(unsigned char ix, boost::shared_ptr<Module> const &b) {
+    if (ix > MAX_BOARD_INDEX) {
+        throw std::runtime_error("Board index out of range in USBLink::set_board()");
+    }
+    if (boards_.size() <= ix) {
+        boards_.insert(boards_.end(), ((int)ix+1-boards_.size()), 
+            boost::shared_ptr<Board>());
+    }
+    boards_[ix] = b;
+}
 

@@ -173,7 +173,15 @@ void Camera::process() {
             boost::system_time nuTime = boost::get_system_time();
             boost::posix_time::time_duration delta = nuTime - lastTime_;
             lastTime_ = nuTime;
-            fps_ = fps_ * 0.75 + 0.25 * 1000000.0 / std::max(delta.total_microseconds(), 1L);
+            double instant = 1000000.0 / std::max(delta.total_microseconds(), 1L);
+            //  quick hack to make the FPS update smoother at high rates and 
+            //  less laggy at lower rates. I don't feel like working out the 
+            //  exp math to make it constant sleew rate over time.
+            double weightA = 0.15 + 0.5 / instant;
+            if (weightA > 1) {
+                weightA = 1;
+            }
+            fps_ = (1 - weightA) * fps_ + weightA * instant;
             inQueue_ -= 1;
             //  grabbed should be given away
             imageGrabbed_.release();
@@ -213,10 +221,6 @@ void Camera::queue() {
         throw std::runtime_error(error);
     }
     inQueue_ += 1;
-    /*
-    char buf[2] = { (char)(inQueue_ + '0'), 0 };
-    std::cerr << buf << std::flush;
-    */
 }
 
 void Camera::wait() {

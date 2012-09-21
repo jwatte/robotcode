@@ -47,44 +47,52 @@ protected:
 
 template<> class property_type<double> : public property_type_base {
 public:
-    typedef property_type<double> type;
+    typedef double proptype;
+    typedef property_type<proptype> type;
     static type const &instance() {
         static type it;
         return it;
     }
+    static inline proptype default_value() { return 0; }
 protected:
     property_type() : property_type_base(TypeDouble) {}
 };
 
 template<> class property_type<long> : public property_type_base {
 public:
-    typedef property_type<long> type;
+    typedef long proptype;
+    typedef property_type<proptype> type;
     static type const &instance() {
         static type it;
         return it;
     }
+    static inline proptype default_value() { return 0; }
 protected:
     property_type() : property_type_base(TypeLong) {}
 };
 
 template<> class property_type<std::string> : public property_type_base {
 public:
-    typedef property_type<std::string> type;
+    typedef std::string proptype;
+    typedef property_type<proptype> type;
     static type const &instance() {
         static type it;
         return it;
     }
+    static inline proptype default_value() { return proptype(); }
 protected:
     property_type() : property_type_base(TypeString) {}
 };
 
 template<> class property_type<boost::shared_ptr<Image>> : public property_type_base {
 public:
-    typedef property_type<boost::shared_ptr<Image>> type;
+    typedef boost::shared_ptr<Image> proptype;
+    typedef property_type<proptype> type;
     static type const &instance() {
         static type it;
         return it;
     }
+    static inline proptype default_value() { return proptype(); }
 protected:
     property_type() : property_type_base(TypeImage) {}
 };

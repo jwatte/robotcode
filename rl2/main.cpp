@@ -6,6 +6,8 @@
 #include "USBLink.h"
 #include "Settings.h"
 #include "BrowserWindow.h"
+#include "Boards.h"
+#include "protocol.h"
 
 #include <cstring>
 #include <cerrno>
@@ -23,6 +25,9 @@
 
 static std::map<std::string, std::string> g_args;
 static std::vector<std::string> g_files;
+boost::shared_ptr<Module> gUSBLink;
+boost::shared_ptr<Module> gMotorBoard;
+
 
 double g_pulse;
 
@@ -65,52 +70,75 @@ void main_loop() {
     Fl::run();
 }
 
-void setup_cameras(boost::shared_ptr<ModuleList> const &modules) {
-    std::string cameras("cameras.js");
-    get_arg("cameras", cameras);
-    if (cameras.size()) {
-        boost::shared_ptr<Settings> settings = Settings::load(cameras);
+template<typename ModuleType>
+boost::shared_ptr<Module> setup_module(std::string const &optname, std::string const &boardname, 
+    boost::shared_ptr<ModuleList> const &modules)
+{
+    std::string setfile(optname + ".js");
+    get_arg(optname, setfile);
+    boost::shared_ptr<Module> mod;
+    if (setfile.size()) {
+        boost::shared_ptr<Settings> settings = Settings::load(setfile);
+        if (!settings || !settings->has_name(boardname)) {
+            return mod;
+        }
+        std::cerr << "setting up " << optname << " " << boardname << std::endl;
+        boost::shared_ptr<Settings> const &value(settings->get_value(boardname));
+        mod = boost::shared_ptr<Module>(ModuleType::open(value));
+        if (!mod) {
+            std::cerr << "Could not load " << optname << ": " << setfile
+                << ": " << boardname << std::endl;
+        }
+        else {
+            modules->add(mod);
+        }
+    }
+    return mod;
+}
+
+template<typename ModuleType>
+std::vector<boost::shared_ptr<Module>> setup_module(std::string const &optname,
+    boost::shared_ptr<ModuleList> const &modules) {
+    std::string setfile(optname + ".js");
+    get_arg(optname, setfile);
+    std::vector<boost::shared_ptr<Module>> mods;
+    if (setfile.size()) {
+        boost::shared_ptr<Settings> settings = Settings::load(setfile);
         if (!settings) {
-            return;
+            return mods;
         }
         for (size_t i = 0, n = settings->num_names(); i != n; ++i) {
             std::string const &name(settings->get_name_at(i));
-            std::cerr << "setting up camera " << name << std::endl;
+            std::cerr << "setting up " << optname << " " << name << std::endl;
             boost::shared_ptr<Settings> const &value(settings->get_value(name));
-            boost::shared_ptr<Module> cam(Camera::open(value));
-            if (!cam) {
-                std::cerr << "Could not load camera: " << cameras << ": " << name << std::endl;
+            boost::shared_ptr<Module> mod(ModuleType::open(value));
+            if (!mod) {
+                std::cerr << "Could not load " << optname << ": " << setfile
+                    << ": " << name << std::endl;
             }
             else {
-                modules->add(cam);
+                modules->add(mod);
+                mods.push_back(mod);
             }
         }
     }
+    return mods;
+}
+
+void setup_cameras(boost::shared_ptr<ModuleList> const &modules) {
+    setup_module<Camera>("cameras", modules);
 }
 
 void setup_usblinks(boost::shared_ptr<ModuleList> const &modules) {
-    std::string usblinks("usblinks.js");
-    get_arg("usblinks", usblinks);
-    if (usblinks.size()) {
-        boost::shared_ptr<Settings> settings = Settings::load(usblinks);
-        if (!settings) {
-            return;
-        }
-        for (size_t i = 0, n = settings->num_names(); i != n; ++i) {
-            std::string const &name(settings->get_name_at(i));
-            std::cerr << "setting up usblink " << name << std::endl;
-            boost::shared_ptr<Settings> const &value(settings->get_value(name));
-            boost::shared_ptr<Module> usb(USBLink::open(value));
-            if (!usb) {
-                std::cerr << "Could not load USBLink: " << usblinks << ": " << name << std::endl;
-            }
-            else {
-                modules->add(usb);
-            }
-        }
-    }
+    gUSBLink = setup_module<USBLink>("usblinks", "comm", modules);
 }
 
+
+void setup_boards(boost::shared_ptr<ModuleList> const &modules) {
+   gMotorBoard = setup_module<MotorBoard>("boards", "motor", modules);
+
+   gUSBLink->cast_as<USBLink>()->set_board(MOTOR_BOARD, gMotorBoard);
+}
 
 void setup_browser_window(boost::shared_ptr<ModuleList> const &modules) {
     (new BrowserWindow(modules))->show();
@@ -152,6 +180,7 @@ int main(int argc, char const *argv[]) {
     try {
         setup_cameras(modules);
         setup_usblinks(modules);
+        setup_boards(modules);
         setup_browser_window(modules);
         main_loop();
     }

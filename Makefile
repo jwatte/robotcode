@@ -1,10 +1,13 @@
 
 APPS:=rl2 simplegps simpleusb #simplecap robolink
 
-OPT:=-O0
-CPP_OPT:=-ggdb $(OPT) -fvar-tracking-assignments -Wall -Werror -std=gnu++0x
-CPP_CFLAGS:=$(sort $(CPP_OPT) $(filter-out -D_FORTIFY_SOURCE%,$(filter-out -O%,$(shell fltk-config --use-images --cxxflags)))) -I/usr/local/include/libusb-1.0
-CPP_LFLAGS:=-ljpeg $(sort $(CPP_OPT) $(shell fltk-config --use-images --ldflags)) -lv4l2 -lgps -lboost_thread -lboost_system /usr/local/lib/libusb-1.0.so
+OPT:=-O3
+CPP_OPT:=-ggdb $(OPT) -fvar-tracking-assignments -Wall -Werror -std=gnu++0x -msse -march=native -mtune=native
+CPP_CFLAGS:=$(sort $(CPP_OPT) $(filter-out -D_FORTIFY_SOURCE%, $(filter-out -O%, \
+    $(filter-out -mtune=%, $(filter-out -march=%,$(shell fltk-config --use-images --cxxflags)))))) \
+    -I/usr/local/include/libusb-1.0
+CPP_LFLAGS:=-ljpeg $(sort $(CPP_OPT) $(shell fltk-config --use-images --ldflags)) \
+	-lv4l2 -lgps -lboost_thread -lboost_system /usr/local/lib/libusb-1.0.so
 CPP_SRCS:=$(foreach app,$(APPS),$(wildcard $(app)/*.cpp))
 CPP_OBJS:=$(patsubst %.cpp,bld/obj/%.o,$(CPP_SRCS))
 
@@ -17,8 +20,11 @@ AVR_CFLAGS:=-Wall -Werror -Wno-switch -Os -O3 -mcall-prologues -Iavr/libavr -std
 AVR_LFLAGS:=-Lbld/avrbin -lc
 
 AVR_PARTS:=attiny84a atmega328p attiny85
-AVR_PROG_PORT?=/dev/_avrisp2
-AVR_PROG:=-c avrisp2 -P $(AVR_PROG_PORT)
+AVR_PROG_PORT?=usb
+AVR_PROG:=-c avrisp2
+ifneq ($(AVR_PROG_PORT),)
+AVR_PROG+= -P $(AVR_PROG_PORT)
+endif
 AVR_OBJS+=$(foreach i,$(AVR_PARTS),$(patsubst avr/libavr/%.cpp,bld/avrobj/libavr_$i/%.o,$(LIBAVR_SRCS)))
 
 

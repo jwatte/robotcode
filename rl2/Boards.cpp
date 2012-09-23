@@ -1,5 +1,6 @@
 #include "Boards.h"
 #include "protocol.h"
+#include "Settings.h"
 
 boost::shared_ptr<Module> MotorBoard::open(boost::shared_ptr<Settings> const &set) {
     return boost::shared_ptr<Module>(new MotorBoard());
@@ -34,6 +35,101 @@ MotorBoard::MotorBoard() :
     add_uchar_prop(str_voltage, 8, 16.0 / 256);
     add_uchar_prop(str_debug_bits, 9, 0);
     add_uchar_prop(str_last_fatal, 10, 0);
+}
+
+
+
+struct ir_fun {
+    long max_value;
+    double distance_at_max;
+    long min_value;
+    double distance_at_min;
+    double s_curve;
+};
+
+static double smoothstep(double t, double a, double b) {
+    double x = t * t * (3 - 2 * t);
+    return (x * (b - a)) + a;
+}
+
+class IRTranslator : public Translator<double> {
+public:
+    IRTranslator(ir_fun const &fn) :
+        fn_(fn) {
+    }
+    ir_fun const fn_;
+    double translate(void const *src) {
+        unsigned char uc = *(unsigned char const *)src;
+        if (uc > fn_.max_value) {
+            return fn_.distance_at_max;
+        }
+        if (uc < fn_.min_value) {
+            return fn_.distance_at_min;
+        }
+        double d = (uc - fn_.min_value) / (double)(fn_.max_value - fn_.min_value);
+        return smoothstep(pow(d, fn_.s_curve), fn_.distance_at_max, fn_.distance_at_min);
+    }
+};
+
+boost::shared_ptr<Module> InputBoard::open(boost::shared_ptr<Settings> const &set) {
+    ir_fun ifn = {
+        255,    //  max_value
+        0.4,    //  distance_at_max
+        60,     //  min_value
+        1.5,    //  distance_at_min
+        1       //  s_curve
+    };
+    maybe_get(set, "max_value", ifn.max_value);
+    maybe_get(set, "distance_at_max", ifn.distance_at_max);
+    maybe_get(set, "min_value", ifn.min_value);
+    maybe_get(set, "distance_at_min", ifn.distance_at_min);
+    maybe_get(set, "s_curve", ifn.s_curve);
+    return boost::shared_ptr<Module>(new InputBoard(ifn));
+}
+
+static std::string str_InputBoard = "Input board";
+static std::string str_w_laser0 = "w_laser0";
+static std::string str_w_laser1 = "w_laser1";
+static std::string str_w_laser2 = "w_laser2";
+static std::string str_r_ir0 = "r_ir0";
+static std::string str_r_ir1 = "r_ir1";
+static std::string str_r_ir2 = "r_ir2";
+static std::string str_r_us0 = "r_us0";
+static std::string str_r_us1 = "r_us1";
+static std::string str_r_us2 = "r_us2";
+static std::string str_r_iter = "r_iter";
+
+InputBoard::InputBoard(ir_fun const &fn) :
+    Board(str_InputBoard, sizeof(info_SensorInput), SENSOR_BOARD) {
+
+    add_uchar_prop(str_w_laser0, 0, 0);
+    add_uchar_prop(str_w_laser1, 1, 0);
+    add_uchar_prop(str_w_laser2, 2, 0);
+    boost::shared_ptr<Translator<double>> xlat(new IRTranslator(fn));
+    add_prop(str_r_ir0, 3, xlat);
+    add_prop(str_r_ir1, 4, xlat);
+    add_prop(str_r_ir2, 5, xlat);
+    add_uchar_prop(str_r_us0, 6, 0.01);
+    add_uchar_prop(str_r_us1, 7, 0.01);
+    add_uchar_prop(str_r_us2, 8, 0.01);
+    add_uchar_prop(str_r_iter, 9, 0);
+}
+
+
+
+boost::shared_ptr<Module> USBBoard::open(boost::shared_ptr<Settings> const &set) {
+    double top_voltage = 16.0;
+    maybe_get(set, "top_voltage", top_voltage);
+    return boost::shared_ptr<Module>(new USBBoard(top_voltage));
+}
+
+static std::string str_USBBoard = "USB board";
+static std::string str_r_voltage = "r_voltage";
+
+USBBoard::USBBoard(double top_voltage) :
+    Board(str_USBBoard, sizeof(info_USBInterface), USB_BOARD) {
+
+    add_uchar_prop(str_r_voltage, 0, top_voltage/256);
 }
 
 

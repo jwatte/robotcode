@@ -133,9 +133,12 @@ void Image::make_thumbnail() const {
     size_t rowbytes3 = rowbytes * 3;
     size_t colcnt = width_ >> 2;
     size_t rb = BytesPerPixel - 2;
+    unsigned char *tnp = (unsigned char *)&thumbnail_[0];
     for (size_t col = 0, i = 0, n = thumbnail_.size(); i != n; i += BytesPerPixel) {
         unsigned char *p = base;
         unsigned short red = 8, green = 8, blue = 8;
+        //  If we're unlucky with aliasing, this needs a 5x L1 cache.
+        //  For size 1920, though, it'll probably not alias that badly.
         for (size_t q = 0; q != 4; ++q) {
             red += p[0] + p[rowbytes] + p[rowbytes2] + p[rowbytes3];
             p++;
@@ -144,12 +147,13 @@ void Image::make_thumbnail() const {
             blue += p[0] + p[rowbytes] + p[rowbytes2] + p[rowbytes3];
             p += rb;
         }
-        thumbnail_[i] = red >> 4;
-        thumbnail_[i+1] = green >> 4;
-        thumbnail_[i+2] = blue >> 4;
+        tnp[i] = red >> 4;
+        tnp[i+1] = green >> 4;
+        tnp[i+2] = blue >> 4;
         col += 1;
         base += BytesPerPixel << 2;
         if (col == colcnt) {
+          //  This assumes rowbytes is tightly packed
             base += rowbytes3;
             col = 0;
         }

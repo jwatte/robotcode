@@ -57,11 +57,11 @@ boost::shared_ptr<Module> Camera::open(boost::shared_ptr<Settings> const &set) {
     int capHeight = 1080;
     auto v = set->get_value("width");
     if (!!v) {
-        capWidth = v->get_integer();
+        capWidth = v->get_long();
     }
     v = set->get_value("height");
     if (!!v) {
-        capHeight = v->get_integer();
+        capHeight = v->get_long();
     }
     return boost::shared_ptr<Module>(new Camera(set->get_value("device")->get_string(),
         capWidth, capHeight));

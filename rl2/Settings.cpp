@@ -63,8 +63,14 @@ void Settings::parse(input &in) {
         parse_object(in);
     }
     else if (tok[0] == '-' || (tok[0] >= '0' && tok[0] <= '9')) {
-        type_ = dtInteger;
-        iValue_ = boost::lexical_cast<int>(tok);
+        if (tok.find('.') != std::string::npos) {
+            type_ = dtDouble;
+            dValue_ = boost::lexical_cast<double>(tok);
+        }
+        else {
+            type_ = dtLong;
+            lValue_ = boost::lexical_cast<long>(tok);
+        }
     }
     else {
         throw std::runtime_error(
@@ -128,8 +134,12 @@ bool Settings::is_Settings() const {
     return type_ == dtObject;
 }
 
-bool Settings::is_integer() const {
-    return type_ == dtInteger;
+bool Settings::is_long() const {
+    return type_ == dtLong;
+}
+
+bool Settings::is_double() const {
+    return type_ == dtDouble;
 }
 
 std::string const &Settings::get_string() const {
@@ -137,9 +147,14 @@ std::string const &Settings::get_string() const {
     return value_;
 }
 
-int Settings::get_integer() const {
-    must_be_integer("get_integer()");
-    return iValue_;
+long Settings::get_long() const {
+    must_be_long("get_long()");
+    return lValue_;
+}
+
+double Settings::get_double() const {
+    must_be_double("get_double()");
+    return (is_long() ? lValue_ : dValue_);
 }
 
 
@@ -190,9 +205,15 @@ void Settings::must_be_Settings(char const *fn) const {
     }
 }
 
-void Settings::must_be_integer(char const *fn) const {
-    if (type_ != dtInteger) {
-        throw std::runtime_error(std::string("Must be an integer in Settings::") + fn + "; key " + name_);
+void Settings::must_be_long(char const *fn) const {
+    if (type_ != dtLong) {
+        throw std::runtime_error(std::string("Must be an long in Settings::") + fn + "; key " + name_);
+    }
+}
+
+void Settings::must_be_double(char const *fn) const {
+    if (type_ != dtDouble && type_ != dtLong) {
+        throw std::runtime_error(std::string("Must be a double in Settings::") + fn + "; key " + name_);
     }
 }
 
@@ -237,17 +258,18 @@ next_line:
         pos += 1;
         return std::string(pos - 1, pos);
     }
-    else if ((*pos >= '0' && *pos <= '9') || (*pos == '-')) {
+    else if ((*pos >= '0' && *pos <= '9') || (*pos == '-') || (*pos == '.')) {
         char const *spos = pos;
         ++pos;
         while (pos < end) {
-            if (*pos < '0' || *pos > '9') {
+            if ((*pos < '0' || *pos > '9') && 
+                !(*pos == '.' || *pos == 'e' || *pos == 'E' || *pos == '-' || *pos == '+')) {
                 break;
             }
             ++pos;
         }
         if (pos == spos) {
-            throw std::runtime_error("Unexpected minus (-)");
+            throw std::runtime_error("Unexpected numeric token");
         }
         return std::string(spos, pos);
     }

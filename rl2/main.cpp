@@ -27,6 +27,8 @@ static std::map<std::string, std::string> g_args;
 static std::vector<std::string> g_files;
 boost::shared_ptr<Module> gUSBLink;
 boost::shared_ptr<Module> gMotorBoard;
+boost::shared_ptr<Module> gInputBoard;
+boost::shared_ptr<Module> gUSBBoard;
 
 
 double g_pulse;
@@ -136,8 +138,12 @@ void setup_usblinks(boost::shared_ptr<ModuleList> const &modules) {
 
 void setup_boards(boost::shared_ptr<ModuleList> const &modules) {
    gMotorBoard = setup_module<MotorBoard>("boards", "motor", modules);
+   gInputBoard = setup_module<InputBoard>("boards", "input", modules);
+   gUSBBoard = setup_module<USBBoard>("boards", "usb", modules);
 
    gUSBLink->cast_as<USBLink>()->set_board(MOTOR_BOARD, gMotorBoard);
+   gUSBLink->cast_as<USBLink>()->set_board(SENSOR_BOARD, gInputBoard);
+   gUSBLink->cast_as<USBLink>()->set_board(USB_BOARD, gUSBBoard);
 }
 
 void setup_browser_window(boost::shared_ptr<ModuleList> const &modules) {

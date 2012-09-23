@@ -23,7 +23,7 @@
     Board -> Host
     cmd arg1 arg2 data
     O                           board is online
-    N   node      data          data from node
+    D   node      data          data from node
     F   node code               node fatalled
 
     Host -> Board
@@ -203,7 +203,7 @@ MotorBoardUser motorBoard;
 class SensorBoardUser : public ITWIUser {
 public:
     void tick() {
-        getfrom(NodeSensorInput, sizeof(info_MotorPower));
+        getfrom(NodeSensorInput, sizeof(info_SensorInput));
     }
 };
 SensorBoardUser sensorBoard;
@@ -365,6 +365,18 @@ void blink(bool on) {
 }
 
 
+void read_voltage(void *);
+
+void on_voltage(unsigned char v) {
+    g_info.r_voltage = v;
+    send_data_from(NodeUSBInterface, sizeof(g_info), &g_info);
+    after(1000, &read_voltage, 0);
+}
+
+void read_voltage(void *) {
+    adc_read(0, &on_voltage);
+}
+
 void setup() {
     //  reset other boards by pulling reset low
     PORTD &= ~(SERIAL_INDICATOR | RESET_SENSOR | RESET_MOTOR);
@@ -385,6 +397,7 @@ void setup() {
     imu.enqueue();
     delay(20);
     after(1, &ITWIUser::next, 0);
+    after(1000, &read_voltage, 0);
     digitalWrite(LED_PIN, LOW);
 }
 

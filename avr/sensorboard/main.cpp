@@ -87,30 +87,33 @@ void read_ping(void *)
 
 unsigned char nIr;
 
-#define MIN_IR_VAL 60
-#define MAX_IR_VAL 180
+/*
+#define MIN_IR_VAL 20       //  was 60
+#define MAX_IR_VAL 240      //  was 180
 #define IR_MIN_DISTANCE 10
+#define IR_MAX_DISTANCE 200
 
 unsigned char ir_inches(unsigned char val)
 {
     if (val < MIN_IR_VAL) {
-        return 0;
+        return IR_MAX_DISTANCE;
     }
     if (val > MAX_IR_VAL) {
         return IR_MIN_DISTANCE;
     }
     //  this is not a good formula, really -- but, whatever
     unsigned short inchVal = IR_MIN_DISTANCE + (MAX_IR_VAL - val);
-    if (inchVal > 200) {
-        return 0;
+    if (inchVal > IR_MAX_DISTANCE) {
+        return IR_MAX_DISTANCE;
     }
     return inchVal & 0xff;
 }
+*/
 
 void on_ir(unsigned char val)
 {
     ++g_actualData.r_iter;
-    g_actualData.r_ir[nIr] = ir_inches(val);
+    g_actualData.r_ir[nIr] = val; //ir_inches(val);
     nIr = (nIr + 1);
     if (nIr == 3) {
         nIr = 0;

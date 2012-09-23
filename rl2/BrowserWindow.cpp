@@ -6,7 +6,7 @@
 
 
 BrowserWindow::BrowserWindow(boost::shared_ptr<ModuleList> const &modules) :
-    Fl_Window(240, 480, "Modules"),
+    Fl_Window(0, 0, 240, 480, "Modules"),
     modules_(modules) {
     begin();
     hold_ = new Fl_Hold_Browser(0, 0, 480, 480);

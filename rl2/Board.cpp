@@ -9,6 +9,27 @@ public:
 };
 
 template<typename BaseType, typename PropType>
+class PropUpdateT : public PropUpdate {
+public:
+    PropUpdateT(boost::shared_ptr<Property> const &prop, void const *src, 
+        boost::shared_ptr<Translator<PropType>> xlat) :
+        prop_(prop),
+        src_(src),
+        xlat_(xlat) {
+    }
+    boost::shared_ptr<Property> prop_;
+    void const *src_;
+    boost::shared_ptr<Translator<PropType>> xlat_;
+
+    void update() {
+        BaseType bt;
+        memcpy(&bt, src_, sizeof(bt));
+        PropType pt = xlat_->translate(&bt);
+        prop_->set<PropType>(pt);
+    }
+};
+
+template<typename BaseType, typename PropType>
 class PropUpdateImpl : public PropUpdate {
 public:
     PropUpdateImpl(boost::shared_ptr<Property> const &prop, void const *src,
@@ -42,11 +63,20 @@ unsigned char Board::type() {
 
 void Board::on_data(unsigned char const *data, unsigned char sz) {
     if (sz != data_.size()) {
-        std::cerr << "Bad update size " << sz << " for board " << name_ << std::endl;
+        std::cerr << "Bad update size " << (int)sz << " for board " << name_ << 
+            " (expected " << data_.size() << ")" << std::endl;
+        std::cerr << "  ";
+        for (size_t i = 0; i < sz; ++i) {
+            std::cerr << std::hex << " " << (int)data[i];
+        }
+        std::cerr << std::endl;
         return;
     }
-    memcpy(&data_[0], data, sz);
-    dirty_ = true;
+    //  Only invalidate if data is actually different
+    if (memcmp(&data_[0], data, sz)) {
+        memcpy(&data_[0], data, sz);
+        dirty_ = true;
+    }
 }
 
 void Board::get_data(unsigned char *o_data, unsigned char sz) {
@@ -146,6 +176,26 @@ size_t Board::add_sshort_prop(std::string const &name, unsigned char offset, dou
         props_.push_back(prop);
         updates_.push_back(pu);
     }
+    return props_.size() - 1;
+}
+
+size_t Board::add_prop(std::string const &name, unsigned char offset, boost::shared_ptr<Translator<double>> xlat) {
+    assert(offset < data_.size());
+    boost::shared_ptr<Property> prop(new PropertyImpl<double>(name));
+    props_.push_back(prop);
+    boost::shared_ptr<PropUpdate> pu(new PropUpdateT<short, double>(
+        prop, &data_[offset], xlat));
+    updates_.push_back(pu);
+    return props_.size() - 1;
+}
+
+size_t Board::add_prop(std::string const &name, unsigned char offset, boost::shared_ptr<Translator<long>> xlat) {
+    assert(offset < data_.size());
+    boost::shared_ptr<Property> prop(new PropertyImpl<long>(name));
+    props_.push_back(prop);
+    boost::shared_ptr<PropUpdate> pu(new PropUpdateT<short, long>(
+        prop, &data_[offset], xlat));
+    updates_.push_back(pu);
     return props_.size() - 1;
 }
 

@@ -37,6 +37,7 @@ protected:
 };
 
 
+
 class property_type_base {
 public:
     PropertyType get_type() const { return ptype_; }

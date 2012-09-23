@@ -10,18 +10,20 @@ private:
     MotorBoard();
 };
 
+struct ir_fun;
+
 class InputBoard : public Board {
 public:
     static boost::shared_ptr<Module> open(boost::shared_ptr<Settings> const &set);
 private:
-    InputBoard();
+    InputBoard(ir_fun const &tune_ir);
 };
 
 class USBBoard : public Board {
 public:
     static boost::shared_ptr<Module> open(boost::shared_ptr<Settings> const &set);
 private:
-    USBBoard();
+    USBBoard(double top_voltage);
 };
 
 class IMUBoard : public Board {

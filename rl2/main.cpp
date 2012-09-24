@@ -8,6 +8,7 @@
 #include "BrowserWindow.h"
 #include "Boards.h"
 #include "protocol.h"
+#include "GPSModule.h"
 
 #include <cstring>
 #include <cerrno>
@@ -29,6 +30,7 @@ boost::shared_ptr<Module> gUSBLink;
 boost::shared_ptr<Module> gMotorBoard;
 boost::shared_ptr<Module> gInputBoard;
 boost::shared_ptr<Module> gUSBBoard;
+boost::shared_ptr<Module> gIMUBoard;
 
 
 double g_pulse;
@@ -135,15 +137,21 @@ void setup_usblinks(boost::shared_ptr<ModuleList> const &modules) {
     gUSBLink = setup_module<USBLink>("usblinks", "comm", modules);
 }
 
+void setup_gps(boost::shared_ptr<ModuleList> const &modules) {
+    setup_module<GPSModule>("gps", "gpsd", modules);
+}
+
 
 void setup_boards(boost::shared_ptr<ModuleList> const &modules) {
    gMotorBoard = setup_module<MotorBoard>("boards", "motor", modules);
    gInputBoard = setup_module<InputBoard>("boards", "input", modules);
    gUSBBoard = setup_module<USBBoard>("boards", "usb", modules);
+   gIMUBoard = setup_module<IMUBoard>("boards", "imu", modules);
 
    gUSBLink->cast_as<USBLink>()->set_board(MOTOR_BOARD, gMotorBoard);
    gUSBLink->cast_as<USBLink>()->set_board(SENSOR_BOARD, gInputBoard);
    gUSBLink->cast_as<USBLink>()->set_board(USB_BOARD, gUSBBoard);
+   gUSBLink->cast_as<USBLink>()->set_board(IMU_BOARD, gIMUBoard);
 }
 
 void setup_browser_window(boost::shared_ptr<ModuleList> const &modules) {
@@ -185,6 +193,7 @@ int main(int argc, char const *argv[]) {
 
     try {
         setup_cameras(modules);
+        setup_gps(modules);
         setup_usblinks(modules);
         setup_boards(modules);
         setup_browser_window(modules);

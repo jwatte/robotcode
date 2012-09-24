@@ -134,3 +134,34 @@ USBBoard::USBBoard(double top_voltage) :
 
 
 
+
+boost::shared_ptr<Module> IMUBoard::open(boost::shared_ptr<Settings> const &set) {
+    return boost::shared_ptr<Module>(new IMUBoard());
+}
+
+static std::string str_IMUBoard = "IMU board";
+static std::string str_r_mag_x = "r_mag_x";
+static std::string str_r_mag_y = "r_mag_y";
+static std::string str_r_mag_z = "r_mag_z";
+static std::string str_r_accel_x = "r_accel_x";
+static std::string str_r_accel_y = "r_accel_y";
+static std::string str_r_accel_z = "r_accel_z";
+static std::string str_r_gyro_x = "r_gyro_x";
+static std::string str_r_gyro_y = "r_gyro_y";
+static std::string str_r_gyro_z = "r_gyro_z";
+
+IMUBoard::IMUBoard() :
+    Board(str_IMUBoard, sizeof(info_IMU), IMU_BOARD) {
+
+    add_sshort_prop(str_r_mag_x, 0, 2.0 / 32767);
+    add_sshort_prop(str_r_mag_y, 2, 2.0 / 32767);
+    add_sshort_prop(str_r_mag_z, 4, 2.0 / 32767);
+    add_sshort_prop(str_r_accel_x, 6, 2.0 / 32767);
+    add_sshort_prop(str_r_accel_y, 8, 2.0 / 32767);
+    add_sshort_prop(str_r_accel_z, 10, 2.0 / 32767);
+    add_sshort_prop(str_r_gyro_x, 12, 2.0 / 32767);
+    add_sshort_prop(str_r_gyro_y, 14, 2.0 / 32767);
+    add_sshort_prop(str_r_gyro_z, 16, 2.0 / 32767);
+}
+
+

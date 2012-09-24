@@ -12,6 +12,7 @@ public:
     void remove(boost::shared_ptr<Module> m);
     size_t num_modules();
     boost::shared_ptr<Module> get_module_at(size_t ix);
+    boost::shared_ptr<Module> get_module_named(std::string const &name);
     bool contains(boost::shared_ptr<Module> m);
     void step_all();
 private:

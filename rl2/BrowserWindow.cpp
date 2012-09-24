@@ -2,19 +2,92 @@
 #include "BrowserWindow.h"
 #include "ModuleList.h"
 #include "PropertyWindow.h"
+#include "Property.h"
+#include "GraphWidget.h"
+#include <algorithm>
+#include <iostream>
 #include <boost/foreach.hpp>
+#include <FL/Fl_Fill_Dial.H>
 
+
+template<typename T>
+class PropertyListenerTramp : public Listener {
+public:
+    PropertyListenerTramp(T min, T max, Fl_Valuator *w, GraphWidget *gw) :
+        min_(min),
+        max_(max),
+        w_(w),
+        gw_(gw) {
+        w_->minimum((double)min);
+        w_->maximum((double)max);
+        if (gw_) {
+            gw_->range((double)min, (double)max);
+        }
+    }
+    void attach(boost::shared_ptr<Property> const &prop) {
+        prop_ = prop;
+        prop->add_listener(Listener::shared_from_this());
+        on_change();
+    }
+    void on_change() {
+        T t(prop_->get<T>());
+        update(t);
+    }
+    void update(T t) {
+        std::cerr << prop_->name() << "=" << t << std::endl;
+        double tv = (double)std::max(min_, std::min(max_, t));
+        w_->value(tv);
+        w_->damage(0xff);
+        if (gw_) {
+            gw_->value(tv);
+        }
+    }
+
+    boost::shared_ptr<Property> prop_;
+    T min_;
+    T max_;
+    Fl_Valuator *w_;
+    GraphWidget *gw_;
+};
 
 BrowserWindow::BrowserWindow(boost::shared_ptr<ModuleList> const &modules) :
-    Fl_Window(0, 0, 240, 480, "Modules"),
+    Fl_Double_Window(0, 0, 480, 480, "Modules"),
     modules_(modules) {
     begin();
-    hold_ = new Fl_Hold_Browser(0, 0, 480, 480);
+    hold_ = new Fl_Hold_Browser(0, 0, 160, 240);
+    cbatt_ = new Fl_Fill_Dial(170, 10, 140, 140, "Comp Batt");
+    cbatt_->angle1(0);
+    cbatt_->angle2(360);
+    cbatt_->color(0xa0202000, 0x20a040ff);
+    cgraph_ = new GraphWidget(170, 180, 140, 60);
+    mbatt_ = new Fl_Fill_Dial(330, 10, 140, 140, "Loco Batt");
+    mbatt_->angle1(0);
+    mbatt_->angle2(360);
+    mbatt_->color(0xa0202000, 0x20a040ff);
+    mgraph_ = new GraphWidget(330, 180, 140, 60);
     end();
     hold_->callback(&BrowserWindow::select_callback, this);
     tramp_ = boost::shared_ptr<ListenerTramp>(new ListenerTramp(this));
     tramp_->attach(modules_);
     on_change();
+    (boost::shared_ptr<PropertyListenerTramp<double>>(
+        new PropertyListenerTramp<double>(10.5, 15.0, cbatt_, cgraph_)))->attach(
+        modules->get_module_named("USB board")->get_property_named("r_voltage"));
+    (boost::shared_ptr<PropertyListenerTramp<double>>(
+        new PropertyListenerTramp<double>(6.5, 8.5, mbatt_, mgraph_)))->attach(
+        modules->get_module_named("Motor board")->get_property_named("r_voltage"));
+    Fl::add_timeout(1, &BrowserWindow::on_timeout, this);
+}
+
+void BrowserWindow::on_timeout(void *b) {
+    BrowserWindow *bw = reinterpret_cast<BrowserWindow *>(b);
+    bw->timeout();
+    Fl::add_timeout(1, &BrowserWindow::on_timeout, bw);
+}
+
+void BrowserWindow::timeout() {
+    cgraph_->scroll();
+    mgraph_->scroll();
 }
 
 BrowserWindow::~BrowserWindow() {

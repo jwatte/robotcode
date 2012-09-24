@@ -12,7 +12,7 @@
 class Settings;
 class Image;
 
-class Camera : public Module {
+class Camera : public cast_as_impl<Module, Camera> {
 public:
     static boost::shared_ptr<Module> open(boost::shared_ptr<Settings> const &set);
     void step();

@@ -13,6 +13,7 @@ public:
     virtual std::string const &name() = 0;
     virtual size_t num_properties() = 0;
     virtual boost::shared_ptr<Property> get_property_at(size_t ix) = 0;
+    virtual boost::shared_ptr<Property> get_property_named(std::string const &str);
 };
 
 #endif  //  rl2_Module_h

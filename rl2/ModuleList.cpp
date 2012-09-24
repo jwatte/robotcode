@@ -34,6 +34,15 @@ boost::shared_ptr<Module> ModuleList::get_module_at(size_t ix) {
     return modules_[ix];
 }
 
+boost::shared_ptr<Module> ModuleList::get_module_named(std::string const &name) {
+    BOOST_FOREACH(auto m, modules_) {
+        if (m->name() == name) {
+            return m;
+        }
+    }
+    throw std::runtime_error("Module " + name + " not found in ModuleList");
+}
+
 bool ModuleList::contains(boost::shared_ptr<Module> m) {
     return std::find(modules_.begin(), modules_.end(), m) != modules_.end();
 }

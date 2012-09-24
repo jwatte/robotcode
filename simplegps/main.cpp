@@ -18,7 +18,7 @@ int main() {
         exit(1);
     }
     while (true) {
-        if (gps_waiting(&gps, 500)) {
+        if (gps_waiting(&gps, 100)) {
             errno = 0;
             if (gps_read(&gps) == -1) {
                 perror("gps_read()");
@@ -41,6 +41,5 @@ int main() {
             fflush(stdout);
             gps.set = 0;
         }
-        usleep(100000);
     }
 }

@@ -1,6 +1,9 @@
 
 #include "GraphWidget.h"
 #include <FL/fl_draw.H>
+#include <iostream>
+#include <cmath>
+
 
 GraphWidget::GraphWidget(int x, int y, int w, int h, char const *l) :
     Fl_Widget(x, y, w, h, l),
@@ -43,6 +46,7 @@ void GraphWidget::value(double d) {
     if (dx >= w()) {
         left_ += granule_ * (1 + dx - w());
         dx = w() - 1;
+        vals_.erase(vals_.begin());
     }
     if (vals_.size() <= (size_t)dx) {
         if (vals_.empty()) {
@@ -62,7 +66,50 @@ void GraphWidget::value(double d) {
 }
 
 void GraphWidget::draw() {
+    //  background
     fl_rectf(x(), y(), w(), h(), color());
+
+    //  horizontal lines
+    fl_color(0xc0c0c0ff);
+    //  halves just happen to work for now -- for other graphs, 
+    //  probably want a different gradation
+    double l = ceil(low_ * 2);
+    double s = h() / (low_ - high_) * 0.5;
+    double t = y() + h() - low_ * s * 2;
+    double x2 = x() + w();
+    while (l < high_ * 2) {
+        double yl = t + s * l;
+        fl_line(x(), yl, x2, yl);
+        l += 1;
+    }
+
+    //  vertical lines
+    fl_color(0xc0c0c0ff);
+    //  12 is a nice multiplier for time-based gradations;
+    //  1, 5, 10 seconds all work well with it
+    long tl = left_ - (left_ % 12 * granule_);
+    long rl = left_ + w() * granule_;
+    s = y();
+    t = y() + h();
+    while (tl < rl) {
+        if (tl >= left_) {
+            double x2 = x() + (tl - left_) / granule_;
+            fl_line(x2, s, x2, t);
+        }
+        tl += 12 * granule_;
+    }
+
+    //  text
+    fl_font(FL_HELVETICA, 9);
+    fl_color(0x20a040ff);
+    char str[20];
+    sprintf(str, "%+.1f", high_);
+    fl_draw(str, x(), y()+9);
+    sprintf(str, "%+.1f", low_);
+    fl_color(0x802020ff);
+    fl_draw(str, x(), y()+h());
+
+    // graph
     fl_color(FL_FOREGROUND_COLOR);
     if (vals_.size() > 0) {
         int dx = x();

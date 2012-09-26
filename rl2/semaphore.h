@@ -12,7 +12,9 @@ public:
     ~semaphore();
 
     void acquire();
+    void acquire_n(int n);
     void release();
+    void release_n(int n);
     //  nonblocking_available is only safe if there is only 
     //  ever one thread that will call acquire() on the 
     //  semaphore.

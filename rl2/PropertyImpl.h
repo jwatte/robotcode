@@ -30,7 +30,7 @@ public:
             throw std::runtime_error("Invalid type in PropertyImpl::set_value() "
                 "for '" + name_ + "'");
         }
-        if (value_ != *(T *)t) {
+        if (!base.equal(value_, *(T *)t)) {
             value_ = *(T *)t;
             this->on_change();
         }

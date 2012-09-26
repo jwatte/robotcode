@@ -4,6 +4,7 @@
 #include "PropertyWindow.h"
 #include "Property.h"
 #include "GraphWidget.h"
+#include "Settings.h"
 #include <algorithm>
 #include <iostream>
 #include <boost/foreach.hpp>
@@ -34,7 +35,6 @@ public:
         update(t);
     }
     void update(T t) {
-        std::cerr << prop_->name() << "=" << t << std::endl;
         double tv = (double)std::max(min_, std::min(max_, t));
         w_->value(tv);
         w_->damage(0xff);
@@ -50,7 +50,8 @@ public:
     GraphWidget *gw_;
 };
 
-BrowserWindow::BrowserWindow(boost::shared_ptr<ModuleList> const &modules) :
+BrowserWindow::BrowserWindow(boost::shared_ptr<ModuleList> const &modules,
+    boost::shared_ptr<Settings> const &set) :
     Fl_Double_Window(0, 0, 480, 480, "Modules"),
     modules_(modules) {
     begin();
@@ -59,12 +60,16 @@ BrowserWindow::BrowserWindow(boost::shared_ptr<ModuleList> const &modules) :
     cbatt_->angle1(0);
     cbatt_->angle2(360);
     cbatt_->color(0xa0202000, 0x20a040ff);
+    long granule = 10;
+    maybe_get(set, "graph_s", granule);
     cgraph_ = new GraphWidget(170, 180, 140, 60);
+    cgraph_->granule(granule);
     mbatt_ = new Fl_Fill_Dial(330, 10, 140, 140, "Loco Batt");
     mbatt_->angle1(0);
     mbatt_->angle2(360);
     mbatt_->color(0xa0202000, 0x20a040ff);
     mgraph_ = new GraphWidget(330, 180, 140, 60);
+    mgraph_->granule(granule);
     end();
     hold_->callback(&BrowserWindow::select_callback, this);
     tramp_ = boost::shared_ptr<ListenerTramp>(new ListenerTramp(this));

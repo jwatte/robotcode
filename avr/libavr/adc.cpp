@@ -15,13 +15,10 @@ void (*_adc_cb)(unsigned char val) = 0;
 void _adc_result(void *cb) {
     void (*comp)(unsigned char) = _adc_cb;
     _adc_cb = 0;
-    uart_force_out(((int)comp) >> 8);
-    uart_force_out(((int)comp) & 0xff);
     (*comp)(ADCH);
 }
 
 ISR(ADC_vect) {
-    uart_force_out('a');
     if (!_adc_cb) {
         fatal(FATAL_ADC_BADCALL);
     }

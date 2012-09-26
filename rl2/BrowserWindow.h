@@ -12,10 +12,12 @@
 class ModuleList;
 class Module;
 class GraphWidget;
+class Settings;
 
 class BrowserWindow : public Fl_Double_Window, public Listener, public WindowOwner {
 public:
-    BrowserWindow(boost::shared_ptr<ModuleList> const &modules);
+    BrowserWindow(boost::shared_ptr<ModuleList> const &modules,
+        boost::shared_ptr<Settings> const &set);
     ~BrowserWindow();
 
     void window_close(boost::shared_ptr<OwnedWindow> w);

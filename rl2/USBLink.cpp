@@ -111,6 +111,7 @@ void USBLink::step() {
             unsigned int ptr = sendBufBegin_, end = sendBufEnd_;
             while (ptr != end) {
                 if (sendBuf_[ptr] != BEGIN_PACKET) {
+                    std::cerr << " " << std::hex << (int)sendBuf_[ptr];
                     ++errBytes_;
                     ++ptr;
                 }

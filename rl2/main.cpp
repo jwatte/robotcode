@@ -154,8 +154,9 @@ void setup_boards(boost::shared_ptr<ModuleList> const &modules) {
    gUSBLink->cast_as<USBLink>()->set_board(IMU_BOARD, gIMUBoard);
 }
 
-void setup_browser_window(boost::shared_ptr<ModuleList> const &modules) {
-    (new BrowserWindow(modules))->show();
+void setup_browser_window(boost::shared_ptr<ModuleList> const &modules,
+    boost::shared_ptr<Settings> const &set) {
+    (new BrowserWindow(modules, set))->show();
 }
 
 void step_all(boost::shared_ptr<ModuleList> *all_modules) {
@@ -196,7 +197,7 @@ int main(int argc, char const *argv[]) {
         setup_gps(modules);
         setup_usblinks(modules);
         setup_boards(modules);
-        setup_browser_window(modules);
+        setup_browser_window(modules, Settings::load("browser.js"));
         main_loop();
     }
     catch (std::exception const &x) {

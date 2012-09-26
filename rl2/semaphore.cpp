@@ -9,10 +9,14 @@ semaphore::~semaphore() {
 }
 
 void semaphore::acquire() {
+    acquire_n(1);
+}
+
+void semaphore::acquire_n(int n) {
     boost::unique_lock<boost::mutex> lock(guard_);
     while (true) {
-        if (count_ > 0) {
-            --count_;
+        if (count_ >= n) {
+            count_ -= n;
             return;
         }
         condition_.wait(lock);
@@ -20,11 +24,16 @@ void semaphore::acquire() {
 }
 
 void semaphore::release() {
+    release_n(1);
+}
+
+void semaphore::release_n(int n) {
     boost::unique_lock<boost::mutex> lock(guard_);
-    ++count_;
+    count_ += n;
     condition_.notify_one();
 }
 
 size_t semaphore::nonblocking_available() {
     return count_;
 }
+

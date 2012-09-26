@@ -4,6 +4,7 @@
 #include "Listenable.h"
 #include "cast_as.h"
 #include <typeinfo>
+#include <stdexcept>
 
 class Image;
 
@@ -41,7 +42,14 @@ protected:
 class property_type_base {
 public:
     PropertyType get_type() const { return ptype_; }
+    template<typename T> bool equal(T const &a, T const &b) const {
+        if (property_type<T>::instance().ptype_ != ptype_) {
+            throw std::runtime_error("Invalid property comparison");
+        }
+        return equal((void const *)&a, (void const *)&b);
+    }
 protected:
+    virtual bool equal(void const *a, void const *b) const = 0;
     property_type_base(PropertyType pt) : ptype_(pt) {}
     PropertyType ptype_;
 };
@@ -56,6 +64,9 @@ public:
     }
     static inline proptype default_value() { return 0; }
 protected:
+    bool equal(void const *a, void const *b) const {
+        return *(proptype const *)a == *(proptype const *)b;
+    }
     property_type() : property_type_base(TypeDouble) {}
 };
 
@@ -69,6 +80,9 @@ public:
     }
     static inline proptype default_value() { return 0; }
 protected:
+    bool equal(void const *a, void const *b) const {
+        return *(proptype const *)a == *(proptype const *)b;
+    }
     property_type() : property_type_base(TypeLong) {}
 };
 
@@ -82,6 +96,9 @@ public:
     }
     static inline proptype default_value() { return proptype(); }
 protected:
+    bool equal(void const *a, void const *b) const {
+        return *(proptype const *)a == *(proptype const *)b;
+    }
     property_type() : property_type_base(TypeString) {}
 };
 
@@ -95,6 +112,11 @@ public:
     }
     static inline proptype default_value() { return proptype(); }
 protected:
+    //  two images are never equal, because the pointers may be, 
+    //  but setting an image property means the image data changed.
+    bool equal(void const *a, void const *b) const {
+        return false;
+    }
     property_type() : property_type_base(TypeImage) {}
 };
 

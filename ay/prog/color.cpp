@@ -72,7 +72,7 @@ struct Diamond {
     }
 };
 
-void process(ImagePtr &img, bool outhcl) {
+void vote_hcl(ImagePtr &img, bool outhcl) {
     int div = 8;
     if (img->width() < 1400) {
         //  try to keep the output size approximately the same
@@ -112,19 +112,136 @@ void process(ImagePtr &img, bool outhcl) {
     img = op;
 }
 
+struct pix_span {
+    pix_span(int l, int r) :
+        left(l),
+        right(r),
+        previx(-1),
+        height(0)
+    {
+    }
+    int left;
+    int right;
+    int previx;
+    int height;
+};
+
+struct span_info {
+    span_info() :
+        prev_row_start(0),
+        cur_row_start(0) {
+    }
+    std::vector<pix_span> spans;
+    int prev_row_start;
+    int cur_row_start;
+    static void overlap(pix_span a, pix_span b) {
+        int leftmost = std::max(a.left, b.left);
+        int rightmost = std::min(a.right, b.right);
+        return rightmost - leftmost;
+    }
+    void add_span(pix_span ps) {
+        pix_span const *prev = spans.size() ? &spans[0] : 0;
+        int match = -1;
+        for (int i = prev_row_start; i < cur_row_start; ++i) {
+            if (prev[i].left < ps.right && prev[i].right > ps.left) {
+                if (ps.height < prev[i].height) {
+                    //  clearly a better match
+                    ps.height = prev[i].height;
+                    match = i;
+                }
+                else if (ps.height == prev[i].height) {
+                    assert(match != -1);
+                    //  equally good match -- use biggest overlap
+                    if (overlap(ps, prev[i]) > overlap(ps, prev[match])) {
+                        ps.height = prev[i].height;
+                        match = i;
+                    }
+                }
+                //  else do nothing
+            }
+        }
+        ps.previx = match;
+        spans.push_back(ps);
+    }
+    void end_row() {
+        prev_row_start = cur_row_start;
+        cur_row_start = spans.size();
+    }
+};
+
+//  Find the tallest contiguous vertical areas of pixels of a 
+//  certain color.
+//
+//  parameters:
+//  img -- the image to search; should be in hcl color space
+//  target -- the color to search for
+//  tolerance -- the amount of deviation to accept (inclusive)
+//  allowed_gap -- how many pixels from previous pixel to still 
+//      count as a contiguous match. (1 == no gaps allowed)
+//  max_len -- the maximum length of a horizontal span of pixels, 
+//      used to break a wide, horizontal, line of the right color
+//      up into separate pieces for robustness.
+void find_cones(
+    ImagePtr img,
+    hcl const target,
+    hcl const tolerance,
+    int allowed_gap = 2,
+    int max_len = 50) {
+
+    size_t rb = img->rowbytes(), h = img->height(), w = img->width();
+    unsigned char *ptr = img->data(), end = ptr + rb * h;
+    span_info spans;
+    spans.prev_row_start = -1;
+    spans.cur_row_start = -1;
+    while (end > ptr) {
+        end -= rb;
+        unsigned char const *pix = end;
+        int span = 0;
+        int start = -1;
+        int len = 0;
+        for (int i = 0; i < w; ++i) {
+            unsigned char h = *pix++;
+            unsigned char c = *pix++;
+            unsigned char l = *pix++;
+            if ((unsigned char)(target.h - h) <= tolerance.h ||
+                (unsigned char)(h - target.h) <= tolerance.h) {
+                if ((unsigned char)(target.c - c) <= tolerance.c ||
+                    (unsigned char)(c - target.c) <= tolerance.c) {
+                    if ((unsigned char)(target.l - l) <= tolerance.l ||
+                        (unsigned char)(l - target.l) <= tolerance.l) {
+                        span = allowed_gap;
+                        if (start < 0) {
+                            start = i;
+                        }
+                    }
+                }
+            }
+            if (span > 0 && len < max_len) {
+                ++len;
+                --span;
+            }
+            else if (start) {
+                pix_span ps(start, start + len - allowed_gap + 1);
+                spans.add_span(ps);
+            }
+        }
+        if (start != -1) {
+            pix_span ps(start, start + len - allowed_gap + 1);
+            spans.add_span(ps);
+        }
+        spans.end_row();
+    }
+    //  now, find the highest spans
+}
+
 int main(int argc, char const *argv[]) {
   try {
-    bool outhcl = false;
-    if (argv[1] && !strcmp(argv[1], "--hcl")) {
-        outhcl = true;
-        --argc;
-        ++argv;
-    }
     if (argc != 3) {
-      throw std::runtime_error("usage: j2t [--hcl] input.jpg output.tga");
+      throw std::runtime_error("usage: j2t input.jpg output.tga");
     }
     ImagePtr img(load_image(argv[1]));
-    process(img, outhcl);
+    vote_hcl(img, true);
+    find_cones(img, hcl(8, 144, 144), hcl(16, 32, 32), 2, 40);
     save_image(img, argv[2]);
   }
   catch (std::exception const &err) {

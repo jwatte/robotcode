@@ -1,5 +1,7 @@
 
 #include "semaphore.h"
+#include <assert.h>
+
 
 semaphore::semaphore(size_t cnt) :
     count_(cnt) {
@@ -13,9 +15,10 @@ void semaphore::acquire() {
 }
 
 void semaphore::acquire_n(int n) {
+    assert(n > 0);
     boost::unique_lock<boost::mutex> lock(guard_);
     while (true) {
-        if (count_ >= n) {
+        if (count_ >= (size_t)n) {
             count_ -= n;
             return;
         }
@@ -28,6 +31,7 @@ void semaphore::release() {
 }
 
 void semaphore::release_n(int n) {
+    assert(n > 0);
     boost::unique_lock<boost::mutex> lock(guard_);
     count_ += n;
     condition_.notify_one();

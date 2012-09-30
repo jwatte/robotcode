@@ -4,7 +4,22 @@
 #include <math.h>
 #include <string.h>
 #include <stdexcept>
+#include <vector>
+#include <iostream>
+#include <sstream>
+#include <boost/bind.hpp>
+#include <boost/foreach.hpp>
 
+
+struct found_rect : rect {
+    found_rect(int six, int left, int top, int right, int bottom) :
+        rect(left, top, right, bottom),
+        spanix(six),
+        score(0) {
+    }
+    int spanix;
+    float score;
+};
 
 struct Diamond {
     Diamond() {
@@ -113,13 +128,15 @@ void vote_hcl(ImagePtr &img, bool outhcl) {
 }
 
 struct pix_span {
-    pix_span(int l, int r) :
+    pix_span(int t, int l, int r) :
+        top(t),
         left(l),
         right(r),
         previx(-1),
         height(0)
     {
     }
+    int top;
     int left;
     int right;
     int previx;
@@ -134,7 +151,7 @@ struct span_info {
     std::vector<pix_span> spans;
     int prev_row_start;
     int cur_row_start;
-    static void overlap(pix_span a, pix_span b) {
+    static int overlap(pix_span a, pix_span b) {
         int leftmost = std::max(a.left, b.left);
         int rightmost = std::min(a.right, b.right);
         return rightmost - leftmost;
@@ -142,18 +159,18 @@ struct span_info {
     void add_span(pix_span ps) {
         pix_span const *prev = spans.size() ? &spans[0] : 0;
         int match = -1;
+        ps.height = 1;
         for (int i = prev_row_start; i < cur_row_start; ++i) {
             if (prev[i].left < ps.right && prev[i].right > ps.left) {
-                if (ps.height < prev[i].height) {
+                if (ps.height <= prev[i].height) {
                     //  clearly a better match
-                    ps.height = prev[i].height;
+                    ps.height = prev[i].height + 1;
                     match = i;
                 }
-                else if (ps.height == prev[i].height) {
+                else if (ps.height == prev[i].height + 1) {
                     assert(match != -1);
                     //  equally good match -- use biggest overlap
                     if (overlap(ps, prev[i]) > overlap(ps, prev[match])) {
-                        ps.height = prev[i].height;
                         match = i;
                     }
                 }
@@ -169,6 +186,32 @@ struct span_info {
     }
 };
 
+std::string str(pix_span const &ps) {
+    std::stringstream ss;
+    ss << ps.left << "," << ps.top << "-" << ps.right << "," << (ps.top + ps.height);
+    return ss.str();
+}
+
+std::string str(rect const &r) {
+    std::stringstream ss;
+    ss << r.x1 << "," << r.y1 << "-" << r.x2 << "," << r.y2;
+    return ss.str();
+}
+
+template<typename R>
+bool overlaps_previous(pix_span const &ps, R const &prev) {
+    for (typename R::const_iterator ptr(prev.begin()), end(prev.end());
+        ptr != end; ++ptr) {
+        if (ps.top < (*ptr).y2 && ps.top + ps.height > (*ptr).y1 &&
+            ps.left < (*ptr).x2 && ps.right > (*ptr).x1) {
+            //std::cout << "overlaps previous: " << str(ps) << " == " << str(*ptr) << std::endl;
+            return true;
+        }
+    }
+    //std::cout << "no overlap previous: " << str(ps) << std::endl;
+    return false;
+}
+
 //  Find the tallest contiguous vertical areas of pixels of a 
 //  certain color.
 //
@@ -183,18 +226,23 @@ struct span_info {
 //      up into separate pieces for robustness.
 void find_cones(
     ImagePtr img,
+    std::vector<found_rect> &cones,
     hcl const target,
     hcl const tolerance,
+    float threshold = 0.1f,
+    float desired_ratio = 2.5f,
     int allowed_gap = 2,
-    int max_len = 50) {
+    int max_len = 40) {
 
     size_t rb = img->rowbytes(), h = img->height(), w = img->width();
-    unsigned char *ptr = img->data(), end = ptr + rb * h;
+    unsigned char *ptr = img->data(), *end = ptr + rb * h;
     span_info spans;
-    spans.prev_row_start = -1;
-    spans.cur_row_start = -1;
+    spans.prev_row_start = 0;
+    spans.cur_row_start = 0;
+    int ih = h;
     while (end > ptr) {
         end -= rb;
+        --ih;
         unsigned char const *pix = end;
         int span = 0;
         int start = -1;
@@ -220,18 +268,147 @@ void find_cones(
                 ++len;
                 --span;
             }
-            else if (start) {
-                pix_span ps(start, start + len - allowed_gap + 1);
+            else if (start > -1) {
+                pix_span ps(ih, start, start + len - allowed_gap + 1);
                 spans.add_span(ps);
+                start = -1;
+                len = 0;
             }
         }
         if (start != -1) {
-            pix_span ps(start, start + len - allowed_gap + 1);
+            pix_span ps(ih, start, start + len - allowed_gap + 1);
             spans.add_span(ps);
         }
         spans.end_row();
     }
     //  now, find the highest spans
+    size_t n = spans.spans.size();
+    std::vector<found_rect> found;
+    while (n > 0) {
+        --n;
+        pix_span ps(spans.spans[n]);
+        if (ps.height > 3 && !overlaps_previous(ps, found)) {
+            found_rect r(n, ps.left, ps.top, ps.right, ps.top + ps.height);
+            float sd = 1.0 / ps.height;
+            //std::cout << "ps.height " << ps.height << " score delta " << sd << std::endl;
+            int prevx1 = r.x1;
+            int prevx2 = r.x2;
+            while (ps.height > 1) {
+                pix_span old(ps);
+                ps = spans.spans[ps.previx];
+                assert(old.left < ps.right && old.right > ps.left);
+                assert(old.height == ps.height + 1);
+                assert(old.top == ps.top - 1);
+                if (ps.left > prevx1) {
+                    r.score -= sd;
+                    //std::cout << "-left " << ps.left << " > " << prevx1 << std::endl;
+                }
+                else if (ps.left < prevx1) {
+                    r.score += sd;
+                    if (ps.left < r.x1) {
+                        r.x1 = ps.left;
+                    }
+                    //std::cout << "+left " << ps.left << " < " << prevx1 << std::endl;
+                }
+                prevx1 = ps.left;
+                if (ps.right < prevx2) {
+                    r.score -= sd;
+                    //std::cout << "-right " << ps.right << " < " << prevx2 << std::endl;
+                }
+                else if (ps.right > prevx2) {
+                    r.score += sd;
+                    if (ps.right > r.x2) {
+                        r.x2 = ps.right;
+                    }
+                    //std::cout << "+right " << ps.right << " > " << prevx2 << std::endl;
+                }
+                prevx2 = ps.right;
+            }
+            //  ratio should be about 1:2, so penalize those that are off
+            float ratio = (float)r.height() / r.width();
+            //std::cout << "ratio " << ratio << " desired " << desired_ratio
+            //     << std::endl;
+            if (ratio < desired_ratio) {
+                //std::cout << "adjusting by " << ratio / desired_ratio
+                //    << " for too wide." << std::endl;
+                r.score = r.score * ratio / desired_ratio;
+            }
+            else {
+                //std::cout << "adjusting by " << desired_ratio / ratio
+                //    << " for too tall." << std::endl;
+                r.score = r.score * desired_ratio / ratio;
+            }
+            r.score = (r.score * r.height() / r.width()) * desired_ratio;
+            //std::cout << "score " << r.score << " " << str(r) << std::endl;
+            found.push_back(r);
+        }
+    }
+    BOOST_FOREACH(auto x, found) {
+        if (x.score >= threshold) {
+            cones.push_back(x);
+        }
+    }
+}
+
+template<typename Iter, typename Callable>
+void frame_rects(ImagePtr img, Iter ptr, Iter end, Callable fn) {
+    unsigned char *base = img->data();
+    size_t rb = img->rowbytes();
+    size_t h = img->height();
+    size_t w = img->width();
+    while (ptr < end) {
+        auto c = fn(*ptr);
+        unsigned char *cc = (unsigned char *)&c;
+        //std::cout << "framing " << (*ptr).x1 << "," << (*ptr).y1 << "-"
+        //    << (*ptr).x2 << "," << (*ptr).y2 << " color "
+        //    << (int)cc[0] << "," << (int)cc[1] << "," << (int)cc[2] << std::endl;
+        size_t left = (*ptr).x1;
+        if (left > w) left = w;
+        size_t top = (*ptr).y1;
+        if (top > h) top = h;
+        size_t right = (*ptr).x2;
+        if (right > w) right = w;
+        if (right < left) right = left;
+        size_t bottom = (*ptr).y2;
+        if (bottom > h) bottom = h;
+        if (bottom < top) bottom = top;
+        if (right > left && bottom > top) {
+            unsigned char *bb = base + rb * top + left * 3;
+            for (size_t p = left; p < right; ++p) {
+                bb[0] = cc[0];
+                bb[1] = cc[1];
+                bb[2] = cc[2];
+                bb += 3;
+            }
+            bb = base + rb * top + left * 3;
+            for (size_t p = top; p < bottom; ++p) {
+                bb[0] = cc[0];
+                bb[1] = cc[1];
+                bb[2] = cc[2];
+                bb += rb;
+            }
+            bb = base + rb * top + (right - 1) * 3;
+            for (size_t p = top; p < bottom; ++p) {
+                bb[0] = cc[0];
+                bb[1] = cc[1];
+                bb[2] = cc[2];
+                bb += rb;
+            }
+            bb = base + rb * (bottom - 1) + left * 3;
+            for (size_t p = left; p < right; ++p) {
+                bb[0] = cc[0];
+                bb[1] = cc[1];
+                bb[2] = cc[2];
+                bb += 3;
+            }
+        }
+        ++ptr;
+    }
+}
+
+hcl color_for_rect(found_rect const &fr) {
+    float f = std::min(1.0f, std::max(fr.score, 0.0f));
+    return hcl(0, 0, (unsigned char)(f * 255));
 }
 
 int main(int argc, char const *argv[]) {
@@ -241,7 +418,10 @@ int main(int argc, char const *argv[]) {
     }
     ImagePtr img(load_image(argv[1]));
     vote_hcl(img, true);
-    find_cones(img, hcl(8, 144, 144), hcl(16, 32, 32), 2, 40);
+    std::vector<found_rect> cones;
+    find_cones(img, cones, hcl(8, 144, 144), hcl(16, 32, 32));
+    frame_rects(img, cones.begin(), cones.end(), color_for_rect);
+    convert<hcl, rgb>(img);
     save_image(img, argv[2]);
   }
   catch (std::exception const &err) {

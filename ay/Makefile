@@ -19,10 +19,10 @@ bld/%:	bld/prog/%.o $(LIB)
 	g++ -g -o $@ $< -Lbld -lay -ljpeg -lm
 
 bld/lib/%.o:	lib/%.cpp
-	g++ -c -g -MMD $(OPT) -Ilib -o $@ $<
+	g++ -c -g -MMD -std=gnu++11 $(OPT) -Ilib -o $@ $<
 
 bld/prog/%.o:	prog/%.cpp
-	g++ -c -g -MMD $(OPT) -Ilib -o $@ $<
+	g++ -c -g -MMD -std=gnu++11 $(OPT) -Ilib -o $@ $<
 
 bld:
 	mkdir -p bld

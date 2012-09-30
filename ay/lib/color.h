@@ -1,6 +1,7 @@
 #if !defined(ay_color_h)
 #define ay_color_h
 
+#include "ay.h"
 #include <math.h>
 #include <algorithm>
 
@@ -50,6 +51,24 @@ struct hcl {
     }
     static int drgbfunc[];
 };
+
+template<typename From, typename To>
+void convert(ImagePtr img) {
+    size_t rb = img->rowbytes();
+    size_t w = img->width();
+    size_t h = img->height();
+    From f(0, 0, 0);
+    To t(0, 0, 0);
+    for (size_t y = 0; y != h; ++y) {
+        unsigned char *ptr = img->data() + y * rb;
+        for (size_t x = 0; x != w; ++x) {
+            memcpy(&f, ptr, 3);
+            t = f;
+            memcpy(ptr, &t, 3);
+            ptr += 3;
+        }
+    }
+}
 
 #endif
 

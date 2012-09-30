@@ -87,7 +87,7 @@ void GraphWidget::draw() {
     fl_color(0xc0c0c0ff);
     //  12 is a nice multiplier for time-based gradations;
     //  1, 5, 10 seconds all work well with it
-    long tl = left_ - (left_ % 12 * granule_);
+    long tl = left_ - (left_ % (12 * granule_));
     long rl = left_ + w() * granule_;
     s = y();
     t = y() + h();

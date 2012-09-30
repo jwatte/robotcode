@@ -1,4 +1,4 @@
 {
-"graph_s":1,
+"graph_s":5,
 "stats":"/var/db/stats"
 }

@@ -30,6 +30,19 @@ private:
   bool owned_;
 };
 
+struct rect {
+    rect() : x1(0), y1(0), x2(0), y2(0) {}
+    rect(int l, int t, int r, int b) : x1(l), y1(t), x2(r), y2(b) {}
+    int x1;
+    int y1;
+    int x2; 
+    int y2;
+    int width() const { return x2 - x1; }
+    int height() const { return y2 - y1; }
+    void width(int w) { x2 = x1 + w; }
+    void height(int h) { y2 = y1 + h; }
+};
+
 ImagePtr load_image(std::string const &path);
 void save_image(ImagePtr image, std::string const &path);
 void flip_v(ImagePtr image);

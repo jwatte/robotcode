@@ -9,6 +9,8 @@
 #include "Boards.h"
 #include "protocol.h"
 #include "GPSModule.h"
+#include "Services.h"
+#include "DataLogger.h"
 
 #include <cstring>
 #include <cerrno>
@@ -24,6 +26,7 @@
 #include <FL/Fl.H>
 #include <FL/Fl_Shared_Image.H>
 
+static Services services;
 static std::map<std::string, std::string> g_args;
 static std::vector<std::string> g_files;
 boost::shared_ptr<Module> gUSBLink;
@@ -159,6 +162,11 @@ void setup_browser_window(boost::shared_ptr<ModuleList> const &modules,
     (new BrowserWindow(modules, set))->show();
 }
 
+void setup_data_logger(boost::shared_ptr<ModuleList> const &modules,
+    boost::shared_ptr<Settings> const &set) {
+    new DataLogger(modules, set);
+}
+
 void step_all(boost::shared_ptr<ModuleList> *all_modules) {
     boost::this_thread::sleep(boost::posix_time::milliseconds(5));
     (*all_modules)->step_all();
@@ -198,6 +206,7 @@ int main(int argc, char const *argv[]) {
         setup_usblinks(modules);
         setup_boards(modules);
         setup_browser_window(modules, Settings::load("browser.js"));
+        setup_data_logger(modules, Settings::load("logger.js"));
         main_loop();
     }
     catch (std::exception const &x) {

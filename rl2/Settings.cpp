@@ -115,6 +115,7 @@ void Settings::parse_object(input &in) {
             boost::shared_ptr<Settings> set(new Settings(key));
             set->parse(in);
             sub_[key] = set;
+            subIterN_ = (size_t)-1;
         }
         else {
             throw std::runtime_error("Expected key name or '}' in object for " + name_);

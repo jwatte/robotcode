@@ -8,8 +8,15 @@ CPP_CFLAGS:=$(sort $(CPP_OPT) $(filter-out -D_FORTIFY_SOURCE%, $(filter-out -O%,
     -I/usr/local/include/libusb-1.0
 CPP_LFLAGS:=-ljpeg $(sort $(CPP_OPT) $(shell fltk-config --use-images --ldflags)) \
 	-lv4l2 -lgps -lboost_thread -lboost_system /usr/local/lib/libusb-1.0.so
-CPP_SRCS:=$(foreach app,$(APPS),$(wildcard $(app)/*.cpp))
+ALL_APP_CPP_SRCS:=$(foreach app,$(APPS),$(wildcard $(app)/*.cpp))
+CPP_SRCS:=$(sort $(foreach app,$(APPS),$(filter-out $(app)/test_%.cpp, \
+    $(filter $(app)/%.cpp, $(ALL_APP_CPP_SRCS)))))
 CPP_OBJS:=$(patsubst %.cpp,bld/obj/%.o,$(CPP_SRCS))
+CPP_TEST_SRCS:=$(sort $(foreach app,$(APPS),$(filter $(app)/test_%.cpp,$(ALL_APP_CPP_SRCS))))
+CPP_TEST_OBJS:=$(patsubst %.cpp,bld/obj/%.o,$(CPP_TEST_SRCS))
+CPP_TESTS:=$(sort $(foreach app,$(APPS),$(patsubst %.cpp,%, \
+    $(filter $(app)/test_%.cpp,$(ALL_APP_CPP_SRCS)))))
+TEST_NAMES:=$(foreach app,$(APPS),$(patsubst $(app)/%,%,$(filter $(app)/%,$(CPP_TESTS))))
 
 AVR_SRCS:=$(wildcard avr/*/*.cpp)
 LIBAVR_SRCS:=$(filter avr/libavr/%,$(AVR_SRCS))
@@ -30,7 +37,7 @@ AVR_OBJS+=$(foreach i,$(AVR_PARTS),$(patsubst avr/libavr/%.cpp,bld/avrobj/libavr
 
 OPENCV_LFLAGS:=-lopencv_highgui -lopencv_core -lopencv_imgproc -lopencv_calib3d -lopencv_features2d -lopencv_video -lwebcam
 
-all:	$(patsubst %,bld/bin/%,$(APPS)) $(patsubst %,bld/avrbin/%.hex,$(AVR_BINS))
+all:	$(patsubst %,bld/bin/%,$(TEST_NAMES)) $(patsubst %,bld/bin/%,$(APPS)) $(patsubst %,bld/avrbin/%.hex,$(AVR_BINS))
 
 clean:
 	rm -rf bld
@@ -68,6 +75,17 @@ bld/bin/$(1):	$(filter bld/obj/$(1)/%,$(CPP_OBJS))
 	g++ -o bld/bin/$(1) $(filter bld/obj/$(1)/%,$(CPP_OBJS)) $(CPP_LFLAGS)
 endef
 $(foreach app,$(APPS),$(eval $(call mkapp,$(app))))
+
+define mktest
+bld/bin/$(2):	$(filter-out bld/obj/$(1)/main.o,$(filter bld/obj/$(1)/%,$(CPP_OBJS))) bld/obj/$(1)/$(2).o
+	@mkdir -p `dirname $$@`
+	g++ -o $$@ $$^ $(CPP_LFLAGS)
+	echo Running bld/bin/$(2)
+	@bld/bin/$(2)
+.PRECIOUS:	bld/bin/$(2)
+endef
+$(foreach test,$(CPP_TESTS),$(eval $(call mktest,$(patsubst %/,%,$(dir $(test))),$(notdir $(test)))))
+
 
 define mkavrbin
 bld/avrbin/$(1):	$$(filter bld/avrobj/$(1)/%,$(AVR_OBJS)) bld/avrbin/libavr_$$(PART_$(1)).a
@@ -136,4 +154,5 @@ fuses_12:
 	avrdude -e -u -V -p m328p -b 115200 -B 200 $(AVR_PROG) -U lfuse:w:0xE7:m -U hfuse:w:0xDF:m -U efuse:w:0xFD:m -U lock:w:0xFF:m
 
 -include $(patsubst %.o,%.d,$(CPP_OBJS))
+-include $(patsubst %.o,%.d,$(CPP_TEST_OBJS))
 -include $(patsubst %.o,%.d,$(AVR_OBJS))

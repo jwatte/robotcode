@@ -1,7 +1,10 @@
 
 #include "QueuedFile.h"
+#include "Services.h"
 #include <boost/thread.hpp>
 #include <boost/bind.hpp>
+#include <boost/lexical_cast.hpp>
+#include <fcntl.h>
 
 
 
@@ -49,25 +52,26 @@ void QueuedFileManager::thread_fn() {
                 condition_.wait(lock);
             }
             if (!queue_.empty()) {
-                file = *queue_.front();
-                queue_.pop_front();
+                file = *queue_.begin();
+                queue_.erase(queue_.begin());
             }
         }
         if (!!file) {
             size_t sz = file->toRead_.nonblocking_available();
             if (sz > 0) {
+                file->toRead_.acquire_n(sz);
                 void const *a = 0;
                 void const *b = 0;
                 size_t sa = 0;
                 size_t sb = 0;
                 file->get_tail(sz, a, sa, b, sb);
-                if ((sa > 0 && ::write(file->fd_, a, sa) < 0) ||
-                    (sb > 0 && ::write(file->fd_, b, sb) < 0)) {
+                if ((sa > 0 && gSvc->write(file->fd_, a, sa) < 0) ||
+                    (sb > 0 && gSvc->write(file->fd_, b, sb) < 0)) {
                     std::cerr << "file write failed: " << file->name_ << 
                         " (" << sa + sb << " bytes)" << std::endl;
                 }
                 else {
-                    ::fsync(file->fd_);
+                    gSvc->fsync(file->fd_);
                 }
                 file->toWrite_.release_n(sa + sb);
             }
@@ -90,6 +94,24 @@ void QueuedFile::write(void const *data, size_t size) {
     writev(&vl, 1);
 }
 
+static void fill(void *d, size_t dz, vlist const *&cur, size_t &used) {
+    size_t gone = 0;
+    while (gone < dz) {
+        size_t tocopy = cur->size - used;
+        if (tocopy > dz - gone) {
+            tocopy = dz - gone;
+        }
+        memcpy((char *)d + gone, (char *)cur->data + used, tocopy);
+        used += tocopy;
+        gone += tocopy;
+        if (used == cur->size) {
+            ++cur;
+            used = 0;
+        }
+    }
+}
+
+
 void QueuedFile::writev(vlist const *ptr, size_t n) {
     size_t size = 0;
     for (size_t i = 0; i != n; ++i) {
@@ -98,16 +120,19 @@ void QueuedFile::writev(vlist const *ptr, size_t n) {
     if (size == 0) {
         return;
     }
-    vlist cur = *ptr;
+    vlist const *cur = ptr;
+    //  "used" keeps how much is used from the current vlist item
+    size_t used = 0;
     while (size > 0) {
-        if (size > BUF_SIZE) {
+        // get N from cur, and increment ptr if not enough
+        if (size >= BUF_SIZE) {
             toWrite_.acquire_n(BUF_SIZE);
-            todo...
-            // get N from cur, and increment ptr if not enough
-            // memcpy(buf_, data, BUF_SIZE);
+            //  At this point, I know the thread is not referencing this file!
+            //  This is because I hold a reference to all bytes in the buffer.
+            fill(buf_, BUF_SIZE, cur, used);
             bufHead_ = bufTail_ = 0;
-            data = (char const *)data + BUF_SIZE;
             size -= BUF_SIZE;
+            toRead_.release_n(BUF_SIZE);
         }
         else {
             toWrite_.acquire_n(size);
@@ -115,34 +140,30 @@ void QueuedFile::writev(vlist const *ptr, size_t n) {
             size_t sa = 0, sb = 0;
             get_head(size, a, sa, b, sb);
             if (sa) {
-                todo...
-                // get N from cur, and increment ptr if not enough
-                // memcpy(buf_, data, BUF_SIZE);
-                // memcpy(a, data, sa);
-                data = (char const *)data + sa;
+                fill(a, sa, cur, used);
             }
             if (sb) {
-                todo...
-                // get N from cur, and increment ptr if not enough
-                // memcpy(b, data, sb);
-                data = (char const *)data + sb;
+                fill(b, sb, cur, used);
             }
             size -= (sa + sb);
+            toRead_.release_n(sa + sb);
         }
         g_mgr.enqueue(shared_from_this());
     }
 }
 
 QueuedFile::~QueuedFile() {
-    ::close(fd_);
+    gSvc->close(fd_);
 }
 
 QueuedFile::QueuedFile(std::string const &name) :
-    fd_(0),
     bufHead_(0),
     bufTail_(0),
+    fd_(0),
+    toWrite_(BUF_SIZE),
+    toRead_(0),
     name_(name) {
-    fd_ = ::open(name.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0664);
+    fd_ = gSvc->open(name.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0664);
     if (fd_ < 0) {
         throw std::runtime_error("Could not create file: " + name);
     }
@@ -171,7 +192,7 @@ void QueuedFile::get_head(size_t n, void *&oa, size_t &oasz, void *&ob, size_t &
     oasz = n;
     char *end = (char *)oa + oasz;
     if (end > &buf_[BUF_SIZE]) {
-        obsz = end - *buf_[BUF_SIZE];
+        obsz = end - &buf_[BUF_SIZE];
         oasz -= obsz;
         ob = buf_;
     }

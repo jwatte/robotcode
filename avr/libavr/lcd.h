@@ -155,7 +155,7 @@ struct font_desc {
     unsigned char first_char;
     unsigned char num_chars;
     unsigned char height;
-    unsigned short offset[/*num_chars*/];
+    unsigned short offset[/*num_chars + 1*/];
     //unsigned char bytes[];
 };
 

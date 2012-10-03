@@ -1,0 +1,6 @@
+0000000000000000 g     O .data	0000000000000387 Droid_Sans_10_ascii_data
+0000000000000000 g     O .data	0000000000000839 Droid_Sans_16_ascii_data
+0000000000000000 g     O .data	0000000000000285 Droid_Sans_7_ascii_data
+0000000000000000 g     O .data	000000000000035d Inconsolata_10_ascii_data
+0000000000000000 g     O .data	0000000000000772 Inconsolata_16_ascii_data
+0000000000000000 g     O .data	0000000000000240 Inconsolata_7_ascii_data

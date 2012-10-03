@@ -156,7 +156,7 @@ void save_tga(ImagePtr img, std::string const &path) {
     if (fd < 0) {
         throw std::runtime_error("Could not create file: " + tmp);
     }
-    unsigned short hdr[9] = { 0, 0x2, 0, 0x1800, 0, 0, img->width(), img->height(), 0x2018 };
+    unsigned short hdr[9] = { 0, 0x2, 0, 0x1800, 0, 0, (unsigned short)img->width(), (unsigned short)img->height(), 0x2018 };
     if (18 != write(fd, hdr, 18)) {
         unlink(tmp.c_str());
         close(fd);

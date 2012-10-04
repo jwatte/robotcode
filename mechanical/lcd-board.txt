@@ -1,0 +1,8 @@
+
+Bottom, left-to-right:
+
+Pin header:
+GND 5V NC RS   WR RD DB8 DB9   DB10 DB11 DB12 DB13   DB14 DB15 CS RST
+
+Socket:
+GND 5V NC RS   WR RD DB8 DB9   DB10 DB11 DB12 DB13   DB14 DB15 CD NC   RST NC 5V(L) NC

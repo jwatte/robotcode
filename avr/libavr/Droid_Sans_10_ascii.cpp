@@ -1,8 +1,10 @@
 // Use this declaration to get at this font:
-// extern unsigned char Droid_Sans_10_ascii_data[];
+// extern unsigned char Droid_Sans_10_ascii_data[] PROGMEM;
 // Font Droid_Sans_10_ascii(Droid_Sans_10_ascii_data);
 
-unsigned char Droid_Sans_10_ascii_data[] = {
+#include <avr/pgmspace.h>
+
+unsigned char const Droid_Sans_10_ascii_data[] PROGMEM = {
   0xf0, 0x20, 0x7e, 0xc,
 0xc4,0x0, // 32
 0xc9,0x0, // 33

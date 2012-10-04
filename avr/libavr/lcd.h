@@ -5,6 +5,7 @@
 #define avr_lcd_h
 
 #include <avr/pgmspace.h>
+#include <libavr.h>
 
 /*
    This interface uses the 8-bit bus, and maps the signals as
@@ -45,7 +46,13 @@ public:
         PORTD = val;
     }
     static inline void ctl(unsigned char flags) {
-        PORTB = (PORTB & 0xfc) | flags;
+        PORTB = (PORTB & 0xf8) | flags;
+    }
+    static inline void set(unsigned char flag) {
+        PORTB |= flag;
+    }
+    static inline void clear(unsigned char flag) {
+        PORTB &= ~flag;
     }
 };
 
@@ -116,7 +123,7 @@ public:
         }
         cmd(0x0022);
     }
-    static void set_window(
+    static void begin_data(
         unsigned short left, unsigned short right,
         unsigned short top, unsigned short bottom) {
         cmd_data(0x0046, (right << 8) | left);
@@ -125,6 +132,14 @@ public:
         cmd_data(0x0020, left);
         cmd_data(0x0021, top);
         cmd(0x0022);
+        _setup_data();
+    }
+    static void _setup_data() {
+        Interface::clear(LCD_CS);
+        Interface::set(LCD_RS);
+    }
+    static void end_data() {
+        Interface::set(LCD_CS);
     }
     static void cmd(unsigned short c) {
         Interface::ctl(LCD_WR);
@@ -136,17 +151,18 @@ public:
         Interface::ctl(LCD_WR | LCD_CS);
     }
     static void data(unsigned short d) {
-        Interface::ctl(LCD_WR | LCD_RS);
         Interface::set_bus(d >> 8);
-        Interface::ctl(LCD_RS);
-        Interface::ctl(LCD_RS | LCD_WR);
+        Interface::clear(LCD_WR);
+        Interface::set(LCD_WR);
         Interface::set_bus(d & 0xff);
-        Interface::ctl(LCD_RS);
-        Interface::ctl(LCD_RS | LCD_WR | LCD_CS);
+        Interface::clear(LCD_WR);
+        Interface::set(LCD_WR);
     }
     static inline void cmd_data(unsigned short c, unsigned short d) {
         cmd(c);
+        _setup_data();
         data(d);
+        end_data();
     }
 };
 
@@ -207,13 +223,13 @@ public:
         }
 
         //  now, fill with pixels
-        Controller::set_window(left, right - 1, top, bottom - 1);
-
+        Controller::begin_data(left, right - 1, top, bottom - 1);
         for (unsigned short y = top; y != bottom; ++y) {
             for (unsigned char x = left; x != right; ++x) {
                 Controller::data(color);
             }
         }
+        Controller::end_data();
     }
 
     static void text(unsigned short left, unsigned short top,
@@ -223,32 +239,32 @@ public:
 
         unsigned char h = f.height();
         unsigned short oleft = left;
-        set_window(left, top, Controller::width(), top + h);
+        Controller::begin_data(left, top, width(), top + h);
         while (len > 0) {
             void const *ptr;
             unsigned char w;
             if (f.get_char(*str, ptr, w)) {
-                unsigned char w2 = Controller::width() - left;
+                unsigned char w2 = width() - left;
                 if (w > w2) {
                     w = w2;
                 }
-                unsigned char h2 = Controller::height() - top;
+                unsigned char h2 = height() - top;
                 if (h2 > h) {
                     h2 = h;
                 }
                 fling_bits(ptr, w, h2, h, tcolor, bcolor);
                 left += w;
-                if (left >= Controller::width()) {
+                if (left >= width()) {
                     break;
                 }
             }
             else if (*str == '\n') {
                 top += h;
-                if (top >= Controller::width()) {
+                if (top >= width()) {
                     break;
                 }
                 left = oleft;
-                set_window(left, top, Controller::width(), top + h);
+                Controller::begin_data(left, top, width(), top + h);
             }
             // else if (*str == '\t') {
             //     do tabs
@@ -256,6 +272,7 @@ public:
             --len;
             ++str;
         }
+        Controller::end_data();
     }
 
     /* Draw tightly packed bits in two color format. The bits 

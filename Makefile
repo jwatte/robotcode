@@ -54,6 +54,7 @@ PART_blink:=atmega328p
 PART_stepdirsend:=atmega328p
 PART_stepdirrecv:=atmega328p
 PART_display:=atmega328p
+PART_display2:=atmega328p
 PART_readcompass:=atmega328p
 PART_test85:=attiny85
 
@@ -67,6 +68,7 @@ fuses_blink:	fuses_8
 fuses_stepdirsend:	fuses_8
 fuses_stepdirrecv:	fuses_8
 fuses_display:	fuses_20
+fuses_display2:	fuses_20
 fuses_readcompass:	fuses_16
 fuses_test85:	fuses_8_85
 
@@ -126,33 +128,36 @@ define translate_part
 $(if $(TRANSLATE_$(1)),$(TRANSLATE_$(1)),$(1))
 endef
 
+FUSES_B?=-B 200
+FLASH_B?=-B 1
+
 %:	bld/avrbin/%.hex fuses_%
-	avrdude -u -V -p $(call translate_part,$(PART_$@)) -b 115200 -B 1 $(AVR_PROG) -U flash:w:$<:i
+	avrdude -u -V -p $(call translate_part,$(PART_$@)) -b 115200 $(FLASH_B) $(AVR_PROG) -U flash:w:$<:i
 	avr-size bld/avrbin/$@
 
 fuses_8:
 	# 8 MHz, internal osc, 2.7V brown-out, 65k + 4.1ms boot delay
-	avrdude -e -u -V -p m328p -b 115200 -B 200 $(AVR_PROG) -U lfuse:w:0xD2:m -U hfuse:w:0xD9:m -U efuse:w:0xFD:m -U lock:w:0xFF:m
+	avrdude -e -u -V -p m328p -b 115200 $(FUSES_B) $(AVR_PROG) -U lfuse:w:0xD2:m -U hfuse:w:0xD9:m -U efuse:w:0xFD:m -U lock:w:0xFF:m
 
 fuses_tiny_8:
 	# 8 MHz, internal osc, 2.7V brown-out, 65k + 4.1ms boot delay
-	avrdude -e -u -V -p t84 -b 115200 -B 200 $(AVR_PROG) -U lfuse:w:0xD2:m -U hfuse:w:0xDD:m -U efuse:w:0x01:m
+	avrdude -e -u -V -p t84 -b 115200 $(FUSES_B) $(AVR_PROG) -U lfuse:w:0xD2:m -U hfuse:w:0xDD:m -U efuse:w:0x01:m
 
 fuses_8_85:
 	# 8 MHz, internal osc, 2.7V brown-out, 65k + 4.1ms boot delay
-	avrdude -e -u -V -p t85 -b 115200 -B 200 $(AVR_PROG) -U lfuse:w:0xD2:m -U hfuse:w:0xDD:m -U efuse:w:0xFF:m
+	avrdude -e -u -V -p t85 -b 115200 $(FUSES_B) $(AVR_PROG) -U lfuse:w:0xD2:m -U hfuse:w:0xDD:m -U efuse:w:0xFF:m
 
 fuses_16:
 	# 16 MHz, crystal osc, 2.7V brown-out, 16k + 4.1ms boot delay
-	avrdude -e -u -V -p m328p -b 115200 -B 200 $(AVR_PROG) -U lfuse:w:0xE7:m -U hfuse:w:0xDF:m -U efuse:w:0xFD:m -U lock:w:0xFF:m
+	avrdude -e -u -V -p m328p -b 115200 $(FUSES_B) $(AVR_PROG) -U lfuse:w:0xE7:m -U hfuse:w:0xDF:m -U efuse:w:0xFD:m -U lock:w:0xFF:m
 
 fuses_20:
 	# 20 MHz, crystal osc, 2.7V brown-out, 16k + 4.1ms boot delay
-	avrdude -e -u -V -p m328p -b 115200 -B 200 $(AVR_PROG) -U lfuse:w:0xE7:m -U hfuse:w:0xDF:m -U efuse:w:0xFD:m -U lock:w:0xFF:m
+	avrdude -e -u -V -p m328p -b 115200 $(FUSES_B) $(AVR_PROG) -U lfuse:w:0xE7:m -U hfuse:w:0xDF:m -U efuse:w:0xFD:m -U lock:w:0xFF:m
 
 fuses_12:
 	# 12 MHz, crystal osc, 2.7V brown-out, 16k + 4.1ms boot delay
-	avrdude -e -u -V -p m328p -b 115200 -B 200 $(AVR_PROG) -U lfuse:w:0xE7:m -U hfuse:w:0xDF:m -U efuse:w:0xFD:m -U lock:w:0xFF:m
+	avrdude -e -u -V -p m328p -b 115200 $(FUSES_B) $(AVR_PROG) -U lfuse:w:0xE7:m -U hfuse:w:0xDF:m -U efuse:w:0xFD:m -U lock:w:0xFF:m
 
 -include $(patsubst %.o,%.d,$(CPP_OBJS))
 -include $(patsubst %.o,%.d,$(CPP_TEST_OBJS))

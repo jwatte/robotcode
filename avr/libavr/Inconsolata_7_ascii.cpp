@@ -2,7 +2,10 @@
 // extern unsigned char Inconsolata_7_ascii_data[];
 // Font Inconsolata_7_ascii(Inconsolata_7_ascii_data);
 
-unsigned char Inconsolata_7_ascii_data[] = {
+#include <avr/pgmspace.h>
+
+extern unsigned char const Inconsolata_7_ascii_data[] PROGMEM;
+unsigned char const Inconsolata_7_ascii_data[] PROGMEM = {
   0xf0, 0x20, 0x7e, 0x8,
 0xc4,0x0, // 32
 0xc8,0x0, // 33

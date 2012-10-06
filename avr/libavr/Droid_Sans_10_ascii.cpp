@@ -4,6 +4,7 @@
 
 #include <avr/pgmspace.h>
 
+extern unsigned char const Droid_Sans_10_ascii_data[] PROGMEM;
 unsigned char const Droid_Sans_10_ascii_data[] PROGMEM = {
   0xf0, 0x20, 0x7e, 0xc,
 0xc4,0x0, // 32

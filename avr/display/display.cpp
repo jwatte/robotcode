@@ -3,24 +3,14 @@
 
 #include <libavr.h>
 #include <lcd.h>
+#include <stdio.h>
 
 extern unsigned char const Droid_Sans_10_ascii_data[] PROGMEM;
-Font Droid_10(Droid_Sans_10_ascii_data);
+Font TheFont(Droid_Sans_10_ascii_data);
 
 bool lit = false;
-unsigned char offset = 0;
-unsigned short colors[] = {
-    0xffff,
-    0x07ff,
-    0xf81f,
-    0xffe0,
-    0xf800,
-    0x07e0,
-    0x001f,
-    0x0000
-};
 
-void floop(void *) {
+void floop(void *n) {
     if (lit) {
         PORTB |= (1 << 5);
     }
@@ -29,15 +19,11 @@ void floop(void *) {
     }
     lit = !lit;
 
-    LCD::clear(colors[offset]);
-    offset += 1;
-    if (offset >= sizeof(colors)/sizeof(colors[0])) {
-        offset = 0;
-    }
+    char txt[32];
+    sprintf(txt, "Value %d        ", (int)n);
+    LCD::text(5, 5, 0x0000, 0xffff, txt, strlen(txt), TheFont);
 
-    LCD::text(5, 5, 0xffff, 0x0000, "floop", 5, Droid_10);
-
-    after(500, floop, 0);
+    after(0, floop, (char *)n + 1);
 }
 
 void setup() {
@@ -53,5 +39,6 @@ void setup() {
     LCD::init();
     after(500, floop, 0);
     PORTB &= ~(1 << 5);
+    LCD::clear(0xffff);
 }
 

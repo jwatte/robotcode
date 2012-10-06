@@ -2,7 +2,10 @@
 // extern unsigned char Droid_Sans_16_ascii_data[];
 // Font Droid_Sans_16_ascii(Droid_Sans_16_ascii_data);
 
-unsigned char Droid_Sans_16_ascii_data[] = {
+#include <avr/pgmspace.h>
+
+extern unsigned char const Droid_Sans_16_ascii_data[] PROGMEM;
+unsigned char const Droid_Sans_16_ascii_data[] PROGMEM = {
   0xf0, 0x20, 0x7e, 0x13,
 0xc4,0x0, // 32
 0xce,0x0, // 33

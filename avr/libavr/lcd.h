@@ -98,7 +98,7 @@ public:
             0x003D,0x000D,
             0x0016,0x0007,
             0x0002,0x0013,
-            0x0003,0x0003,
+            0x0003,0x000B,  //  0x0003 for horizontal GRAM writes, 000B for vertical
             0x0001,0x0127,
             0x0008,0x0303,
             0x000A,0x000B,
@@ -122,6 +122,7 @@ public:
             cmd_data(pcmd, pdat);
         }
         cmd(0x0022);
+        end_data();
     }
     static void begin_data(
         unsigned short left, unsigned short right,
@@ -139,7 +140,9 @@ public:
         Interface::set(LCD_RS);
     }
     static void end_data() {
-        Interface::set(LCD_CS);
+        //  pull as much as possible down, to avoid wasting battery
+        Interface::ctl(LCD_CS);
+        Interface::set_bus(0);
     }
     static void cmd(unsigned short c) {
         Interface::ctl(LCD_WR);
@@ -168,8 +171,8 @@ public:
 
 struct font_desc {
     unsigned char magic;
-    unsigned char first_char;
-    unsigned char num_chars;
+    unsigned char min_char;
+    unsigned char max_char;
     unsigned char height;
     unsigned short offset[/*num_chars + 1*/];
     //unsigned char bytes[];
@@ -184,7 +187,10 @@ public:
     unsigned char height() const;
     bool get_char(unsigned char val, void const *&oPtr, unsigned char &ow) const;
 private:
-    void const *data_;
+    void const *data_;  //  in progmem
+    font_desc desc_;    //  loaded
+    static char buf_[64];   //  I'm saying no char is bigger than this --
+                            //  for really large fonts, this is not true!
 };
 
 template<
@@ -222,7 +228,8 @@ public:
             return;
         }
 
-        //  now, fill with pixels
+        //  now, fill with pixels -- the fill is actually top-down, but
+        //  the number of pixels is the same.
         Controller::begin_data(left, right - 1, top, bottom - 1);
         for (unsigned short y = top; y != bottom; ++y) {
             for (unsigned char x = left; x != right; ++x) {
@@ -239,23 +246,30 @@ public:
 
         unsigned char h = f.height();
         unsigned short oleft = left;
-        Controller::begin_data(left, top, width(), top + h);
+        bool drawing = true;
+        if (top + h > height()) {
+            h = height() - top;
+        }
+        Controller::begin_data(left, width() - 1, top, top + h - 1);
         while (len > 0) {
             void const *ptr;
             unsigned char w;
-            if (f.get_char(*str, ptr, w)) {
-                unsigned char w2 = width() - left;
-                if (w > w2) {
-                    w = w2;
+            LCDImpl::set_bus(0); //  save battery while reading flash
+            if (f.get_char(*(unsigned char *)str, ptr, w)) {
+                if (drawing) {
+                    unsigned char w2 = width() - left;
+                    if (w > w2) {
+                        w = w2;
+                    }
+                    unsigned char h2 = height() - top;
+                    if (h2 > h) {
+                        h2 = h;
+                    }
+                    fling_bits(ptr, w, h2, h, tcolor, bcolor);
+                    left += w;
                 }
-                unsigned char h2 = height() - top;
-                if (h2 > h) {
-                    h2 = h;
-                }
-                fling_bits(ptr, w, h2, h, tcolor, bcolor);
-                left += w;
                 if (left >= width()) {
-                    break;
+                    drawing = false;
                 }
             }
             else if (*str == '\n') {
@@ -264,7 +278,8 @@ public:
                     break;
                 }
                 left = oleft;
-                Controller::begin_data(left, top, width(), top + h);
+                drawing = true;
+                Controller::begin_data(left, width() - 1, top, top + h - 1);
             }
             // else if (*str == '\t') {
             //     do tabs
@@ -301,6 +316,7 @@ public:
                     }
                 }
                 data = data << 1;
+                bits -= 1;
             }
             w -= 1;
         }

@@ -33,11 +33,11 @@ def printarc(lx = 1.125, d = 1.0, z = 0.35):
     print "G01Z0.1F05"
     print ""
 
-#print "(front left)"
-#printarc(1.125)
-#print "(front right)"
-#printarc(7.875)
-print "(rear left)"
-printarc(1.125 - 0.3420)
-print "(rear right)"
-printarc(7.875 + 0.3420)
+print "(front left)"
+printarc(1.125)
+print "(front right)"
+printarc(7.875)
+#print "(rear left)"
+#printarc(1.125 - 0.3420)
+#print "(rear right)"
+#printarc(7.875 + 0.3420)

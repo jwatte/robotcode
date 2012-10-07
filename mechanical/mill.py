@@ -272,8 +272,8 @@ def print_ball(props):
 props = Props()
 
 is_top_bottom = True
-is_rough_port = False
-is_ball = False;
+is_rough_port = True
+is_ball = True;
 
 print_header(props)
 

@@ -1,6 +1,7 @@
 
 #include "lcd.h"
 
+#if HAS_UTFT
 
 char Font::buf_[sizeof(Font::buf_)];
 
@@ -44,4 +45,6 @@ bool Font::get_char(unsigned char val, void const *&oPtr, unsigned char &ow) con
     ow = ret ? (offset2 - offset) * 8 / height() : 1;
     return ret;
 }
+
+#endif
 

@@ -7,6 +7,8 @@
 #include <avr/pgmspace.h>
 #include <libavr.h>
 
+#if HAS_UTFT
+
 /*
    This interface uses the 8-bit bus, and maps the signals as
    follows:
@@ -324,5 +326,8 @@ public:
 };
 
 typedef LCDImpl<> LCD;
+
+#endif
+
 
 #endif  //  avr_lcd_h

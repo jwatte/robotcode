@@ -5,6 +5,8 @@
 #include <lcd.h>
 #include <stdio.h>
 
+#if HAS_UTFT
+
 extern unsigned char const Droid_Sans_10_ascii_data[] PROGMEM;
 Font TheFont(Droid_Sans_10_ascii_data);
 
@@ -41,4 +43,6 @@ void setup() {
     PORTB &= ~(1 << 5);
     LCD::clear(0xffff);
 }
+
+#endif
 

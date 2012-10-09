@@ -23,6 +23,7 @@ public:
     Property() {}
     virtual std::string const &name() = 0;
     virtual PropertyType type() = 0;
+    virtual bool editable() = 0;
     template<typename T> T get() {
         char data[sizeof(T)];
         T *ret = new(data) T();
@@ -30,11 +31,14 @@ public:
         return *ret;
     }
     template<typename T> void set(T const &v) {
-        set_value(property_type<T>::instance(), &v);
+        set_value(property_type<T>::instance(), &v, false);
+    }
+    template<typename T> void edit(T const &v) {
+        set_value(property_type<T>::instance(), &v, true);
     }
 protected:
     virtual void get_value(property_type_base const &base, void *ref) = 0;
-    virtual void set_value(property_type_base const &base, void const *t) = 0;
+    virtual void set_value(property_type_base const &base, void const *t, bool is_edit) = 0;
 };
 
 

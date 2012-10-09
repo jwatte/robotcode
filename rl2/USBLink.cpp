@@ -300,5 +300,6 @@ void USBLink::set_board(unsigned char ix, boost::shared_ptr<Module> const &b) {
             boost::shared_ptr<Board>());
     }
     boards_[ix] = b;
+    b->set_return(this);
 }
 

@@ -11,7 +11,27 @@
 
 #include <FL/Fl_Box.H>
 #include <FL/Fl_RGB_Image.H>
+#include <FL/Fl_Input.H>
 
+
+class ClickableBox : public Fl_Box {
+public:
+    ClickableBox(PropertyDisplay *owner, int x, int y, int w, int h, char const *l = 0) :
+        Fl_Box(x, y, w, h, l),
+        owner_(owner) {
+    }
+    int handle(int event) {
+        if (Fl_Box::handle(event)) {
+            return 1;
+        }
+        if (event == 1) {   //  mouse down
+            owner_->on_click();
+            return 1;
+        }
+        return 0;
+    }
+    PropertyDisplay *owner_;
+};
 
 PropertyDisplay *PropertyDisplay::create(boost::shared_ptr<Property> const &prop) {
     int h = 20;
@@ -30,6 +50,7 @@ PropertyDisplay::PropertyDisplay(int x, int y, int w, int h,
     prop_(prop),
     name_(0),
     output_(0),
+    edit_(0),
     box_(0),
     flimage_(0) {
     begin();
@@ -40,10 +61,16 @@ PropertyDisplay::PropertyDisplay(int x, int y, int w, int h,
     }
     else {
         name_ = new Fl_Box(x, y, 120, 20);
-        output_ = new Fl_Box(x + 120, y, w - 120, 20);
+        output_ = new ClickableBox(this, x + 120, y, w - 120, 20);
         output_->labelfont(FL_HELVETICA);
         output_->labelsize(12);
         output_->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+        if (prop->editable()) {
+            edit_ = new Fl_Input(x + 120, y, w - 120, 20);
+            edit_->hide();
+            edit_->when(FL_WHEN_RELEASE_ALWAYS | FL_WHEN_ENTER_KEY_ALWAYS);
+            edit_->callback(&PropertyDisplay::edit_tramp, this);
+        }
     }
     name_->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
     name_->labelfont(FL_HELVETICA + FL_BOLD);
@@ -58,6 +85,51 @@ PropertyDisplay::PropertyDisplay(int x, int y, int w, int h,
 PropertyDisplay::~PropertyDisplay() {
     static_cast<ListenerTramp &>(*tramp_).detach();
     delete flimage_;
+}
+
+void PropertyDisplay::edit_tramp(Fl_Widget *, void *d) {
+    reinterpret_cast<PropertyDisplay *>(d)->on_edit();
+}
+
+void PropertyDisplay::on_click() {
+    if (edit_ != 0) {
+        output_->hide();
+        edit_->value(value_.c_str());
+        edit_->show();
+    }
+}
+
+static bool set_prop_value(boost::shared_ptr<Property> const &prop, std::string const &ival, std::string &oerr) {
+    try {
+        switch (prop->type()) {
+            case TypeLong:
+                prop->edit<long>(boost::lexical_cast<long>(ival));
+                break;
+            case TypeDouble:
+                prop->edit<double>(boost::lexical_cast<double>(ival));
+                break;
+            case TypeString:
+                prop->edit<std::string>(ival);
+                break;
+            default:
+                throw std::runtime_error("Unknown property type in PropertyDisplay::on_edit()");
+        }
+    }
+    catch (std::exception const &x) {
+        oerr = x.what();
+        return false;
+    }
+    return true;
+}
+
+void PropertyDisplay::on_edit() {
+    edit_->hide();
+    output_->label("");
+    output_->show();
+    std::string val(edit_->value()), err;
+    if (!set_prop_value(prop_, val, err)) {
+        std::cerr << "Property value error: " << err << std::endl;
+    }
 }
 
 void PropertyDisplay::on_change() {

@@ -114,16 +114,21 @@ boost::shared_ptr<Property> Board::get_property_at(size_t ix) {
     return props_[ix];
 }
 
+void Board::set_return(IReturn *r) {
+    return_ = r;
+}
+
 Board::Board(std::string const &name, unsigned char dataSize, unsigned char type) :
     type_(type),
     dirty_(false),
-    name_(name)
-{
+    name_(name),
+    return_(0) {
     data_.resize(dataSize);
 }
 
-size_t Board::add_uchar_prop(std::string const &name, unsigned char offset, double scale) {
+size_t Board::add_uchar_prop(std::string const &name, unsigned char offset, double scale, bool editable) {
     assert(offset < data_.size());
+    //  todo: editor that uses return_ to fling back to USBLink
     if (scale == 0) {
         boost::shared_ptr<Property> prop(new PropertyImpl<long>(name));
         boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<unsigned char, long>(
@@ -141,8 +146,9 @@ size_t Board::add_uchar_prop(std::string const &name, unsigned char offset, doub
     return props_.size() - 1;
 }
 
-size_t Board::add_schar_prop(std::string const &name, unsigned char offset, double scale) {
+size_t Board::add_schar_prop(std::string const &name, unsigned char offset, double scale, bool editable) {
     assert(offset < data_.size());
+    //  todo: editor that uses return_ to fling back to USBLink
     if (scale == 0) {
         boost::shared_ptr<Property> prop(new PropertyImpl<long>(name));
         boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<char, long>(
@@ -160,8 +166,9 @@ size_t Board::add_schar_prop(std::string const &name, unsigned char offset, doub
     return props_.size() - 1;
 }
 
-size_t Board::add_sshort_prop(std::string const &name, unsigned char offset, double scale) {
+size_t Board::add_sshort_prop(std::string const &name, unsigned char offset, double scale, bool editable) {
     assert(offset < data_.size());
+    //  todo: editor that uses return_ to fling back to USBLink
     if (scale == 0) {
         boost::shared_ptr<Property> prop(new PropertyImpl<long>(name));
         boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<short, long>(

@@ -13,3 +13,4 @@ bin
 capture.bin
 *.tga
 *.jpg
+logfile.log

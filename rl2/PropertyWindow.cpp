@@ -38,7 +38,7 @@ PropertyWindow::PropertyWindow(WindowOwner *owner, boost::shared_ptr<Module> mod
     mod_(mod) {
     update_next();
     win()->begin();
-    browser_ = new PropertyBrowser(0, 0, 486, 512);
+    browser_ = new PropertyBrowser(0, 0, win()->w(), win()->h());
     build();
     win()->end();
 }

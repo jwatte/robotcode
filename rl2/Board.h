@@ -28,11 +28,6 @@ public:
 };
 
 
-class IReturn {
-public:
-    virtual void set_data(unsigned char offset, void const *data, unsigned char cnt) = 0;
-};
-
 class Board : public cast_as_impl<Module, Board> {
 public:
     virtual unsigned char type();
@@ -43,7 +38,7 @@ public:
     virtual std::string const &name();
     virtual size_t num_properties();
     virtual boost::shared_ptr<Property> get_property_at(size_t ix);
-    virtual void set_return(IReturn *ret);
+    virtual void set_return(boost::shared_ptr<IReturn> const &ret);
 protected:
     Board(std::string const &name, unsigned char dataSize, unsigned char type);
     size_t add_uchar_prop(std::string const &name, unsigned char offset, double scale, bool editable = false);
@@ -60,7 +55,7 @@ protected:
     bool dirty_;
     std::string name_;
     std::vector<unsigned char> data_;
-    IReturn *return_;
+    boost::shared_ptr<IReturn> return_;
 };
 
 #endif  //  rl2_Board_h

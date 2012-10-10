@@ -114,15 +114,14 @@ boost::shared_ptr<Property> Board::get_property_at(size_t ix) {
     return props_[ix];
 }
 
-void Board::set_return(IReturn *r) {
+void Board::set_return(boost::shared_ptr<IReturn> const &r) {
     return_ = r;
 }
 
 Board::Board(std::string const &name, unsigned char dataSize, unsigned char type) :
     type_(type),
     dirty_(false),
-    name_(name),
-    return_(0) {
+    name_(name) {
     data_.resize(dataSize);
 }
 

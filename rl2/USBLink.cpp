@@ -14,9 +14,15 @@
 
 class Transfer {
 public:
-    Transfer(unsigned char ep) : ep_(ep), xfer_(0), pack_(0) {
+    Transfer(libusb_device_handle dh, unsigned char iep, unsigned char oep) :
+        dh_(dh),
+        iep_(iep),
+        oep_(oep),
+        xfer_(0),
+        pack_(0) {
         xfer_ = libusb_alloc_transfer(0);
-        busy_ = false;
+        busyRead_ = false;
+        busyWrite_ = false;
     }
     ~Transfer() {
         libusb_free_transfer(xfer_);
@@ -24,11 +30,11 @@ public:
             pack_->destroy();
         }
     }
-    void recv(libusb_device_handle *dh) {
+    void recv() {
         pack_ = Packet::create();
-        busy_ = true;
-        xfer_->dev_handle = dh;
-        libusb_fill_bulk_transfer(xfer_, dh, ep_, pack_->buffer(), pack_->max_size(),
+        busyRead_ = true;
+        xfer_->dev_handle = dh_;
+        libusb_fill_bulk_transfer(xfer_, dh_, ep_, pack_->buffer(), pack_->max_size(),
                 &Transfer::callback, this, 1000); //  a second is a long time!
         int err = libusb_submit_transfer(xfer_);
         if (err != 0) {
@@ -36,18 +42,26 @@ public:
             pack_->destroy();
             pack_ = 0;
             usleep(10000);
-            busy_ = false;
+            busyRead_ = false;
         }
+    }
+    void write(Packet *p) {
+        assert(!busyWrite_);
+        busyWrite_ = true;
+        ...     second transfer ...
     }
     static void callback(libusb_transfer *x) {
         ((Transfer *)x->user_data)->on_callback();
     }
     void on_callback() {
         pack_->set_size(xfer_->actual_length);
-        busy_ = false;
+        busyRead_ = false;
     }
-    bool busy() const {
-        return busy_;
+    bool busy_read() const {
+        return busyRead_;
+    }
+    bool busy_write() const {
+        return busyWrite_;
     }
     Packet *ack_pack() {
         Packet *ret = pack_;
@@ -57,13 +71,29 @@ public:
     unsigned char ep_;
     libusb_transfer *xfer_;
     Packet *pack_;
-    bool busy_;
+    bool busyRead_;
+    bool busyWrite_;
+};
+
+
+class USBReturn : public IReturn {
+public:
+    USBReturn(unsigned char board, USBLink *link) :
+        board_(board),
+        link_(link) {
+    }
+    virtual void set_data(unsigned char offset, void const *data, unsigned char sz) {
+        link_->board_return(board_, offset, data, sz);
+    }
+    unsigned char board_;
+    USBLink *link_;
 };
 
 boost::shared_ptr<Module> USBLink::open(boost::shared_ptr<Settings> const &set) {
     std::string vid("f000");
     std::string pid("0001");
-    std::string endpoint("82");
+    std::string ep_input("82");
+    std::string ep_output("3");
     auto v = set->get_value("vid");
     if (!!v) {
         vid = v->get_string();
@@ -72,11 +102,15 @@ boost::shared_ptr<Module> USBLink::open(boost::shared_ptr<Settings> const &set) 
     if (!!v) {
         pid = v->get_string();
     }
-    v = set->get_value("endpoint");
+    v = set->get_value("input");
     if (!!v) {
-        endpoint = v->get_string();
+        ep_input = v->get_string();
     }
-    return boost::shared_ptr<Module>(new USBLink(vid, pid, endpoint));
+    v = set->get_value("output");
+    if (!!v) {
+        ep_output = v->get_string();
+    }
+    return boost::shared_ptr<Module>(new USBLink(vid, pid, ep_input, ep_output));
 }
 
 void USBLink::step() {
@@ -143,14 +177,28 @@ void USBLink::thread_fn() {
     }
 
     while (!thread_->interruption_requested()) {
-        if (!xfer_->busy()) {
+        bool tosleep = true;
+        if (!xfer_->busy_read()) {
             if (xfer_->pack_) {
+                //  I should only do this once per packet
                 pickup_.release();
+                //  this will block until stepped from other side,
+                //  which is bad for writing
                 return_.acquire();
             }
-            xfer_->recv(dh_);
+            //  this should happen once I have the returned packet
+            xfer_->recv();
+            tosleep = false;
         }
-        else {
+        if (!xfer_->busy_write()) {
+            boost::exclusive_lock<boost::mutex> lock(queueLock_);
+            if (queue_.size()) {
+                xfer_->write(*queue_.front());
+                queue_.pop_front();
+                tosleep = false;
+            }
+        }
+        if (tosleep) {
             usleep(5000);
         }
         libusb_handle_events(ctx_);
@@ -198,10 +246,11 @@ static std::string str_err_packets("err_packets");
 static std::string str_drop_packets("drop_packets");
 static std::string str_err_bytes("err_bytes");
 
-USBLink::USBLink(std::string const &vid, std::string const &pid, std::string const &endpoint) :
+USBLink::USBLink(std::string const &vid, std::string const &pid, std::string const &ep_input, std::string const &ep_output) :
     vid_(vid),
     pid_(pid),
-    endpoint_(endpoint),
+    ep_input_(ep_input),
+    ep_output_(ep_output),
     ctx_(0),
     dh_(0),
     xfer_(0),
@@ -226,12 +275,13 @@ USBLink::USBLink(std::string const &vid, std::string const &pid, std::string con
     char *o = 0;
     ivid_ = (unsigned short)strtol(vid_.c_str(), &o, 16);
     ipid_ = (unsigned short)strtol(pid_.c_str(), &o, 16);
-    iep_ = (unsigned short)strtol(endpoint_.c_str(), &o, 16);
-    xfer_ = new Transfer(iep_);
+    iep_ = (unsigned short)strtol(ep_input_.c_str(), &o, 16);
+    oep_ = (unsigned short)strtol(ep_output_.c_str(), &o, 16);
     dh_ = libusb_open_device_with_vid_pid(ctx_, ivid_, ipid_);
     if (!dh_ ) {
         throw std::runtime_error("Could not find USB device " + name_);
     }
+    xfer_ = new Transfer(dh_, iep_, oep_);
     libusb_device_descriptor ldd;
     int er;
     er = libusb_get_device_descriptor(libusb_get_device(dh_), &ldd);
@@ -291,6 +341,22 @@ void USBLink::dispatch_board(unsigned char board, unsigned char const *info, uns
     }
 }
 
+void USBLink::board_return(unsigned char ix, unsigned char offset, void const *data, unsigned char sz) {
+    if (sz > 30) {
+        throw std::runtime_error("Too large return packet in USBLink::board_return()")
+    }
+    Packet *p = Packet::create();
+    p->set_size(4 + sz);
+    unsigned char *msg = p->buffer();
+    msg[0] = 0xed;
+    msg[1] = 'm';
+    msg[2] = sz + 1;
+    msg[3] = ix;
+    memcpy(&msg[4], data, sz);
+    boost::exclusive_lock<boost::mutex> lock(queueLock_);
+    queue_.push_back(p);
+}
+
 void USBLink::set_board(unsigned char ix, boost::shared_ptr<Module> const &b) {
     if (ix > MAX_BOARD_INDEX) {
         throw std::runtime_error("Board index out of range in USBLink::set_board()");
@@ -300,6 +366,6 @@ void USBLink::set_board(unsigned char ix, boost::shared_ptr<Module> const &b) {
             boost::shared_ptr<Board>());
     }
     boards_[ix] = b;
-    b->set_return(this);
+    b->set_return(boost::shared_ptr<IReturn>(new USBReturn(ix, this)));
 }
 

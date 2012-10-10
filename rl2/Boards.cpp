@@ -125,11 +125,17 @@ boost::shared_ptr<Module> USBBoard::open(boost::shared_ptr<Settings> const &set)
 
 static std::string str_USBBoard = "USB board";
 static std::string str_r_voltage = "r_voltage";
+static std::string str_r_badsync = "r_badsync";
+static std::string str_r_badcmd = "r_badcmd";
+static std::string str_r_naks = "r_naks";
 
 USBBoard::USBBoard(double top_voltage) :
     Board(str_USBBoard, sizeof(info_USBInterface), USB_BOARD) {
 
     add_uchar_prop(str_r_voltage, 0, top_voltage/256);
+    add_uchar_prop(str_r_badsync, 1, 0);
+    add_uchar_prop(str_r_badcmd, 2, 0);
+    add_uchar_prop(str_r_naks, 3, 0);
 }
 
 

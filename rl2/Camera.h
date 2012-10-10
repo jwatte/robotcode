@@ -20,6 +20,7 @@ public:
 
     virtual size_t num_properties();
     virtual boost::shared_ptr<Property> get_property_at(size_t ix);
+    virtual void set_return(boost::shared_ptr<IReturn> const &) {}
     ~Camera();
 private:
     Camera(std::string const &devname, unsigned int capWidth, unsigned int capHeight);

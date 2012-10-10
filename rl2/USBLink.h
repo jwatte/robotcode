@@ -5,6 +5,7 @@
 #include "semaphore.h"
 #include <assert.h>
 #include <boost/thread.hpp>
+#include <deque.h>
 
 struct libusb_context;
 struct libusb_device_handle;
@@ -35,24 +36,32 @@ public:
 
     virtual size_t num_properties();
     virtual boost::shared_ptr<Property> get_property_at(size_t ix);
+    virtual void set_return(boost::shared_ptr<IReturn> const &) {}
     ~USBLink();
     virtual void set_board(unsigned char ix, boost::shared_ptr<Module> const &b);
 private:
-    USBLink(std::string const &vid, std::string const &pid, std::string const &endpoint);
+    friend class USBReturn;
+    USBLink(std::string const &vid, std::string const &pid, std::string const &ep_input,
+        std::string const &ep_output);
     void thread_fn();
     void dispatch_cmd(unsigned char const *data, unsigned char sz);
     void dispatch_board(unsigned char board, unsigned char const *info, unsigned char sz);
+    void board_return(unsigned char board, unsigned char offset, void const *data, unsigned char sz);
     std::string vid_;
     std::string pid_;
-    std::string endpoint_;
+    std::string ep_input_;
+    std::string ep_output_;
     unsigned short ivid_;
     unsigned short ipid_;
     unsigned int iep_;
+    unsigned int oep_;
     libusb_context *ctx_;
     libusb_device_handle *dh_;
     Transfer *xfer_;
     semaphore pickup_;
     semaphore return_;
+    boost::mutex queueLock_;
+    std::deque<Packet *> queue_;
     boost::shared_ptr<boost::thread> thread_;
     size_t inPackets_;
     size_t outPackets_;

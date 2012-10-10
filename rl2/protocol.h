@@ -42,6 +42,10 @@ struct info_SensorInput {
 
 struct info_USBInterface {
     unsigned char r_voltage;
+    unsigned char r_badsync;
+    unsigned char r_badcmd;
+    unsigned char r_naks;
+    unsigned char r_overrun;
 };
 
 struct info_IMU {

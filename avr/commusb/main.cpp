@@ -39,6 +39,8 @@ TWIMaster *twi;
 
 #define MAXCMD 30
 static unsigned char cmdbuf[2+MAXCMD];
+static unsigned char inbuf[4 + MAXCMD];
+static unsigned char inbuf_ptr;
 
 static void cmd_start(char ch) {
     PORTD |= SERIAL_INDICATOR;
@@ -97,6 +99,11 @@ public:
 ITWIUser *ITWIUser::first_;
 
 
+enum {
+    PENDING_SEND = 1,
+    PENDING_AWAITING_DATA = 2,
+    PENDING_RECEIVED = 3
+};
 class MyMaster : public ITWIMaster {
 public:
         virtual void data_from_slave(unsigned char n, void const *data) {
@@ -106,18 +113,62 @@ public:
             user_->data_from_slave(n, data);
         }
         virtual void xmit_complete() {
+            if (pending_ == PENDING_AWAITING_DATA) {
+                pending_ = 0;
+                return;
+            }
             if (!user_) {
                 fatal(FATAL_UNEXPECTED);
             }
             user_->xmit_complete();
         }
         virtual void nack() {
+            ++g_info.r_naks;
+            if (pending_) {
+                pending_ = 0;
+                return;
+            }
             if (!user_) {
                 fatal(FATAL_UNEXPECTED);
             }
             user_->nack();
         }
+        virtual bool to_slave(unsigned char sl, unsigned char sz, unsigned char const *ptr) {
+            if (sz + 2U > sizeof(to_slave_buf_)) {
+                return false;
+            }
+            if (pending_) {
+                return false;
+            }
+            memcpy(&to_slave_buf_[2], ptr, sz);
+            to_slave_buf_[0] = sl;
+            to_slave_buf_[1] = sz;
+            pending_ = PENDING_SEND;
+            //  send immediately if possible
+            if (!user_ && !twi->is_busy()) {
+                service_pending();
+            }
+            return true;
+        }
+        void service_pending() {
+            switch (pending_) {
+            case PENDING_SEND:
+                pending_++;
+                twi->send_to(to_slave_buf_[1], &to_slave_buf_[2], to_slave_buf_[0]);
+                break;
+            case PENDING_AWAITING_DATA:
+                break;
+            case PENDING_RECEIVED:
+                pending_ = 0;
+                break;
+            default:
+                fatal(FATAL_UNEXPECTED);
+                break;
+            }
+        }
         ITWIUser *user_;
+        unsigned char to_slave_buf_[2 + MAXCMD];
+        unsigned char pending_;
 };
 MyMaster master;
 
@@ -179,6 +230,10 @@ void ITWIUser::enqueue() {
 void ITWIUser::next(void *) {
     unsigned char at = 10;
     if (master.user_ || twi->is_busy()) {
+        at = 1;
+    }
+    else if (master.pending_) {
+        master.service_pending();
         at = 1;
     }
     else if (first_ != 0) {
@@ -364,6 +419,80 @@ void blink(bool on) {
     digitalWrite(LED_PIN, on ? HIGH : LOW);
 }
 
+void handle_input_cmd(unsigned char cmd, unsigned char sz, unsigned char const *data) {
+    switch (cmd) {
+    case 'm':
+        if (sz < 2) {   //  dst addr + actual data
+            ++g_info.r_badcmd;
+        }
+        else {
+            if (!master.to_slave(data[0], sz-1, &data[1])) {
+                ++g_info.r_overrun;
+            }
+        }
+        break;
+    default:
+        //  bad cmd
+        ++g_info.r_badcmd;
+        break;
+    }
+}
+
+void recv_serial(void *) {
+    after(1, &recv_serial, 0);
+    unsigned char n = uart_available();
+again:
+    if (n > 0) {
+        if (inbuf_ptr == 0) {
+            unsigned char ch = uart_getch();
+            --n;
+            if (ch == 0xed) {
+                inbuf_ptr = 1;
+                inbuf[0] = 0xed;
+            }
+            else {
+                //  bad sync!
+                ++g_info.r_badsync;
+            }
+            goto again;
+        }
+        if (n + inbuf_ptr > sizeof(inbuf)) {
+            n = sizeof(inbuf) - inbuf_ptr;
+        }
+        n = uart_read(n, &inbuf[inbuf_ptr]);
+        inbuf_ptr += n;
+        if (inbuf_ptr > 2) {
+            //  have length and command
+            unsigned char lc = inbuf[1] + 2;
+            if (lc > sizeof(inbuf)) {
+                //  bad command;
+                inbuf_ptr = 0;
+            }
+            else if (inbuf_ptr >= lc) {
+                handle_input_cmd(inbuf[2], inbuf[1] - 1, &inbuf[3]);
+                if (inbuf_ptr > lc) {
+                    memmove(&inbuf[0], &inbuf[inbuf[1] + 2], inbuf_ptr - lc);
+                    if (inbuf[0] != 0xed) {
+                        //  bad sync
+                        ++g_info.r_badsync;
+                        inbuf_ptr = 0;
+                    }
+                    else {
+                        inbuf_ptr -= lc;
+                    }
+                }
+                else {
+                    //  exact packet size -- go back looking for sync byte
+                    inbuf_ptr = 0;
+                }
+            }
+            else {
+                //  do nothing yet
+            }
+        }
+    }
+}
+
 
 void read_voltage(void *);
 
@@ -397,6 +526,7 @@ void setup() {
     imu.enqueue();
     delay(20);
     after(1, &ITWIUser::next, 0);
+    after(1, &recv_serial, 0);
     after(1000, &read_voltage, 0);
     digitalWrite(LED_PIN, LOW);
 }

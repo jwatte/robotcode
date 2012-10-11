@@ -19,7 +19,7 @@
    CS:       PORTB2
    RD:       Tie high
 
-   RST:      Tie to AVR /RESET pin
+   RST:      Tie to AVR /RESET pin or manually managed
 
    The idea is to keep the following pins free:
    - XTAL (PB6/7)

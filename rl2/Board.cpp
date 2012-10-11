@@ -3,9 +3,10 @@
 #include <boost/foreach.hpp>
 
 
-class PropUpdate {
+class PropUpdate : public Listener {
 public:
     virtual void update() = 0;
+    virtual void set_prop(boost::shared_ptr<Property> const &pr) = 0;
 };
 
 template<typename BaseType, typename PropType>
@@ -27,20 +28,32 @@ public:
         PropType pt = xlat_->translate(&bt);
         prop_->set<PropType>(pt);
     }
+
+    virtual void set_prop(boost::shared_ptr<Property> const &pr) {
+        throw std::runtime_error("Should not set_prop() on a Translate property");
+    }
+    void on_change() {
+        throw std::runtime_error("Should not edit a Translate property");
+    }
 };
 
 template<typename BaseType, typename PropType>
 class PropUpdateImpl : public PropUpdate {
 public:
-    PropUpdateImpl(boost::shared_ptr<Property> const &prop, void const *src,
+    PropUpdateImpl(Board *brd, void const *src,
         double scale) :
-        prop_(prop),
+        brd_(brd),
         src_(src),
         scale_(scale) {
     }
+    Board *brd_;
     boost::shared_ptr<Property> prop_;
     void const *src_;
     double scale_;
+
+    void set_prop(boost::shared_ptr<Property> const &prop) {
+        prop_ = prop;
+    }
 
     void update() {
         BaseType bt;
@@ -53,6 +66,13 @@ public:
             pt = (PropType)bt;
         }
         prop_->set<PropType>(pt);
+    }
+
+    //  edit
+    void on_change() {
+        PropType pt(prop_->get<PropType>());
+        BaseType bt(static_cast<BaseType>(pt / (scale_ != 0 ? scale_ : 1.0) + 0.5));
+        brd_->edit(src_, &bt, sizeof(bt));
     }
 };
 
@@ -118,6 +138,14 @@ void Board::set_return(boost::shared_ptr<IReturn> const &r) {
     return_ = r;
 }
 
+void Board::edit(void const *dst, void const *src, size_t sz) {
+    size_t offset = (char const *)dst - (char const *)&data_[0];
+    assert(sz <= 4);
+    assert(offset + sz <= data_.size());
+    std::cerr << "Sending return for board " << name_ << " offset " << offset << " size " << sz << std::endl;
+    return_->set_data(offset, src, (unsigned char)sz);
+}
+
 Board::Board(std::string const &name, unsigned char dataSize, unsigned char type) :
     type_(type),
     dirty_(false),
@@ -127,18 +155,17 @@ Board::Board(std::string const &name, unsigned char dataSize, unsigned char type
 
 size_t Board::add_uchar_prop(std::string const &name, unsigned char offset, double scale, bool editable) {
     assert(offset < data_.size());
-    //  todo: editor that uses return_ to fling back to USBLink
     if (scale == 0) {
-        boost::shared_ptr<Property> prop(new PropertyImpl<long>(name));
-        boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<unsigned char, long>(
-            prop, &data_[offset], 0));
+        boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<unsigned char, long>(this, &data_[offset], 0));
+        boost::shared_ptr<Property> prop(new PropertyImpl<long>(name, pu));
+        pu->set_prop(prop);
         props_.push_back(prop);
         updates_.push_back(pu);
     }
     else {
-        boost::shared_ptr<Property> prop(new PropertyImpl<double>(name));
-        boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<unsigned char, double>(
-            prop, &data_[offset], scale));
+        boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<unsigned char, double>(this, &data_[offset], scale));
+        boost::shared_ptr<Property> prop(new PropertyImpl<double>(name, pu));
+        pu->set_prop(prop);
         props_.push_back(prop);
         updates_.push_back(pu);
     }
@@ -147,18 +174,17 @@ size_t Board::add_uchar_prop(std::string const &name, unsigned char offset, doub
 
 size_t Board::add_schar_prop(std::string const &name, unsigned char offset, double scale, bool editable) {
     assert(offset < data_.size());
-    //  todo: editor that uses return_ to fling back to USBLink
     if (scale == 0) {
-        boost::shared_ptr<Property> prop(new PropertyImpl<long>(name));
-        boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<char, long>(
-            prop, &data_[offset], 0));
+        boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<char, long>(this, &data_[offset], 0));
+        boost::shared_ptr<Property> prop(new PropertyImpl<long>(name, pu));
+        pu->set_prop(prop);
         props_.push_back(prop);
         updates_.push_back(pu);
     }
     else {
-        boost::shared_ptr<Property> prop(new PropertyImpl<double>(name));
-        boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<char, double>(
-            prop, &data_[offset], scale));
+        boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<char, double>(this, &data_[offset], scale));
+        boost::shared_ptr<Property> prop(new PropertyImpl<double>(name, pu));
+        pu->set_prop(prop);
         props_.push_back(prop);
         updates_.push_back(pu);
     }
@@ -167,18 +193,17 @@ size_t Board::add_schar_prop(std::string const &name, unsigned char offset, doub
 
 size_t Board::add_sshort_prop(std::string const &name, unsigned char offset, double scale, bool editable) {
     assert(offset < data_.size());
-    //  todo: editor that uses return_ to fling back to USBLink
     if (scale == 0) {
-        boost::shared_ptr<Property> prop(new PropertyImpl<long>(name));
-        boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<short, long>(
-            prop, &data_[offset], 0));
+        boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<short, long>(this, &data_[offset], 0));
+        boost::shared_ptr<Property> prop(new PropertyImpl<long>(name, pu));
+        pu->set_prop(prop);
         props_.push_back(prop);
         updates_.push_back(pu);
     }
     else {
-        boost::shared_ptr<Property> prop(new PropertyImpl<double>(name));
-        boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<short, double>(
-            prop, &data_[offset], scale));
+        boost::shared_ptr<PropUpdate> pu(new PropUpdateImpl<short, double>(this, &data_[offset], scale));
+        boost::shared_ptr<Property> prop(new PropertyImpl<double>(name, pu));
+        pu->set_prop(prop);
         props_.push_back(prop);
         updates_.push_back(pu);
     }

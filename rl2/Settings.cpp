@@ -244,7 +244,7 @@ next_line:
     if (*pos == '/' && pos[1] == '*') {
         pos += 2;
         while (pos < end) {
-            //  todo: this stops at end-comment in strings!
+            //  fixme: this stops at end-comment in strings!
             if (*pos == '*' && pos[1] == '/') {
                 pos += 2;
                 goto next_line;

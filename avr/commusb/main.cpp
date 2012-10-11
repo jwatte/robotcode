@@ -263,6 +263,14 @@ public:
 };
 SensorBoardUser sensorBoard;
 
+class DisplayBoardUser : public ITWIUser {
+public:
+    void tick() {
+        getfrom(NodeDisplay, sizeof(info_Display));
+    }
+};
+DisplayBoardUser displayBoard;
+
 
 //  I2C addresses
 #define ACCEL           0x18
@@ -523,6 +531,7 @@ void setup() {
     cmd_finish();
     motorBoard.enqueue();
     sensorBoard.enqueue();
+    displayBoard.enqueue();
     imu.enqueue();
     delay(20);
     after(1, &ITWIUser::next, 0);

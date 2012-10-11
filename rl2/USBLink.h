@@ -5,7 +5,7 @@
 #include "semaphore.h"
 #include <assert.h>
 #include <boost/thread.hpp>
-#include <deque.h>
+#include <deque>
 
 struct libusb_context;
 struct libusb_device_handle;

@@ -14,6 +14,7 @@ enum Node {
     NodeSensorInput,    //  3
     NodeUSBInterface,   //  4
     NodeIMU,            //  5
+    NodeDisplay,        //  6
 
     NodeCount
 };
@@ -74,6 +75,14 @@ struct info_IMU {
     unsigned short r_mag[3];
     unsigned short r_accel[3];
     unsigned short r_gyro[3];
+};
+
+struct info_Display {
+    unsigned char counter;
+    unsigned char screen;
+    unsigned char field;
+    unsigned char size;
+    unsigned char value[26];
 };
 
 char hexchar(unsigned char nybble);

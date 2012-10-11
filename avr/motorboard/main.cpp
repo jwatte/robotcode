@@ -299,8 +299,8 @@ void update_servo(void *v)
         actually_write_servo();
     }
 #endif
-    //  2 ms spin delay every 40 ms is 5% of available CPU...
-    after(40, &update_servo, 0);
+    //  2 ms spin delay every 30 ms is 7.5% of available CPU.
+    after(30, &update_servo, 0);
 }
 
 

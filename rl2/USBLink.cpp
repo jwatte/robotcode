@@ -12,9 +12,10 @@
 
 
 
+/*
 class Transfer {
 public:
-    Transfer(libusb_device_handle dh, unsigned char iep, unsigned char oep) :
+    Transfer(libusb_device_handle *dh, unsigned char iep, unsigned char oep) :
         dh_(dh),
         iep_(iep),
         oep_(oep),
@@ -34,7 +35,7 @@ public:
         pack_ = Packet::create();
         busyRead_ = true;
         xfer_->dev_handle = dh_;
-        libusb_fill_bulk_transfer(xfer_, dh_, ep_, pack_->buffer(), pack_->max_size(),
+        libusb_fill_bulk_transfer(xfer_, dh_, iep_, pack_->buffer(), pack_->max_size(),
                 &Transfer::callback, this, 1000); //  a second is a long time!
         int err = libusb_submit_transfer(xfer_);
         if (err != 0) {
@@ -68,11 +69,136 @@ public:
         pack_ = 0;
         return ret;
     }
-    unsigned char ep_;
+    libusb_device_handle *dh_;
+    unsigned char iep_;
+    unsigned char oep_;
     libusb_transfer *xfer_;
     Packet *pack_;
     bool busyRead_;
     bool busyWrite_;
+};
+*/
+
+class Transfer {
+public:
+    Transfer(libusb_device_handle *dh, unsigned char iep, unsigned char oep) :
+        dh_(dh),
+        iep_(iep),
+        oep_(oep),
+        inPack_(0),
+        inReady_(0),
+        inXfer_(libusb_alloc_transfer(0)),
+        outPack_(0),
+        outXfer_(libusb_alloc_transfer(0)) {
+
+        boost::unique_lock<boost::mutex> lock(lock_);
+        start_in_inner();
+    }
+    ~Transfer() {
+        dh_ = 0;
+        libusb_free_transfer(inXfer_);
+        libusb_free_transfer(outXfer_);
+        BOOST_FOREACH(auto p, inQueue_) {
+            p->destroy();
+        }
+        BOOST_FOREACH(auto p, outQueue_) {
+            p->destroy();
+        }
+    }
+
+    unsigned int in_ready() {
+        return inReady_.nonblocking_available();
+    }
+    Packet *in_dequeue() {
+        inReady_.acquire();
+        boost::unique_lock<boost::mutex> lock(lock_);
+        Packet *ret = inQueue_.front();
+        inQueue_.pop_front();
+        return ret;
+    }
+
+    void out_write(void const *data, size_t sz) {
+        Packet *p = Packet::create();
+        p->set_size(sz);
+        memcpy(p->buffer(), data, sz);
+        boost::unique_lock<boost::mutex> lock(lock_);
+        outQueue_.push_back(p);
+        start_out_inner();
+    }
+
+private:
+    //  must be called with lock held
+    void start_out_inner() {
+        if (!outPack_ && !outQueue_.empty()) {
+            outPack_ = outQueue_.front();
+            outQueue_.pop_front();
+            outXfer_->dev_handle = dh_;
+            libusb_fill_bulk_transfer(outXfer_, dh_, oep_, outPack_->buffer(), outPack_->size(),
+                    &Transfer::out_callback, this, 1000); //  a second is a long time!
+            int err = libusb_submit_transfer(outXfer_);
+            if (err != 0) {
+                std::cerr << "libusb_submit_transfer() failed writing to board: "
+                    << libusb_error_name(err) << " (" << err << ")" << std::endl;
+                outPack_->destroy();
+                outPack_ = 0;
+            }
+        }
+    }
+
+    static void out_callback(libusb_transfer *cbArg) {
+        reinterpret_cast<Transfer *>(cbArg->user_data)->out_complete();
+    }
+
+    void out_complete() {
+        boost::unique_lock<boost::mutex> lock(lock_);
+        outPack_->destroy();
+        outPack_ = 0;
+        start_out_inner();
+    }
+
+    //  must be called with lock held
+    void start_in_inner() {
+        if (!inPack_) {
+            inPack_ = Packet::create();
+            inXfer_->dev_handle = dh_;
+            libusb_fill_bulk_transfer(inXfer_, dh_, oep_, inPack_->buffer(), inPack_->max_size(),
+                    &Transfer::in_callback, this, 1000); //  a second is a long time!
+            int err = libusb_submit_transfer(inXfer_);
+            if (err != 0) {
+                std::cerr << "libusb_submit_transfer() failed reading from board: "
+                    << libusb_error_name(err) << " (" << err << ")" << std::endl;
+                inPack_->destroy();
+                inPack_ = 0;
+            }
+        }
+    }
+
+    static void in_callback(libusb_transfer *cbArg) {
+        reinterpret_cast<Transfer *>(cbArg->user_data)->in_complete();
+    }
+
+    void in_complete() {
+        boost::unique_lock<boost::mutex> lock(lock_);
+        inPack_->set_size(inXfer_->actual_length);
+        inQueue_.push_back(const_cast<Packet *>(inPack_));
+        inPack_ = 0;
+        inReady_.release();
+        start_in_inner();
+    }
+
+    libusb_device_handle *dh_;
+    unsigned char iep_;
+    unsigned char oep_;
+    boost::mutex lock_;
+
+    Packet *volatile inPack_;
+    std::deque<Packet *> inQueue_;
+    semaphore inReady_;
+    libusb_transfer *inXfer_;
+
+    Packet *volatile outPack_;
+    std::deque<Packet *> outQueue_;
+    libusb_transfer *outXfer_;
 };
 
 
@@ -114,11 +240,9 @@ boost::shared_ptr<Module> USBLink::open(boost::shared_ptr<Settings> const &set) 
 }
 
 void USBLink::step() {
-    if (pickup_.nonblocking_available()) {
-        pickup_.acquire();
-        Packet *pack = xfer_->ack_pack();
+    while (xfer_->in_ready()) {
+        Packet *pack = xfer_->in_dequeue();
         ++inPackets_;
-        return_.release();
         size_t size = pack->size();
         if (size == 0) {
             errPackets_++;
@@ -161,12 +285,12 @@ void USBLink::step() {
             }
             sendBufBegin_ = ptr;
         }
-        inPacketsProperty_->set<long>(inPackets_);
-        outPacketsProperty_->set<long>(outPackets_);
-        errPacketsProperty_->set<long>(errPackets_);
-        dropPacketsProperty_->set<long>(dropPackets_);
-        errBytesProperty_->set<long>(errBytes_);
     }
+    inPacketsProperty_->set<long>(inPackets_);
+    outPacketsProperty_->set<long>(outPackets_);
+    errPacketsProperty_->set<long>(errPackets_);
+    dropPacketsProperty_->set<long>(dropPackets_);
+    errBytesProperty_->set<long>(errBytes_);
 }
 
 void USBLink::thread_fn() {
@@ -177,31 +301,8 @@ void USBLink::thread_fn() {
     }
 
     while (!thread_->interruption_requested()) {
-        bool tosleep = true;
-        if (!xfer_->busy_read()) {
-            if (xfer_->pack_) {
-                //  I should only do this once per packet
-                pickup_.release();
-                //  this will block until stepped from other side,
-                //  which is bad for writing
-                return_.acquire();
-            }
-            //  this should happen once I have the returned packet
-            xfer_->recv();
-            tosleep = false;
-        }
-        if (!xfer_->busy_write()) {
-            boost::exclusive_lock<boost::mutex> lock(queueLock_);
-            if (queue_.size()) {
-                xfer_->write(*queue_.front());
-                queue_.pop_front();
-                tosleep = false;
-            }
-        }
-        if (tosleep) {
-            usleep(5000);
-        }
         libusb_handle_events(ctx_);
+        usleep(3000);
     }
     std::cerr << "USBLink::thread_fn() returning" << std::endl;
 }
@@ -343,18 +444,16 @@ void USBLink::dispatch_board(unsigned char board, unsigned char const *info, uns
 
 void USBLink::board_return(unsigned char ix, unsigned char offset, void const *data, unsigned char sz) {
     if (sz > 30) {
-        throw std::runtime_error("Too large return packet in USBLink::board_return()")
+        throw std::runtime_error("Too large return packet in USBLink::board_return()");
     }
-    Packet *p = Packet::create();
-    p->set_size(4 + sz);
-    unsigned char *msg = p->buffer();
+    unsigned char msg[4 + 30];
     msg[0] = 0xed;
     msg[1] = 'm';
     msg[2] = sz + 1;
     msg[3] = ix;
     memcpy(&msg[4], data, sz);
-    boost::exclusive_lock<boost::mutex> lock(queueLock_);
-    queue_.push_back(p);
+    xfer_->out_write(msg, 4 + sz);
+    ++outPackets_;
 }
 
 void USBLink::set_board(unsigned char ix, boost::shared_ptr<Module> const &b) {

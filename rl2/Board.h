@@ -39,6 +39,7 @@ public:
     virtual size_t num_properties();
     virtual boost::shared_ptr<Property> get_property_at(size_t ix);
     virtual void set_return(boost::shared_ptr<IReturn> const &ret);
+    void edit(void const *dst, void const *src, size_t sz);
 protected:
     Board(std::string const &name, unsigned char dataSize, unsigned char type);
     size_t add_uchar_prop(std::string const &name, unsigned char offset, double scale, bool editable = false);

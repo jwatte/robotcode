@@ -1,4 +1,6 @@
 
+-include makevars.config
+
 APPS:=rl2 simplegps simpleusb #simplecap robolink
 
 LIBUSB_LOC?=/usr/local

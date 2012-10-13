@@ -7,8 +7,9 @@
 #define SENSOR_BOARD        0x03
 #define USB_BOARD           0x04
 #define IMU_BOARD           0x05
+#define DISPLAY_BOARD       0x06
 
-#define MAX_BOARD_INDEX     0x06
+#define MAX_BOARD_INDEX     0x07
 
 struct info_MotorPower {
     unsigned char w_cmd_power;  //  -127 back, 127 forward
@@ -54,5 +55,45 @@ struct info_IMU {
     unsigned short r_gyro[3];
 };
 
+struct info_Display {
+    unsigned char counter;
+    unsigned char buttons;
+    unsigned char spinner;
+};
+
+enum {
+    cmdSetColors = 0x21,
+    cmdDrawText = 0x22,
+    cmdFillRect = 0x23
+};
+enum {
+    fillFlagFront = 1,
+    fillFlagHeight = 0x40,
+    fillFlagYCoord = 0x80
+};
+
+struct cmd_Display_setColors {
+    unsigned char cmd;
+    unsigned short front;
+    unsigned short back;
+};
+
+struct cmd_Display_drawText {
+    unsigned char cmd;
+    unsigned char x;
+    unsigned char y;
+    //  the high bit of 'len' is the lowest bit of y
+    unsigned char len;
+    char text[26];
+};
+
+struct cmd_Display_fillRect {
+    unsigned char cmd;
+    unsigned char x;
+    unsigned char y;
+    unsigned char w;
+    unsigned char h;
+    unsigned char flags;   //  high bit is low bit of y, low bit is front/back
+};
 
 #endif  //  rl2_protocol_h

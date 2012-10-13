@@ -211,6 +211,9 @@ public:
     virtual void set_data(unsigned char offset, void const *data, unsigned char sz) {
         link_->board_return(board_, offset, data, sz);
     }
+    virtual void raw_cmd(void const *data, unsigned char sz) {
+        link_->board_cmd(board_, data, sz);
+    }
     unsigned char board_;
     USBLink *link_;
 };
@@ -449,6 +452,20 @@ void USBLink::board_return(unsigned char ix, unsigned char offset, void const *d
     unsigned char msg[4 + 30];
     msg[0] = 0xed;
     msg[1] = 'm';
+    msg[2] = sz + 1;
+    msg[3] = ix;
+    memcpy(&msg[4], data, sz);
+    xfer_->out_write(msg, 4 + sz);
+    ++outPackets_;
+}
+
+void USBLink::board_cmd(unsigned char ix, void const *data, unsigned char sz) {
+    if (sz > 32) {
+        throw std::runtime_error("Too large command packet in USBLink::board_cmd()");
+    }
+    unsigned char msg[4 + 30];
+    msg[0] = 0xed;
+    msg[1] = 'c';
     msg[2] = sz + 1;
     msg[3] = ix;
     memcpy(&msg[4], data, sz);

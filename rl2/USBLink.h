@@ -47,6 +47,7 @@ private:
     void dispatch_cmd(unsigned char const *data, unsigned char sz);
     void dispatch_board(unsigned char board, unsigned char const *info, unsigned char sz);
     void board_return(unsigned char board, unsigned char offset, void const *data, unsigned char sz);
+    void board_cmd(unsigned char board, void const *data, unsigned char sz);
     std::string vid_;
     std::string pid_;
     std::string ep_input_;

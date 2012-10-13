@@ -27,7 +27,8 @@
     F   node code               node fatalled
 
     Host -> Board
-    m   node      data          send message to node
+    m   node      data          send data to node
+    c   node      data          send command to node
 
  */
 
@@ -429,6 +430,8 @@ void blink(bool on) {
 
 void handle_input_cmd(unsigned char cmd, unsigned char sz, unsigned char const *data) {
     switch (cmd) {
+    case 'c':
+        //  actually exactly same implementation
     case 'm':
         if (sz < 2) {   //  dst addr + actual data
             ++g_info.r_badcmd;

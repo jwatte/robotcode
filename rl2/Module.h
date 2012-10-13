@@ -21,6 +21,7 @@ public:
 class IReturn {
 public:
     virtual void set_data(unsigned char offset, void const *data, unsigned char cnt) = 0;
+    virtual void raw_cmd(void const *data, unsigned char cnt) = 0;
 };
 
 #endif  //  rl2_Module_h

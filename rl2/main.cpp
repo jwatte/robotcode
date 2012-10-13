@@ -11,6 +11,7 @@
 #include "GPSModule.h"
 #include "Services.h"
 #include "DataLogger.h"
+#include "Tie.h"
 
 #include <cstring>
 #include <cerrno>
@@ -29,11 +30,7 @@
 static Services services;
 static std::map<std::string, std::string> g_args;
 static std::vector<std::string> g_files;
-boost::shared_ptr<Module> gUSBLink;
-boost::shared_ptr<Module> gMotorBoard;
-boost::shared_ptr<Module> gInputBoard;
-boost::shared_ptr<Module> gUSBBoard;
-boost::shared_ptr<Module> gIMUBoard;
+std::vector<boost::shared_ptr<Module>> gTies;
 
 
 double g_pulse;
@@ -150,11 +147,20 @@ void setup_boards(boost::shared_ptr<ModuleList> const &modules) {
    gInputBoard = setup_module<InputBoard>("boards", "input", modules);
    gUSBBoard = setup_module<USBBoard>("boards", "usb", modules);
    gIMUBoard = setup_module<IMUBoard>("boards", "imu", modules);
+   gDisplayBoard = setup_module<DisplayBoard>("boards", "display", modules);
 
    gUSBLink->cast_as<USBLink>()->set_board(MOTOR_BOARD, gMotorBoard);
    gUSBLink->cast_as<USBLink>()->set_board(SENSOR_BOARD, gInputBoard);
    gUSBLink->cast_as<USBLink>()->set_board(USB_BOARD, gUSBBoard);
    gUSBLink->cast_as<USBLink>()->set_board(IMU_BOARD, gIMUBoard);
+   gUSBLink->cast_as<USBLink>()->set_board(DISPLAY_BOARD, gDisplayBoard);
+}
+
+void setup_ties(boost::shared_ptr<ModuleList> const &modules) {
+   gTies = setup_module<Tie>("ties", modules);
+   BOOST_FOREACH(auto tie, gTies) {
+       tie->cast_as<Tie>()->start(modules);
+   }
 }
 
 void setup_browser_window(boost::shared_ptr<ModuleList> const &modules,
@@ -205,6 +211,7 @@ int main(int argc, char const *argv[]) {
         setup_gps(modules);
         setup_usblinks(modules);
         setup_boards(modules);
+        setup_ties(modules);
         setup_browser_window(modules, Settings::load("browser.js"));
         setup_data_logger(modules, Settings::load("logger.js"));
         main_loop();

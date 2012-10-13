@@ -1,6 +1,15 @@
 #include "Boards.h"
 #include "protocol.h"
 #include "Settings.h"
+#include <string.h>
+
+boost::shared_ptr<Module> gUSBLink;
+boost::shared_ptr<Module> gMotorBoard;
+boost::shared_ptr<Module> gInputBoard;
+boost::shared_ptr<Module> gUSBBoard;
+boost::shared_ptr<Module> gIMUBoard;
+boost::shared_ptr<Module> gDisplayBoard;
+
 
 boost::shared_ptr<Module> MotorBoard::open(boost::shared_ptr<Settings> const &set) {
     return boost::shared_ptr<Module>(new MotorBoard());
@@ -21,7 +30,7 @@ static std::string str_last_fatal = "r_last_fatal";
 
 
 MotorBoard::MotorBoard() :
-    Board(str_motorboard, sizeof(info_MotorPower), MOTOR_BOARD) {
+    cast_as_impl<Board, MotorBoard>(str_motorboard, sizeof(info_MotorPower), MOTOR_BOARD) {
 
     add_schar_prop(str_cmd_power, 0, 1.0/127.0);
     add_schar_prop(str_cmd_steer, 1, 1.0/127.0);
@@ -67,6 +76,7 @@ public:
             return fn_.distance_at_min;
         }
         double d = (uc - fn_.min_value) / (double)(fn_.max_value - fn_.min_value);
+        assert(d >= 0.0 && d <= 1.0);
         return smoothstep(pow(d, fn_.s_curve), fn_.distance_at_max, fn_.distance_at_min);
     }
 };
@@ -100,7 +110,7 @@ static std::string str_r_us2 = "r_us2";
 static std::string str_r_iter = "r_iter";
 
 InputBoard::InputBoard(ir_fun const &fn) :
-    Board(str_InputBoard, sizeof(info_SensorInput), SENSOR_BOARD) {
+    cast_as_impl<Board, InputBoard>(str_InputBoard, sizeof(info_SensorInput), SENSOR_BOARD) {
 
     add_uchar_prop(str_w_laser0, 0, 0);
     add_uchar_prop(str_w_laser1, 1, 0);
@@ -130,7 +140,7 @@ static std::string str_r_badcmd = "r_badcmd";
 static std::string str_r_naks = "r_naks";
 
 USBBoard::USBBoard(double top_voltage) :
-    Board(str_USBBoard, sizeof(info_USBInterface), USB_BOARD) {
+    cast_as_impl<Board, USBBoard>(str_USBBoard, sizeof(info_USBInterface), USB_BOARD) {
 
     add_uchar_prop(str_r_voltage, 0, top_voltage/256);
     add_uchar_prop(str_r_badsync, 1, 0);
@@ -157,7 +167,7 @@ static std::string str_r_gyro_y = "r_gyro_y";
 static std::string str_r_gyro_z = "r_gyro_z";
 
 IMUBoard::IMUBoard() :
-    Board(str_IMUBoard, sizeof(info_IMU), IMU_BOARD) {
+    cast_as_impl<Board, IMUBoard>(str_IMUBoard, sizeof(info_IMU), IMU_BOARD) {
 
     add_sshort_prop(str_r_mag_x, 0, 2.0 / 32767);
     add_sshort_prop(str_r_mag_y, 2, 2.0 / 32767);
@@ -168,6 +178,83 @@ IMUBoard::IMUBoard() :
     add_sshort_prop(str_r_gyro_x, 12, 2.0 / 32767);
     add_sshort_prop(str_r_gyro_y, 14, 2.0 / 32767);
     add_sshort_prop(str_r_gyro_z, 16, 2.0 / 32767);
+}
+
+
+
+boost::shared_ptr<Module> DisplayBoard::open(boost::shared_ptr<Settings> const &set) {
+    return boost::shared_ptr<Module>(new DisplayBoard());
+}
+
+static std::string str_DisplayBoard = "Display board";
+static std::string str_r_counter("r_counter");
+static std::string str_r_buttons("r_buttons");
+static std::string str_r_spinner("r_spinner");
+
+DisplayBoard::DisplayBoard() :
+    cast_as_impl<Board, DisplayBoard>(str_DisplayBoard, sizeof(info_Display), DISPLAY_BOARD),
+    fcolor_(0xffff),
+    bgcolor_(0) {
+
+    add_uchar_prop(str_r_counter, 0, 0);
+    add_uchar_prop(str_r_buttons, 1, 0);
+    add_uchar_prop(str_r_spinner, 2, 0);
+}
+
+void DisplayBoard::set_colors(unsigned short front, unsigned short back) {
+    if (front != fcolor_ || back != bgcolor_) {
+        cmd_Display_setColors csc;
+        csc.cmd = cmdSetColors;
+        csc.front = front;
+        csc.back = back;
+        fcolor_ = front;
+        bgcolor_ = back;
+        cmd(csc);
+    }
+}
+
+void DisplayBoard::draw_text(std::string const &str, unsigned short left, unsigned short top,
+    unsigned short color, unsigned short bgcolor) {
+
+    set_colors(color, bgcolor);
+
+    cmd_Display_drawText cdt;
+    cdt.cmd = cmdDrawText;
+    cdt.x = left;
+    cdt.y = top >> 1;
+    unsigned char len = std::min(str.size(), sizeof(cdt.text));
+    cdt.len = len | ((top & 1) << 7);
+    memcpy(cdt.text, str.c_str(), len);
+    cmd(cdt, sizeof(cdt)-sizeof(cdt.text) + len);
+}
+
+void DisplayBoard::fill_rect(unsigned short left, unsigned short top, unsigned short width,
+    unsigned short height, unsigned short color) {
+
+    //  optimize which color to use
+    unsigned char flag = 0;
+    if (color == fcolor_) {
+        flag = fillFlagFront;
+    }
+    else if (color != bgcolor_) {
+        set_colors(fcolor_, color);
+    }
+    
+    if (height & 1) {
+        flag |= fillFlagHeight;
+    }
+    if (top & 1) {
+        flag |= fillFlagYCoord;
+    }
+
+    cmd_Display_fillRect cfr;
+    cfr.cmd = cmdFillRect;
+    cfr.x = left;
+    cfr.y = (top >> 1);
+    cfr.w = width;
+    cfr.h = (height >> 1);
+    cfr.flags = flag;
+    cmd(cfr);
 }
 
 

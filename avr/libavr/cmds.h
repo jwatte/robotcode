@@ -79,10 +79,8 @@ struct info_IMU {
 
 struct info_Display {
     unsigned char counter;
-    unsigned char screen;
-    unsigned char field;
-    unsigned char size;
-    unsigned char value[26];
+    unsigned char buttons;
+    unsigned char spinner;
 };
 
 char hexchar(unsigned char nybble);

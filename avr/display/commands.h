@@ -25,11 +25,19 @@ struct cmd_DrawText {
     char text[26];
 };
 
+enum {
+    fillFlagFront = 1,
+    fillFlagHeight = 0x40,
+    fillFlagYCoord = 0x80
+};
 struct cmd_FillRect {
     unsigned char cmd;
     unsigned char x;
     unsigned char y;
-    unsigned char y2;
+    unsigned char w;
+    unsigned char h;
+    unsigned char flags;   //  high bit is low bit of y, low bit is front/back
 };
+
 
 #endif  //  display_commands_h

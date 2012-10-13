@@ -188,23 +188,27 @@ static void send_nak(void *) {
 }
 
 static void got_data_m(void *) {
-    _twi_master->data_from_slave(_twi.m_ptr, _twi.m_buf);
+    unsigned char n;
     {
         IntDisable idi;
+        n = _twi.m_ptr;
         _twi.m_addr = 0; _twi.m_ptr = _twi.m_end = 0;
         if (_twi_slave) {
             TWCR |= (1 << TWEA);
         }
     }
+    _twi_master->data_from_slave(n, _twi.m_buf);
 }
 
 static void got_data_s(void *) {
-    _twi_slave->data_from_master(_twi.s_ptr, _twi.s_buf);
+    unsigned char n;
     {
         IntDisable idi;
+        n = _twi.s_ptr;
         _twi.s_ptr = _twi.s_end = 0;
         TWCR |= (1 << TWEA);
     }
+    _twi_slave->data_from_master(n, _twi.s_buf);
 }
 
 static void done_sending(void *) {

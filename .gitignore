@@ -14,3 +14,7 @@ capture.bin
 *.tga
 *.jpg
 logfile.log
+*.elf
+*.lss
+*.lst
+*.map

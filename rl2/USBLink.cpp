@@ -12,73 +12,6 @@
 
 
 
-/*
-class Transfer {
-public:
-    Transfer(libusb_device_handle *dh, unsigned char iep, unsigned char oep) :
-        dh_(dh),
-        iep_(iep),
-        oep_(oep),
-        xfer_(0),
-        pack_(0) {
-        xfer_ = libusb_alloc_transfer(0);
-        busyRead_ = false;
-        busyWrite_ = false;
-    }
-    ~Transfer() {
-        libusb_free_transfer(xfer_);
-        if (pack_) {
-            pack_->destroy();
-        }
-    }
-    void recv() {
-        pack_ = Packet::create();
-        busyRead_ = true;
-        xfer_->dev_handle = dh_;
-        libusb_fill_bulk_transfer(xfer_, dh_, iep_, pack_->buffer(), pack_->max_size(),
-                &Transfer::callback, this, 1000); //  a second is a long time!
-        int err = libusb_submit_transfer(xfer_);
-        if (err != 0) {
-            std::cerr << "libusb_submit_transfer(): " << err << ": " << libusb_error_name(err) << std::endl;
-            pack_->destroy();
-            pack_ = 0;
-            usleep(10000);
-            busyRead_ = false;
-        }
-    }
-    void write(Packet *p) {
-        assert(!busyWrite_);
-        busyWrite_ = true;
-        ...     second transfer ...
-    }
-    static void callback(libusb_transfer *x) {
-        ((Transfer *)x->user_data)->on_callback();
-    }
-    void on_callback() {
-        pack_->set_size(xfer_->actual_length);
-        busyRead_ = false;
-    }
-    bool busy_read() const {
-        return busyRead_;
-    }
-    bool busy_write() const {
-        return busyWrite_;
-    }
-    Packet *ack_pack() {
-        Packet *ret = pack_;
-        pack_ = 0;
-        return ret;
-    }
-    libusb_device_handle *dh_;
-    unsigned char iep_;
-    unsigned char oep_;
-    libusb_transfer *xfer_;
-    Packet *pack_;
-    bool busyRead_;
-    bool busyWrite_;
-};
-*/
-
 class Transfer {
 public:
     Transfer(libusb_device_handle *dh, unsigned char iep, unsigned char oep) :
@@ -373,6 +306,7 @@ USBLink::USBLink(std::string const &vid, std::string const &pid, std::string con
     sendBufBegin_(0),
     sendBufEnd_(0),
     name_(vid + ":" + pid) {
+
     if (libusb_init(&ctx_) < 0) {
         throw std::runtime_error("Error opening libusb for " + name_);
     }
@@ -385,23 +319,24 @@ USBLink::USBLink(std::string const &vid, std::string const &pid, std::string con
     if (!dh_ ) {
         throw std::runtime_error("Could not find USB device " + name_);
     }
+    int er = libusb_claim_interface(dh_, 0);
+    if (er != 0) {
+        throw std::runtime_error("Could not claim USB interface for comm board " +
+            name_ + ". Is another process using it? " + libusb_error_name(er));
+    }
+    /*
+    er = libusb_set_configuration(dh_, 1);
+    if (er != 0) {
+        throw std::runtime_error("warning: Could not set configuration on comm board " +
+            name_ + ": " + libusb_error_name(er));
+    }
+    */
     xfer_ = new Transfer(dh_, iep_, oep_);
     libusb_device_descriptor ldd;
-    int er;
     er = libusb_get_device_descriptor(libusb_get_device(dh_), &ldd);
     if (er < 0) {
         throw std::runtime_error("Could not find USB descriptor for comm board " + 
             name_);
-    }
-    er = libusb_set_configuration(dh_, 1);
-    if (er < 0) {
-        throw std::runtime_error("Could not set configuration on comm board " +
-            name_);
-    }
-    er = libusb_claim_interface(dh_, 0);
-    if (er < 0) {
-        throw std::runtime_error("Could not claim USB interface for comm board " +
-            name_ + ". Is another process using it?");
     }
     thread_ = boost::shared_ptr<boost::thread>(new boost::thread(
         boost::bind(&USBLink::thread_fn, this)));

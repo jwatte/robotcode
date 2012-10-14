@@ -1,7 +1,7 @@
 
 -include makevars.config
 
-APPS:=rl2 simplegps simpleusb #simplecap robolink
+APPS:=rl2 simplegps simpleusb boops #simplecap robolink
 
 LIBUSB_LOC?=/usr/local
 OPT?=-O3
@@ -10,7 +10,7 @@ CPP_CFLAGS:=$(sort $(CPP_OPT) $(filter-out -D_FORTIFY_SOURCE%, $(filter-out -O%,
     $(filter-out -mtune=%, $(filter-out -march=%,$(shell fltk-config --use-images --cxxflags)))))) \
     -I$(LIBUSB_LOC)/include/libusb-1.0
 CPP_LFLAGS:=-ljpeg $(sort $(CPP_OPT) $(shell fltk-config --use-images --ldflags)) \
-	-lv4l2 -lgps -lboost_thread -lboost_system $(LIBUSB_LOC)/lib/libusb-1.0.so
+	-lv4l2 -lgps -lboost_thread -lboost_system $(LIBUSB_LOC)/lib/libusb-1.0.so -lasound
 ALL_APP_CPP_SRCS:=$(foreach app,$(APPS),$(wildcard $(app)/*.cpp))
 CPP_SRCS:=$(sort $(foreach app,$(APPS),$(filter-out $(app)/test_%.cpp, \
     $(filter $(app)/%.cpp, $(ALL_APP_CPP_SRCS)))))

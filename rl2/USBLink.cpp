@@ -54,9 +54,13 @@ public:
         Packet *p = Packet::create();
         p->set_size(sz);
         memcpy(p->buffer(), data, sz);
+        p->destroy();
+        return;
+        /*
         boost::unique_lock<boost::mutex> lock(lock_);
         outQueue_.push_back(p);
         start_out_inner();
+        */
     }
 
 private:
@@ -205,7 +209,7 @@ void USBLink::step() {
             unsigned int ptr = sendBufBegin_, end = sendBufEnd_;
             while (ptr != end) {
                 if (sendBuf_[ptr] != BEGIN_PACKET) {
-                    std::cerr << " " << std::hex << (int)sendBuf_[ptr];
+                    //std::cerr << " " << std::hex << (int)sendBuf_[ptr];
                     ++errBytes_;
                     ++ptr;
                 }
@@ -319,18 +323,17 @@ USBLink::USBLink(std::string const &vid, std::string const &pid, std::string con
     if (!dh_ ) {
         throw std::runtime_error("Could not find USB device " + name_);
     }
-    int er = libusb_claim_interface(dh_, 0);
-    if (er != 0) {
-        throw std::runtime_error("Could not claim USB interface for comm board " +
-            name_ + ". Is another process using it? " + libusb_error_name(er));
-    }
-    /*
+    int er;
     er = libusb_set_configuration(dh_, 1);
     if (er != 0) {
         throw std::runtime_error("warning: Could not set configuration on comm board " +
             name_ + ": " + libusb_error_name(er));
     }
-    */
+    er = libusb_claim_interface(dh_, 0);
+    if (er != 0) {
+        throw std::runtime_error("Could not claim USB interface for comm board " +
+            name_ + ". Is another process using it? " + libusb_error_name(er));
+    }
     xfer_ = new Transfer(dh_, iep_, oep_);
     libusb_device_descriptor ldd;
     er = libusb_get_device_descriptor(libusb_get_device(dh_), &ldd);

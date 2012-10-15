@@ -10,34 +10,40 @@
 #include <iostream>
 
 
-//  The higher the factor, the more short bits
-#define SPLIT_FACTOR 0.68
-
-//  How likely are we to switch rather than mutate for each bit?
-#define SWITCH_VOICE 0.1
-#define SWITCH_FREQ 0.2
-#define SWITCH_FMOD 0.2
-#define SWITCH_FMODPHASE 0.3
-#define SWITCH_ACURVE 0.1
 
 struct mood_tonal {
+    //  sqrt of (max freq range - min)
     float freq_scale;
+    //  min freq range
     float freq_add;
+    //  how much to modulate frequency (range)
     float mod_scale;
+    //  how much to modulate frequency (min)
     float mod_add;
+    //  how fast to modulate frequency (range) (1 == one cycle per boop)
     float mp_scale;
+    //  how fast to modulate frequency (min)
     float mp_add;
+    //  how hard to make attack/release (range)
     float acurve_scale;
+    //  how hard to make attack/release (min)
     float acurve_add;
 };
 
 struct mood_rythmic {
+    //  how likely to split a boop into multiple (scaled by existing length)
     float split_factor;
+    //  how likely to switch to another voice
     float switch_voice;
+    //  how likely to switch to a new few rather than just modulate
     float switch_freq;
+    //  how likely to switch to a new modulation range
     float switch_fmod;
+    //  how likely to switch to a new modulation speed
     float switch_fmodphase;
+    //  how likely to switch to a new envelope
     float switch_acurve;
+    //  how likely to generate triplets rather than halves when splitting
     float triplets;
 };
 
@@ -110,6 +116,7 @@ mood neutral = {
     }
 };
 
+//  info for actualy piece being generated
 struct section_info {
     short *buf;
     int count;
@@ -146,13 +153,19 @@ float oscale(int v, int o, int no) {
     if (v > 2) {
         float d = (float)o / no;
         float q = d - 0.8;
-        return (0.7 - q * q) * (1 - d);
+        return (1.0 - q * q) * (1 - d);
     }
     return 1.0 / (o * o + no);
 }
 
 float oscfreq(int v, int o) {
-    return o * (v > 1 ? 2 : 1) + 1;
+    switch (v) {
+        case 0: return o + 1;
+        case 1: return o + 1;
+        case 2: return o * 2 + 1;
+        case 3: return (o & 2) * 3 / 2 + o + 1;
+    }
+    return o + 1;
 }
 
 void init_voicedata() {

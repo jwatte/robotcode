@@ -30,7 +30,7 @@ AVR_CFLAGS:=-Wall -Werror -Wno-switch -Os -O3 -mcall-prologues -Iavr/libavr -std
 AVR_LFLAGS:=-Lbld/avrbin -lc
 
 AVR_PARTS:=attiny84a atmega328p attiny85
-AVR_PROG_PORT?=usb
+AVR_PROG_PORT?=/dev/ttyACM0
 AVR_PROG:=-c avrisp2
 ifneq ($(AVR_PROG_PORT),)
 AVR_PROG+= -P $(AVR_PROG_PORT)
@@ -59,6 +59,7 @@ PART_display:=atmega328p
 PART_display2:=atmega328p
 PART_readcompass:=atmega328p
 PART_test85:=attiny85
+PART_stepdirsend:=atmega328p
 
 fuses_motorboard:	fuses_8
 fuses_estop:	fuses_8
@@ -73,6 +74,7 @@ fuses_display:	fuses_20
 fuses_display2:	fuses_20
 fuses_readcompass:	fuses_16
 fuses_test85:	fuses_8_85
+fuses_stepdirsend:	fuses_20
 
 define mkapp
 bld/bin/$(1):	$(filter bld/obj/$(1)/%,$(CPP_OBJS))
@@ -131,7 +133,7 @@ $(if $(TRANSLATE_$(1)),$(TRANSLATE_$(1)),$(1))
 endef
 
 FUSES_B?=-B 200
-FLASH_B?=-B 1
+FLASH_B?=-B 2
 
 %:	bld/avrbin/%.hex fuses_%
 	avrdude -u -V -p $(call translate_part,$(PART_$@)) -b 115200 $(FLASH_B) $(AVR_PROG) -U flash:w:$<:i

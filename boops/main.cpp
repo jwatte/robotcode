@@ -138,16 +138,33 @@ void initrand(section_info &si, mood const &m) {
 
 float voicedata[4][1024];
 
+int numosc(int v) {
+    return 1 + v * 4;
+}
+
+float oscale(int v, int o, int no) {
+    if (v > 2) {
+        float d = (float)o / no;
+        float q = d - 0.8;
+        return (0.7 - q * q) * (1 - d);
+    }
+    return 1.0 / (o * o + no);
+}
+
+float oscfreq(int v, int o) {
+    return o * (v > 1 ? 2 : 1) + 1;
+}
+
 void init_voicedata() {
     //  generate
     for (int v = 0; v < 4; ++v) {
-        int no = 1 + v * 4;
-        for (int i = 0; i < 1024; ++i) {
-            float m = 0;
-            for (int o = 0; o < no; ++o) {
-                m += sinf(i * 2 * M_PI * (o + 1) / 1024) / (o * o + no);
+        int no = numosc(v);
+        for (int o = 0; o < no; ++o) {
+            float scale = oscale(v, o, no);
+            float freq = oscfreq(v, o) / 1024;
+            for (int i = 0; i < 1024; ++i) {
+                voicedata[v][i] += sinf(i * 2 * M_PI * freq) * scale;
             }
-            voicedata[v][i] = m;
         }
     }
     //  normalize
@@ -317,9 +334,9 @@ int main(int argc, char const *argv[]) {
         }
         else if (!strcmp(argv[1], "random")) {
             switch ((int)(rand() * 3.0 / RAND_MAX)) {
-                case 0: imood = &happy; break;
-                case 1: imood = &sad; break;
-                default: imood = &neutral; break;
+                case 0: imood = &happy; std::cerr << "happy" << std::endl; break;
+                case 1: imood = &sad; std::cerr << "sad" << std::endl; break;
+                default: imood = &neutral; std::cerr << "neutral" << std::endl; break;
             }
         }
         else {

@@ -6,14 +6,21 @@
 unsigned char prev_b = 0;
 unsigned char flank = 0;
 unsigned short val;
-unsigned char flash = 0;
+
+#define DATAOUT (1 << 0)
+#define CHIPSELECT (1 << 1)
+#define CLOCKIN (1 << 2)
+#define STEPIN (1 << 3)
+#define DIRIN (1 << 4)
+#define DEBUGOUT (1 << 5)
+
 
 int main() {
-    DDRB |= (1 << 4) | (1 << 0);    //  PB4, MOSI
+    DDRB |= DATAOUT | DEBUGOUT;
     USICR = (1 << USIWM0) | (1 << USICS1);
     while (true) {
         unsigned char b = PINB;
-        if (!(b & 2)) {
+        if (!(b & CHIPSELECT)) {
             if (!flank) {
                 USIDR = (val >> 8);
                 USISR = (1 << USIOIF);
@@ -30,26 +37,20 @@ int main() {
         else {
             flank = 0;
         }
-        if (b & (1 << 3)) {
+        if (b & STEPIN) {
             if (!prev_b) {
-                if (b & (1 << 4)) {
+                if (b & DIRIN) {
                     ++val;
                 }
                 else {
                     --val;
                 }
+                prev_b = 1;
             }
         }
         else {
             prev_b = 0;
         }
-        if (flash) {
-            PORTB |= (1 << 4);
-        }
-        else {
-            PORTB &= ~(1 << 4);
-        }
-        flash = 1-flash;
     }
 }
 

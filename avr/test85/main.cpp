@@ -7,8 +7,9 @@ unsigned char prev_b = 0;
 unsigned char flank = 0;
 unsigned short val;
 
-#define DATAOUT (1 << 0)
-#define CHIPSELECT (1 << 1)
+//  CHIPSELECT is active high
+#define CHIPSELECT (1 << 0)
+#define DATAOUT (1 << 1)
 #define CLOCKIN (1 << 2)
 #define STEPIN (1 << 3)
 #define DIRIN (1 << 4)
@@ -17,11 +18,15 @@ unsigned short val;
 
 int main() {
     DDRB |= DATAOUT | DEBUGOUT;
-    USICR = (1 << USIWM0) | (1 << USICS1);
+    PORTB = DATAOUT;
     while (true) {
+
         unsigned char b = PINB;
-        if (!(b & CHIPSELECT)) {
+
+        if (b & CHIPSELECT) {
             if (!flank) {
+                USICR = (1 << USIWM0) | (1 << USICS1);
+                PORTB &= ~DATAOUT;
                 USIDR = (val >> 8);
                 USISR = (1 << USIOIF);
                 flank = 1;
@@ -31,12 +36,18 @@ int main() {
                     USIDR = (val & 0xff);
                     USISR = (1 << USIOIF);
                     flank = 2;
+                    val += 1;
                 }
             }
         }
         else {
-            flank = 0;
+            if (flank == 2) {
+                flank = 0;
+                USICR = 0;
+                PORTB |= DATAOUT;
+            }
         }
+
         if (b & STEPIN) {
             if (!prev_b) {
                 if (b & DIRIN) {

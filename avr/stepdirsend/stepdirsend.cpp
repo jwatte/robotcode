@@ -4,7 +4,7 @@
 #include "libavr.h"
 
 //  port B
-#define CTR_PWR (1 << 2)
+#define CTR_POWER (1 << 2)
 #define TRIGGER_IN (1 << 1)
 #define RESET_XBEE (1 << 0)
 #define MOSI (1 << 3)
@@ -24,31 +24,31 @@
 unsigned short counterValues[6];
 
 void enable_tinys() {
-    PORTC |= ALL_CS;
-    PORTB |= CTR_PWR;
-    delay(10);
+    PORTC &= ALL_CS;
+    PORTB |= CTR_POWER;
+    delay(50);
 }
 
 void read_ctr(void *c) {
     unsigned char ctr = (unsigned char)(short)c;
 
-    PORTC |= ALL_CS;
-    PORTC &= ~(CS(ctr));
+    PORTC &= ~ALL_CS;
+    PORTC |= CS(ctr);
     //  clock out two bytes, reading status big-endian
-    udelay(10);
+    udelay(20);
     SPDR = 0;
     unsigned short value;
     while (!(SPSR & (1 << SPIF))) {
         //  wait
     }
     value = ((unsigned short)SPDR << 8);
-    udelay(10);
+    udelay(20);
     SPDR = 0;
     while (!(SPSR & (1 << SPIF))) {
         //  wait
     }
     value |= (unsigned short)SPDR;
-    PORTC = ~(CS(ctr));
+    PORTC &= CS(ctr);
 
     counterValues[ctr] = value;
     //  todo: send to xbee
@@ -62,9 +62,12 @@ void read_ctr(void *c) {
 
 void setup() {
     setup_timers(F_CPU);
-    DDRB = RESET_XBEE | MISO | CLOCK;
+    DDRB = RESET_XBEE | MISO | CLOCK | CTR_POWER;
+    PORTB = 0;
     DDRC = ALL_CS;
     DDRD = TXD;
+    delay(1000);
+    PORTB = 1;
     enable_tinys();
     //  todo: setup xbee
     SPCR = (1 << SPE) | (1 << MSTR) | (1 << SPR0);

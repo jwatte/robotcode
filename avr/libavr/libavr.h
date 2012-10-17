@@ -95,6 +95,7 @@ extern unsigned char uart_available();
 extern char uart_getch();
 extern unsigned char uart_read(unsigned char n, void *data);
 extern void uart_force_out(char ch);
+extern unsigned char uart_send_space();
 
 /* ADC support */
 extern void adc_setup(bool use_aref = true);

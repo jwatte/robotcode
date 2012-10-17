@@ -359,7 +359,7 @@ static void _usart_setup_ints() {
 
 void uart_setup(unsigned long brate, unsigned long f_cpu) {
     IntDisable idi;
-    unsigned short scale = ((f_cpu / 10) << 8) / 1600000;
+    unsigned long scale = ((f_cpu / 10) << 8) / 1600000;
     UCSR0B = 0;
     if (brate == 0) {
         return;
@@ -374,8 +374,9 @@ void uart_setup(unsigned long brate, unsigned long f_cpu) {
             _uart_rxend = 0;
             _uart_txptr = 0;
             _uart_txend = 0;
-            UBRR0H = 0;
-            UBRR0L = (bsu.UBRRn * scale) >> 8;
+            unsigned long lv = ((unsigned long)bsu.UBRRn * scale) >> 8;
+            UBRR0H = (lv >> 8) & 0xff;
+            UBRR0L = lv & 0xff;
             UCSR0A = (1 << U2X0);
             UCSR0C = (3 << UCSZ00) | (1 << USBS0); //  two stop bits
             UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
@@ -398,6 +399,14 @@ unsigned char uart_send(unsigned char n, void const *data) {
     //  start sending whatever is in the buffer
     UCSR0B |= (1 << UDRIE0);
     return xmit;
+}
+
+unsigned char uart_send_space() {
+    char ret = (char)sizeof(_uart_txbuf) - (char)(_uart_txend - _uart_txptr);
+    if (ret < 0 || ret > (char)sizeof(_uart_txbuf)) {
+        fatal(FATAL_UNEXPECTED_SERIAL);
+    }
+    return (unsigned char)ret;
 }
 
 void uart_force_out(char ch) {

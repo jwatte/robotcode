@@ -38,15 +38,15 @@ inline void cbi(uint8_t volatile *reg, uint8_t val) {
 #if defined(__AVR_ATtiny84A__)
 
 #define pinToPortRegOut(pin) \
-    (((pin & 0x18) == 0) ? PORTA : ((pin & 0x18) == 0x8) ? PORTB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+    ((((pin) & 0x18) == 0) ? PORTA : (((pin) & 0x18) == 0x8) ? PORTB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
 #define pinToPortRegIn(pin) \
-    (((pin & 0x18) == 0) ? PINA : ((pin & 0x18) == 0x8) ? PINB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+    ((((pin) & 0x18) == 0) ? PINA : (((pin) & 0x18) == 0x8) ? PINB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
 #define pinToPortDirReg(pin) \
-    (((pin & 0x18) == 0) ? DDRA : ((pin & 0x18) == 0x8) ? DDRB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+    ((((pin) & 0x18) == 0) ? DDRA : (((pin) & 0x18) == 0x8) ? DDRB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
 #define pcMaskReg(pin) \
-    (((pin & 0x18) == 0) ? PCMSK0 : ((pin & 0x18) == 0x8) ? PCMSK1 :(fatal(FATAL_BAD_PIN), *(regtype *)0))
+    ((((pin) & 0x18) == 0) ? PCMSK0 : (((pin) & 0x18) == 0x8) ? PCMSK1 :(fatal(FATAL_BAD_PIN), *(regtype *)0))
 #define pcCtlBit(pin) \
-    (1 << (((pin & 0x18) == 0) ? PCIE0 : ((pin & 0x18) == 0x8) ? PCIE1 :(fatal(FATAL_BAD_PIN), *(regtype *)0)))
+    (1 << ((((pin) & 0x18) == 0) ? PCIE0 : (((pin) & 0x18) == 0x8) ? PCIE1 :(fatal(FATAL_BAD_PIN), *(regtype *)0)))
 
 inline regtype &pcCtlReg(uint8_t pin) {
     return GIMSK;
@@ -69,15 +69,15 @@ inline regtype &pcCtlReg(uint8_t pin) {
 #elif defined(__AVR_ATtiny85__)
 
 #define pinToPortRegOut(pin) \
-    (((pin & 0x18) == 0) ? PORTB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+    ((((pin) & 0x18) == 0) ? PORTB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
 #define pinToPortRegIn(pin) \
-    (((pin & 0x18) == 0) ? PINB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+    ((((pin) & 0x18) == 0) ? PINB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
 #define pinToPortDirReg(pin) \
-    (((pin & 0x18) == 0) ? DDRB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+    ((((pin) & 0x18) == 0) ? DDRB : (fatal(FATAL_BAD_PIN), *(regtype *)0))
 #define pcMaskReg(pin) \
-    (((pin & 0x18) == 0) ? PCMSK : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+    ((((pin) & 0x18) == 0) ? PCMSK : (fatal(FATAL_BAD_PIN), *(regtype *)0))
 #define pcCtlBit(pin) \
-    (1 << (((pin & 0x18) == 0) ? PCIE :(fatal(FATAL_BAD_PIN), *(regtype *)0)))
+    (1 << ((((pin) & 0x18) == 0) ? PCIE :(fatal(FATAL_BAD_PIN), *(regtype *)0)))
 
 inline regtype &pcCtlReg(uint8_t pin) {
     return GIMSK;
@@ -98,15 +98,15 @@ inline regtype &pcCtlReg(uint8_t pin) {
 
 /* for hysterical reasons, Atmega328p starts with pin group == port b */
 #define pinToPortRegOut(pin) \
-    (((pin & 0x18) == 0) ? PORTB : ((pin & 0x18) == 0x8) ? PORTC : ((pin & 0x18) == 0x10) ? PORTD : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+    ((((pin) & 0x18) == 0) ? PORTB : (((pin) & 0x18) == 0x8) ? PORTC : (((pin) & 0x18) == 0x10) ? PORTD : (fatal(FATAL_BAD_PIN), *(regtype *)0))
 #define pinToPortRegIn(pin) \
-    (((pin & 0x18) == 0) ? PINB : ((pin & 0x18) == 0x8) ? PINC : ((pin & 0x18) == 0x10) ? PIND : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+    ((((pin) & 0x18) == 0) ? PINB : (((pin) & 0x18) == 0x8) ? PINC : (((pin) & 0x18) == 0x10) ? PIND : (fatal(FATAL_BAD_PIN), *(regtype *)0))
 #define pinToPortDirReg(pin) \
-    (((pin & 0x18) == 0) ? DDRB : ((pin & 0x18) == 0x8) ? DDRC : ((pin & 0x18) == 0x10) ? DDRD : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+    ((((pin) & 0x18) == 0) ? DDRB : (((pin) & 0x18) == 0x8) ? DDRC : (((pin) & 0x18) == 0x10) ? DDRD : (fatal(FATAL_BAD_PIN), *(regtype *)0))
 #define pcMaskReg(pin) \
-    (((pin & 0x18) == 0) ? PCMSK0 : ((pin & 0x18) == 0x8) ? PCMSK1 : ((pin & 0x18) == 0x10) ? PCMSK2 : (fatal(FATAL_BAD_PIN), *(regtype *)0))
+    ((((pin) & 0x18) == 0) ? PCMSK0 : (((pin) & 0x18) == 0x8) ? PCMSK1 : (((pin) & 0x18) == 0x10) ? PCMSK2 : (fatal(FATAL_BAD_PIN), *(regtype *)0))
 #define pcCtlBit(pin) \
-    (1 << (((pin & 0x18) == 0) ? PCIE0 : ((pin & 0x18) == 0x8) ? PCIE1 : ((pin & 0x18) == 0x10) ? PCIE2 : (fatal(FATAL_BAD_PIN), *(regtype *)0)))
+    (1 << ((((pin) & 0x18) == 0) ? PCIE0 : (((pin) & 0x18) == 0x8) ? PCIE1 : (((pin) & 0x18) == 0x10) ? PCIE2 : (fatal(FATAL_BAD_PIN), *(regtype *)0)))
 
 inline regtype &pcCtlReg(uint8_t pin) {
     return PCICR;

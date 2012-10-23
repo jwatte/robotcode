@@ -306,6 +306,7 @@ void update_servo(void *v)
 
 void setup_buttons()
 {
+    // pull up pause button
     DDRD &= ~(1 << PD2);
     PORTD |= (1 << PD2);
 }

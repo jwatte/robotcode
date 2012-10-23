@@ -1,4 +1,5 @@
 
+#define DEBUG 1
 #define F_CPU 20000000
 
 #include "libavr.h"
@@ -31,10 +32,40 @@
 #define RXD (1 << 0)
 #define TXD (1 << 1)
 #define ALL_DEBUG 0xfc
-#define DEBUG(x) (1 << ((x) + 2))
+#define D_DEBUG(x) (1 << ((x) + 2))
 
 unsigned short counterValues[6];
 unsigned char triggerFlags;
+
+#if DEBUG
+bool debughi;
+
+void debug_toggle() {
+    debughi = !debughi;
+    if (debughi) {
+        PORTD |= (1 << 2);
+    }
+    else {
+        PORTD &= ~(1 << 2);
+    }
+}
+
+void debug_blink(bool on) {
+    for (unsigned char i = 0; i < 10; ++i) {
+        PORTD |= (1 << 2);
+        for (unsigned char volatile d = 0; d < 128; ++d) {
+            i += 1;
+        }
+        PORTD &= ~(1 << 2);
+        for (unsigned char volatile d = 0; d < 128; ++d) {
+            i += 1;
+        }
+    }
+    debughi = !on;
+    debug_toggle();
+}
+
+#endif
 
 void enable_tinys() {
     PORTC &= ALL_CS;
@@ -100,7 +131,10 @@ char const PROGMEM SETUP[] = XBEE_SETUP "\r";
 char const PROGMEM ATCN[] = "ATCN\r";
 
 void setup_xbee(void *) {
-    after(10, &setup_xbee, 0);
+#if DEBUG
+    debug_toggle();
+#endif
+
     //  discard data
     unsigned char dbrd = uart_read(sizeof(databuf), databuf);
     switch (xbee_state) {
@@ -194,8 +228,12 @@ void setup_xbee(void *) {
         }
         ++xbee_waits;
         if (xbee_waits == 255) {
+#if DEBUG
+            ++xbee_state;
+#else
             //  timeout! crash and burn
             fatal(FATAL_UI_BAD_PARAM);
+#endif
         }
         break;
     case 10:
@@ -214,26 +252,30 @@ void setup_xbee(void *) {
     case 12:
         //  super success!
         ++xbee_state;
+        after(0, &read_ctr, 0);
         after(30, &send_data, 0);
         break;
     case 13:
         //  do nothing -- last enqueue
-        break;
+        return;
     }
+    after(10, &setup_xbee, 0);
 }
 
 void setup() {
+#if DEBUG
+    fatal_set_blink(&debug_blink);
+#endif
     setup_timers(F_CPU);
     DDRB = RESET_XBEE | MISO | CLOCK | CTR_POWER;
     PORTB = 0;
     DDRC = ALL_CS;
-    DDRD = TXD;
+    DDRD = TXD | (1 << 2);
     delay(50);
     uart_setup(9600);
     PORTB = 1;
     enable_tinys();
     SPCR = (1 << SPE) | (1 << MSTR) | (1 << SPR0);
-    after(0, &read_ctr, 0);
     after(10, &setup_xbee, 0);
 }
 

@@ -63,6 +63,10 @@ void SetupHardware(void) {
 
     //  try to reset the remote board
     PORTD &= ~(1 << 7);
+    //  ghetto delay loop
+    for (unsigned char volatile i = 0; i < 255; ++i) {
+        ++i;
+    }
     PORTD |= (1 << 7);
 }
 
@@ -93,6 +97,8 @@ void EVENT_USB_Device_ConfigurationChanged(void) {
         DebugWrite('A');
         DebugWrite('I');
         DebugWrite('L');
+        while (true) {
+        }
     }
 }
 
@@ -109,12 +115,14 @@ uint8_t num_ovf;
 
 void StartTransmit(void) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-        //  If I am not currently transmitting
-        if (!(UCSR1B & (1 << TXEN1))) {
-            UDR1 = tx_buf[tx_tail & (sizeof(tx_buf) - 1)];
-            ++tx_tail;
+        if (tx_head != tx_tail) {
+            //  If I am not currently transmitting
+            if (!(UCSR1B & (1 << TXEN1))) {
+                UDR1 = tx_buf[tx_tail & (sizeof(tx_buf) - 1)];
+                ++tx_tail;
+            }
+            UCSR1B = UCSR1B | (1 << UDRIE1) | (1 << TXEN1);
         }
-        UCSR1B = UCSR1B | (1 << UDRIE1) | (1 << TXEN1);
     }
 }
 
@@ -165,7 +173,6 @@ void PacketForwarder_Task(void) {
             --n;
         }
         Endpoint_ClearOUT();
-        StartTransmit();
     }
 
     Endpoint_SelectEndpoint(INFO_EPNUM);

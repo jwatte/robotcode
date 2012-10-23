@@ -171,7 +171,8 @@ public:
 private:
   void pulseCE() {
     digitalWrite(CE, HIGH);
-    udelay(10);
+    //  data sheet says 10 us, be on the safe side.
+    udelay(12);
     digitalWrite(CE, LOW);
   }
 
@@ -300,6 +301,7 @@ private:
     rCONFIG_ |= (1 << NRF_PWR_UP);
     setRegister(NRF_CONFIG, rCONFIG_);
     theMode_ = WriteMode;
+    //  Don't set CE here -- will pulse it later after writing data
   }
 
   void enterMode(ChipMode m) {

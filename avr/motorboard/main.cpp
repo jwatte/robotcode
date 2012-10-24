@@ -7,14 +7,20 @@
 
 
 /*  less than 6.5V in the battery pack, and I can't run. */
-#define VOLTAGE_PIN 2
+#define VOLTAGE_PIN 1
+//  When to turn off motor because of undervoltage
 #define THRESHOLD_VOLTAGE 0x68
+//  When to signal power-off to power control to protect batteries
 #define OFF_VOLTAGE 0x67    //  3.2V*2
-#define VOLTAGE_SCALER 105  //  was 109
+//  8.2V is 164 in the reading
+//  formula is (rdbyte << 6) / scaler
+//  8.2 is 0x83, 150 is 0xA4, so relation is 0x83 == (0xA4 * 64) / scaler
+//  scaler = 0xA4 * 64 / 0x83 == 80
+#define VOLTAGE_SCALER 80
 
 /* For some reason, running the servo on PWM is not very clean. */
 /* Perhaps an approach that uses timer1 interrupts for high resolution */
-/* would be better. But for now, I just schedule 50 Hz updates. */
+/* would be better. But for now, I just schedule 30 Hz updates. */
 #define USE_SERVO_TIMER 0
 
 #define LED_GO_B (1 << PB0)
@@ -34,6 +40,7 @@ RfInt rf_int;
 info_MotorPower g_write_state;
 info_MotorPower g_actual_state;
 
+bool powerfail;
 
 
 struct TuneStruct {
@@ -161,9 +168,12 @@ void set_led_state(bool paused, bool go, int blink)
 }
 
 
+//  Forward: MOTOR_A_PCH_D + MOTOR_B_NCH_B
+//  Backward: MOTOR_B_PCH_D + MOTOR_A_NCH_B
+
 #define MOTOR_A_PCH_D (1 << PD5)
-#define MOTOR_A_NCH_D (1 << PD6)
-#define MOTOR_B_PCH_B (1 << PB2)
+#define MOTOR_A_NCH_B (1 << PB2)
+#define MOTOR_B_PCH_D (1 << PD6)
 #define MOTOR_B_NCH_B (1 << PB1)
 
 //  These were taken at 5.0V regulation.
@@ -179,12 +189,12 @@ void setup_motors()
     TIMSK0 = 0;
     TIFR0 = 0x7;
 
-    PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_A_NCH_D));
-    PORTB = (PORTB & ~(MOTOR_B_PCH_B | MOTOR_B_NCH_B));
-    DDRD |= (MOTOR_A_PCH_D | MOTOR_A_NCH_D);
-    DDRB |= (MOTOR_B_PCH_B | MOTOR_B_NCH_B);
+    PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_B_PCH_D));
+    PORTB = (PORTB & ~(MOTOR_A_NCH_B | MOTOR_B_NCH_B));
+    DDRD |= (MOTOR_A_PCH_D | MOTOR_B_PCH_D);
+    DDRB |= (MOTOR_A_NCH_B | MOTOR_B_NCH_B);
     TCCR0A = 0x03;  //  Fast PWM, not yet turned on
-    TCCR0B = 0x3;   //  0.5 kHz (0x2 is 4 kHz)
+    TCCR0B = 0x03;   //  0.5 kHz (0x2 is 4 kHz, 0x1 is 32 kHz)
     OCR0A = 128;
     OCR0B = 128;
 }
@@ -192,24 +202,27 @@ void setup_motors()
 void update_motor_power()
 {
     char power = (char)g_actual_state.w_cmd_power;
-    if (!g_actual_state.r_e_conn || !g_actual_state.w_e_allow || g_actual_state.r_self_stop) {
+    if (!g_actual_state.r_e_conn || !g_actual_state.w_e_allow || g_actual_state.r_self_stop || powerfail) {
         power = 0;
     }
     if (!((power == 0 && g_actual_state.r_actual_power == 0) ||
                 (power > 0 && g_actual_state.r_actual_power > 0) ||
                 (power < 0 && g_actual_state.r_actual_power < 0))) {
         TCCR0A = 0x03;  //  Fast PWM, not yet turned on
-        PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_A_NCH_D));
-        PORTB = (PORTB & ~(MOTOR_B_PCH_B | MOTOR_B_NCH_B));
-        udelay(10); // prevent shooth-through
+        PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_B_PCH_D));
+        PORTB = (PORTB & ~(MOTOR_A_NCH_B | MOTOR_B_NCH_B));
+        udelay(50); // prevent shooth-through
     }
     g_actual_state.r_actual_power = power;
     if (power == 0) {
         //  ground everything out
-        PORTD = (PORTD & ~(MOTOR_A_PCH_D)) | MOTOR_A_NCH_D;
-        PORTB = (PORTB & ~(MOTOR_B_PCH_B)) | MOTOR_B_NCH_B;
+        PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_B_PCH_D));
+        PORTB = (PORTB | MOTOR_A_NCH_B | MOTOR_B_NCH_B);
         TCCR0A = 0x03;  //  Fast PWM, not yet turned on
-        if (!g_actual_state.r_e_conn) {
+        if (powerfail) {
+            set_led_state(true, true, 100);
+        }
+        else if (!g_actual_state.r_e_conn) {
             set_led_state(true, false, 1200);
         }
         else if (!g_actual_state.w_e_allow || g_actual_state.r_self_stop) {
@@ -225,7 +238,8 @@ void update_motor_power()
         }
         //  negative A, positive B
         set_led_state(false, true, 200);
-        PORTB = (PORTB & ~(MOTOR_B_NCH_B)) | MOTOR_B_PCH_B;
+        PORTB = (PORTB & ~(MOTOR_A_NCH_B)) | MOTOR_B_NCH_B;
+        PORTD = (PORTD & ~(MOTOR_B_PCH_D)) | MOTOR_A_PCH_D;
         //PORTD = (PORTD & ~(MOTOR_A_PCH_D)) | MOTOR_A_NCH_D;
         //  Note: tuning 255 means "full power," 0 means "almost no power"
         OCR0A = (-(int)power * (g_actual_state.w_trim_power + 1)) >> 7;
@@ -237,8 +251,8 @@ void update_motor_power()
         }
         //  positive A, negative B
         set_led_state(false, true, 0);
-        PORTB = (PORTB & ~(MOTOR_B_PCH_B)) | MOTOR_B_NCH_B;
-        //PORTD = (PORTD & ~(MOTOR_A_NCH_D)) | MOTOR_A_PCH_D;
+        PORTB = (PORTB & ~(MOTOR_B_NCH_B)) | MOTOR_A_NCH_B;
+        PORTD = (PORTD & ~(MOTOR_A_PCH_D)) | MOTOR_B_PCH_D;
         OCR0B = ((int)power * (g_actual_state.w_trim_power + 1)) >> 7;
         TCCR0A = (1 << COM0B1) | (1 << WGM01) | (1 << WGM00);  //  Fast PWM, channel B
     }
@@ -338,6 +352,7 @@ void apply_state()
     if (g_actual_state.w_cmd_power != g_write_state.w_cmd_power)
     {
         g_actual_state.w_cmd_power = g_write_state.w_cmd_power;
+        //  When to signal power-off to power control to protect batteries
         power = true;
     }
     if (g_actual_state.w_cmd_steer != g_write_state.w_cmd_steer)
@@ -436,7 +451,7 @@ void slow_bits_update(void *v)
 
 void setup_power()
 {
-    adc_setup();
+    adc_setup(AREF_INTERNAL);
 }
 
 void poll_power(void *);
@@ -452,9 +467,11 @@ void poll_power_result(unsigned char value)
         g_actual_state.r_self_stop = true;
     }
     else {
+        powerfail = false;
         n_badVoltage = 0;
     }
     if (g_actual_state.r_voltage < OFF_VOLTAGE) { //   don't over-discharge
+        powerfail = true;
         ++n_badVoltage;
         if (n_badVoltage > 4) {
             digitalWrite(POWEROFF_PIN, HIGH);

@@ -386,7 +386,7 @@ void setup() {
     digitalWrite(LED_PIN, HIGH);
     setup_timers(F_CPU);
     uart_setup(BAUD_RATE, F_CPU);
-    adc_setup(false);
+    adc_setup();
     //  turn reset into an input, to be voltage independent
     DDRD &= ~(RESET_SENSOR | RESET_MOTOR);
     twi = start_twi_master(&master);

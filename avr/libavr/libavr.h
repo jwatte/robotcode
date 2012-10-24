@@ -98,7 +98,12 @@ extern void uart_force_out(char ch);
 extern unsigned char uart_send_space();
 
 /* ADC support */
-extern void adc_setup(bool use_aref = true);
+enum {
+    AREF_AREF = 0,
+    AREF_VCC = 1,
+    AREF_INTERNAL = 3
+};
+extern void adc_setup(int ref = AREF_VCC);
 extern bool adc_busy();
 extern void adc_read(unsigned char channel, void (*cb)(unsigned char val));
 

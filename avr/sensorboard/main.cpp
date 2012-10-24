@@ -162,7 +162,7 @@ void setup() {
     pinMode(0, OUTPUT);
     pinMode(6, OUTPUT);
     pinMode(7, OUTPUT);
-    adc_setup(true);
+    adc_setup(AREF_AREF);
     blink_laser(0);
     read_ping(0);
     read_ir(0);

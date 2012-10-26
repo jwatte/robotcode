@@ -28,6 +28,8 @@
 
 #define POWEROFF_PIN (8|0)
 
+#define BTN_A (1 << 2)
+
 nRF24L01<false, 0|7, 16|4, 0|6> rf;
 
 class RfInt : public IPinChangeNotify {
@@ -41,6 +43,7 @@ info_MotorPower g_write_state;
 info_MotorPower g_actual_state;
 
 bool powerfail;
+bool btn_power;
 
 
 struct TuneStruct {
@@ -103,11 +106,15 @@ void read_tuning()
 
 
 
-int g_led_timer;
-bool g_led_paused;
-bool g_led_go;
+enum LED_state {
+    LED_powerfail = 0x1,
+    LED_connected = 0x2,
+    LED_forward = 0x4,
+    LED_backward = 0x8,
+};
 bool g_led_blink;
 bool g_after;
+unsigned char g_led_bits = 0;
 
 void blink_leds(bool on)
 {
@@ -132,35 +139,63 @@ void setup_leds()
 void update_leds(void *)
 {
     g_after = false;
-    if (g_led_timer) {
+
+    //  default
+    int delay = 400;
+    bool ledb = g_led_blink;
+    bool ledd = false;
+
+    if (g_led_bits & LED_powerfail) {
+        delay = 100;
+        ledb = g_led_blink;
+        ledd = g_led_blink;
+    }
+    else if (g_led_bits & LED_forward) {
+        delay = 0;
+        ledb = false;
+        ledd = true;
+    }
+    else if (g_led_bits & LED_backward) {
+        delay = 400;
+        ledb = false;
+        ledd = g_led_blink;
+    }
+    else if (g_led_bits & LED_connected) {
+        delay = 0;
+        ledb = true;
+        ledd = false;
+    }
+
+    if (delay) {
         g_led_blink = !g_led_blink;
     }
     else {
         g_led_blink = true;
     }
-    if (g_led_go && g_led_blink) {
+
+    if (ledb) {
         PORTB = PORTB | LED_GO_B;
     }
     else {
         PORTB = PORTB & ~LED_GO_B;
     }
-    if (g_led_paused && g_led_blink) {
+
+    if (ledd) {
         PORTD = PORTD | LED_PAUSE_D;
     }
     else {
         PORTD = PORTD & ~LED_PAUSE_D;
     }
-    if (g_led_timer && !g_after) {
+
+    if (delay && !g_after) {
         g_after = true;
-        after(g_led_timer, &update_leds, 0);
+        after(delay, &update_leds, 0);
     }
 }
 
-void set_led_state(bool paused, bool go, int blink)
+void set_led_bits(unsigned char state)
 {
-    g_led_timer = blink;
-    g_led_paused = paused;
-    g_led_go = go;
+    g_led_bits = state;
     if (!g_after) {
         g_after = true;
         after(0, &update_leds, 0);
@@ -190,11 +225,11 @@ void setup_motors()
     TIFR0 = 0x7;
 
     PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_B_PCH_D));
-    PORTB = (PORTB & ~(MOTOR_A_NCH_B | MOTOR_B_NCH_B));
+    PORTB = (PORTB | MOTOR_A_NCH_B | MOTOR_B_NCH_B);
     DDRD |= (MOTOR_A_PCH_D | MOTOR_B_PCH_D);
     DDRB |= (MOTOR_A_NCH_B | MOTOR_B_NCH_B);
     TCCR0A = 0x03;  //  Fast PWM, not yet turned on
-    TCCR0B = 0x03;   //  0.5 kHz (0x2 is 4 kHz, 0x1 is 32 kHz)
+    TCCR0B = 0x02;   //  0x3 is 0.5 kHz, 0x2 is 4 kHz, 0x1 is 32 kHz
     OCR0A = 128;
     OCR0B = 128;
 }
@@ -202,60 +237,58 @@ void setup_motors()
 void update_motor_power()
 {
     char power = (char)g_actual_state.w_cmd_power;
-    if (!g_actual_state.r_e_conn || !g_actual_state.w_e_allow || g_actual_state.r_self_stop || powerfail) {
+    if (!g_actual_state.r_e_conn || !g_actual_state.w_e_allow ||
+        g_actual_state.r_self_stop || powerfail) {
         power = 0;
+    }
+    if (btn_power) {
+        power = 64;
     }
     if (!((power == 0 && g_actual_state.r_actual_power == 0) ||
                 (power > 0 && g_actual_state.r_actual_power > 0) ||
                 (power < 0 && g_actual_state.r_actual_power < 0))) {
+        //  turn everything off in preparation for change
         TCCR0A = 0x03;  //  Fast PWM, not yet turned on
         PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_B_PCH_D));
         PORTB = (PORTB & ~(MOTOR_A_NCH_B | MOTOR_B_NCH_B));
         udelay(50); // prevent shooth-through
     }
     g_actual_state.r_actual_power = power;
+    unsigned char led = 0;
+    if (powerfail) {
+        led |= LED_powerfail;
+    }
+    if (g_actual_state.r_e_conn) {
+        led |= LED_connected;
+    }
     if (power == 0) {
         //  ground everything out
         PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_B_PCH_D));
         PORTB = (PORTB | MOTOR_A_NCH_B | MOTOR_B_NCH_B);
         TCCR0A = 0x03;  //  Fast PWM, not yet turned on
-        if (powerfail) {
-            set_led_state(true, true, 100);
-        }
-        else if (!g_actual_state.r_e_conn) {
-            set_led_state(true, false, 1200);
-        }
-        else if (!g_actual_state.w_e_allow || g_actual_state.r_self_stop) {
-            set_led_state(true, false, 200);
-        }
-        else {
-            set_led_state(true, false, 0);
-        }
     }
     else if (power < 0) {
         if (power < -127) {
             power = -127;
         }
-        //  negative A, positive B
-        set_led_state(false, true, 200);
-        PORTB = (PORTB & ~(MOTOR_A_NCH_B)) | MOTOR_B_NCH_B;
-        PORTD = (PORTD & ~(MOTOR_B_PCH_D)) | MOTOR_A_PCH_D;
-        //PORTD = (PORTD & ~(MOTOR_A_PCH_D)) | MOTOR_A_NCH_D;
+        led |= LED_backward;
+        PORTB = (PORTB & ~(MOTOR_A_NCH_B)) | (MOTOR_B_NCH_B);
+        PORTD = (PORTD & ~(MOTOR_B_PCH_D)) | (MOTOR_A_PCH_D);
         //  Note: tuning 255 means "full power," 0 means "almost no power"
         OCR0A = (-(int)power * (g_actual_state.w_trim_power + 1)) >> 7;
-        TCCR0A = (1 << COM0A1) | (1 << WGM01) | (1 << WGM00);  //  Fast PWM, channel A
+        TCCR0A = (1 << COM0B1) | (1 << WGM01) | (1 << WGM00);  //  Fast PWM, channel B
     }
     else {
         if (power > 127) {
             power = 127;
         }
-        //  positive A, negative B
-        set_led_state(false, true, 0);
-        PORTB = (PORTB & ~(MOTOR_B_NCH_B)) | MOTOR_A_NCH_B;
-        PORTD = (PORTD & ~(MOTOR_A_PCH_D)) | MOTOR_B_PCH_D;
+        led |= LED_forward;
+        PORTB = (PORTB & ~(MOTOR_B_NCH_B)) | (MOTOR_A_NCH_B);
+        PORTD = (PORTD & ~(MOTOR_A_PCH_D)) | (MOTOR_B_PCH_D);
         OCR0B = ((int)power * (g_actual_state.w_trim_power + 1)) >> 7;
-        TCCR0A = (1 << COM0B1) | (1 << WGM01) | (1 << WGM00);  //  Fast PWM, channel B
+        TCCR0A = (1 << COM0A1) | (1 << WGM01) | (1 << WGM00);  //  Fast PWM, channel A
     }
+    set_led_bits(led);
 }
 
 unsigned char tuned_angle()
@@ -323,6 +356,8 @@ void setup_buttons()
     // pull up pause button
     DDRD &= ~(1 << PD2);
     PORTD |= (1 << PD2);
+    DDRC &= BTN_A;
+    PORTC |= BTN_A; //  pull-up
 }
 
 void poll_button(void *)
@@ -340,6 +375,12 @@ void poll_button(void *)
     else if (g_actual_state.r_self_stop > 0) {
         g_actual_state.r_self_stop = 1;
         update_motor_power();
+    }
+    if (!(PINC & BTN_A)) {
+        btn_power = true;
+    }
+    else {
+        btn_power = false;
     }
     after(100, &poll_button, 0);
 }
@@ -407,7 +448,6 @@ void dispatch_cmd(unsigned char sz, unsigned char const *d)
 void reset_radio(void *)
 {
     if (!g_actual_state.r_e_conn) {
-        set_led_state(false, false, 0);
         blink_leds(true);
         rf.teardown();
         delay(100);
@@ -442,9 +482,6 @@ void slow_bits_update(void *v)
     g_actual_state.r_debug_bits = rf.readClearDebugBits();
     if (rf.canWriteData()) {
         rf.writeData(sizeof(g_actual_state), &g_actual_state);
-    }
-    else {
-        set_led_state(false, true, 50);
     }
     after(175, &slow_bits_update, 0);
 }

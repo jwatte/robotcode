@@ -5,7 +5,7 @@
 #include <LUFA/Drivers/USB/USB.h>
 
 #define INFO_EPNUM           1
-#define INFO_EPSIZE          8
+#define INFO_EPSIZE          1
 
 #define DATA_TX_EPNUM        2
 #define DATA_RX_EPNUM        3

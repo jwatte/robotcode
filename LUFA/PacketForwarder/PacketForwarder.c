@@ -102,13 +102,13 @@ void EVENT_USB_Device_ConfigurationChanged(void) {
     }
 }
 
-uint8_t rx_buf[BUFFER_SIZE];
-uint8_t rx_head;
-uint8_t rx_tail;
+volatile uint8_t rx_buf[BUFFER_SIZE];
+volatile uint8_t rx_head;
+volatile uint8_t rx_tail;
 
-uint8_t tx_buf[BUFFER_SIZE];
-uint8_t tx_head;
-uint8_t tx_tail;
+volatile uint8_t tx_buf[BUFFER_SIZE];
+volatile uint8_t tx_head;
+volatile uint8_t tx_tail;
 
 uint8_t num_ovf;
 
@@ -128,7 +128,7 @@ void StartTransmit(void) {
 
 ISR(USART1_UDRE_vect) {
     if (tx_head == tx_tail) {
-        UCSR1B = UCSR1B & !((1 << UDRIE1) | (1 << TXEN1));
+        UCSR1B = UCSR1B & ~((1 << UDRIE1) | (1 << TXEN1));
     }
     else {
         UDR1 = tx_buf[tx_tail & (sizeof(tx_buf) - 1)];
@@ -173,10 +173,11 @@ void PacketForwarder_Task(void) {
             --n;
         }
         Endpoint_ClearOUT();
+        StartTransmit();
     }
 
     Endpoint_SelectEndpoint(INFO_EPNUM);
-    if (Endpoint_IsConfigured() && Endpoint_IsOUTReceived() && Endpoint_IsReadWriteAllowed()) {
+    if (Endpoint_IsConfigured() && Endpoint_IsINReady() && Endpoint_IsReadWriteAllowed()) {
         ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
             Endpoint_Write_8(num_ovf);
             num_ovf = 0;

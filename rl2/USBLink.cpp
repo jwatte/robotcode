@@ -11,7 +11,7 @@
 #include "protocol.h"
 
 
-#define WRITE_USB 0
+#define WRITE_USB 1
 
 
 class Transfer {
@@ -53,16 +53,13 @@ public:
     }
 
     void out_write(void const *data, size_t sz) {
+        std::cerr << "out_write(" << sz << ")" << std::endl;
         Packet *p = Packet::create();
         p->set_size(sz);
         memcpy(p->buffer(), data, sz);
-        p->destroy();
-        return;
-        /*
         boost::unique_lock<boost::mutex> lock(lock_);
         outQueue_.push_back(p);
         start_out_inner();
-        */
     }
 
 private:
@@ -70,8 +67,10 @@ private:
     void start_out_inner() {
         #if WRITE_USB
         if (!outPack_ && !outQueue_.empty()) {
+            std::cerr << "start_out_inner()" << std::endl;
             outPack_ = outQueue_.front();
             outQueue_.pop_front();
+            memset(outXfer_, 0, sizeof(*outXfer_));
             outXfer_->dev_handle = dh_;
             libusb_fill_bulk_transfer(outXfer_, dh_, oep_, outPack_->buffer(), outPack_->size(),
                     &Transfer::out_callback, this, 1000); //  a second is a long time!
@@ -105,8 +104,9 @@ private:
     void start_in_inner() {
         if (!inPack_) {
             inPack_ = Packet::create();
+            memset(inXfer_, 0, sizeof(*inXfer_));
             inXfer_->dev_handle = dh_;
-            libusb_fill_bulk_transfer(inXfer_, dh_, oep_, inPack_->buffer(), inPack_->max_size(),
+            libusb_fill_bulk_transfer(inXfer_, dh_, iep_, inPack_->buffer(), inPack_->max_size(),
                     &Transfer::in_callback, this, 1000); //  a second is a long time!
             int err = libusb_submit_transfer(inXfer_);
             if (err != 0) {
@@ -123,9 +123,11 @@ private:
     }
 
     void in_complete() {
+        if (inXfer_->status != LIBUSB_TRANSFER_COMPLETED) {
+            std::cerr << "transfer status: " << inXfer_->status << std::endl;
+        }
         boost::unique_lock<boost::mutex> lock(lock_);
         inPack_->set_size(inXfer_->actual_length);
-        std::cerr << "asz: " << inXfer_->actual_length << " " << inXfer_->length << std::endl;
         inQueue_.push_back(const_cast<Packet *>(inPack_));
         inPack_ = 0;
         inReady_.release();
@@ -212,13 +214,7 @@ void USBLink::step() {
             }
             if (!drop) {
                 unsigned char const *pp = (unsigned char const *)pack->buffer();
-                unsigned char len = pp[0];
-                std::cerr << "seen: " << size << " len: " << (int)len << std::endl;
-                if (len > size-1) {
-                    std::cerr << "len too big" << std::endl;
-                    len = size-1;
-                }
-                memcpy(&sendBuf_[sendBufEnd_], pp+1, len);
+                memcpy(&sendBuf_[sendBufEnd_], pp, size);
                 sendBufEnd_ += size;
                 assert(sendBufEnd_ <= sizeof(sendBuf_));
             }
@@ -405,8 +401,8 @@ void USBLink::board_return(unsigned char ix, unsigned char offset, void const *d
     }
     unsigned char msg[4 + 30];
     msg[0] = 0xed;
-    msg[1] = 'm';
-    msg[2] = sz + 1;
+    msg[1] = sz + 2;
+    msg[2] = 'm';
     msg[3] = ix;
     memcpy(&msg[4], data, sz);
     xfer_->out_write(msg, 4 + sz);
@@ -414,13 +410,13 @@ void USBLink::board_return(unsigned char ix, unsigned char offset, void const *d
 }
 
 void USBLink::board_cmd(unsigned char ix, void const *data, unsigned char sz) {
-    if (sz > 32) {
+    if (sz > 30) {
         throw std::runtime_error("Too large command packet in USBLink::board_cmd()");
     }
     unsigned char msg[4 + 30];
     msg[0] = 0xed;
+    msg[2] = sz + 2;
     msg[1] = 'c';
-    msg[2] = sz + 1;
     msg[3] = ix;
     memcpy(&msg[4], data, sz);
     xfer_->out_write(msg, 4 + sz);

@@ -29,7 +29,8 @@ public:
         s_end(0),
         m_ptr(0),
         m_end(0),
-        m_addr(0) {
+        m_addr(0),
+        num_stop(0) {
     }
     unsigned char s_ptr;
     unsigned char s_end;
@@ -38,6 +39,7 @@ public:
     unsigned char m_addr;
     unsigned char s_buf[TWI_MAX_SIZE];
     unsigned char m_buf[TWI_MAX_SIZE];
+    unsigned char num_stop;
 
     /* this is the master interface */
 
@@ -54,7 +56,7 @@ public:
             fatal(FATAL_TWI_TOO_BIG);
         }
         memcpy(m_buf, data, n);
-        m_addr = addr << 1;
+        m_addr = addr; //addr << 1;
         m_ptr = 0;
         m_end = n;
         //  please let me know when you have a start condition
@@ -108,6 +110,8 @@ public:
         }
         else {
             twcr |= (1 << TWSTO);
+            twcr &= ~(1 << TWSTA);
+            num_stop = 0;
             after(0, done_sending, 0);
         }
         return twcr;
@@ -216,8 +220,11 @@ static void done_sending(void *) {
         IntDisable idi;
         //  if still not done stopping the bus, try again soon
         if (TWCR & (1 << TWSTO)) {
-            after(0, done_sending, 0);
-            return;
+            if (_twi.num_stop < 10) {
+                _twi.num_stop++;
+                after(0, done_sending, 0);
+                return;
+            }
         }
         _twi.m_addr = 0;
         _twi.m_ptr = _twi.m_end = 0;

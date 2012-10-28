@@ -41,7 +41,7 @@ int main(void) {
     PORTD |= 0x8;
     bad_delay();
 	SetupHardware();
-	LEDs_SetAllLEDs(LEDMASK_USB_NOTREADY);
+	//LEDs_SetAllLEDs(LEDMASK_USB_NOTREADY);
 	sei();
 
 	while (true) {
@@ -58,7 +58,7 @@ void SetupHardware(void) {
 
 	clock_prescale_set(clock_div_1);
 
-	LEDs_Init();
+	//LEDs_Init();
 
     UCSR1B = 0;
     UCSR1C = 0;
@@ -84,11 +84,11 @@ void SetupHardware(void) {
 }
 
 void EVENT_USB_Device_Connect(void) {
-	LEDs_SetAllLEDs(LEDMASK_USB_ENUMERATING);
+	//LEDs_SetAllLEDs(LEDMASK_USB_ENUMERATING);
 }
 
 void EVENT_USB_Device_Disconnect(void) {
-	LEDs_SetAllLEDs(LEDMASK_USB_NOTREADY);
+	//LEDs_SetAllLEDs(LEDMASK_USB_NOTREADY);
 }
 
 void EVENT_USB_Device_ConfigurationChanged(void) {
@@ -108,7 +108,7 @@ void Reconfig() {
         EP_TYPE_BULK, ENDPOINT_DIR_OUT, DATA_EPSIZE,
         ENDPOINT_BANK_SINGLE);
 
-	LEDs_SetAllLEDs(ConfigSuccess ? LEDMASK_USB_READY : LEDMASK_USB_ERROR);
+	//LEDs_SetAllLEDs(ConfigSuccess ? LEDMASK_USB_READY : LEDMASK_USB_ERROR);
     if (!ConfigSuccess) {
         while (true) {
             DebugWrite(0xed);
@@ -184,10 +184,9 @@ void PacketForwarder_Task(void) {
         Endpoint_SelectEndpoint(DATA_TX_EPNUM);
         Endpoint_SetEndpointDirection(ENDPOINT_DIR_IN);
         if (Endpoint_IsConfigured() && Endpoint_IsINReady() && Endpoint_IsReadWriteAllowed()) {
-            if (g > DATA_EPSIZE - 1) {
-                g = DATA_EPSIZE - 1;
+            if (g > DATA_EPSIZE) {
+                g = DATA_EPSIZE;
             }
-            Endpoint_Write_8(g);
             while (g > 0) {
                 Endpoint_Write_8(rx_buf[rx_tail & (sizeof(rx_buf) - 1)]);
                 ++rx_tail;

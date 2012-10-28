@@ -99,6 +99,20 @@ void PropertyDisplay::on_click() {
     }
 }
 
+int PropertyDisplay::handle(int event) {
+    if ((event == FL_KEYDOWN || event == FL_SHORTCUT) && Fl::event_key() == FL_Escape) {
+        if (edit_ != 0) {
+            edit_->value(value_.c_str());
+            edit_->hide();
+            output_->show();
+            output_->label(value_.c_str());
+            output_->redraw();
+            return 1;
+        }
+    }
+    return Fl_Group::handle(event);
+}
+
 static bool set_prop_value(boost::shared_ptr<Property> const &prop, std::string const &ival, std::string &oerr) {
     try {
         switch (prop->type()) {
@@ -129,7 +143,9 @@ void PropertyDisplay::on_edit() {
     std::string val(edit_->value()), err;
     if (!set_prop_value(prop_, val, err)) {
         std::cerr << "Property value error: " << err << std::endl;
+        output_->label(value_.c_str());
     }
+    output_->redraw();
 }
 
 void PropertyDisplay::on_change() {

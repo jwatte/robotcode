@@ -45,6 +45,7 @@ private:
     void set_colors(unsigned short front, unsigned short back);
     template<typename T> 
     void cmd(T const &t, size_t sz = sizeof(T)) {
+        return; /* TODO: FIXME: enable this */
         if (sz > 32) {
             throw std::runtime_error("Too long command in DisplayBoard::cmd()");
         }

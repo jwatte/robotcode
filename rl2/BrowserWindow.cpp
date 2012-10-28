@@ -50,6 +50,14 @@ public:
     GraphWidget *gw_;
 };
 
+void quit_program(Fl_Widget *) {
+    if (Fl::event() == FL_SHORTCUT && Fl::event_key() == FL_Escape) {
+        return; //  don't quit on Escape
+    }
+    std::cerr << "quit_program() received" << std::endl;
+    exit(0);
+}
+
 BrowserWindow::BrowserWindow(boost::shared_ptr<ModuleList> const &modules,
     boost::shared_ptr<Settings> const &set) :
     Fl_Double_Window(0, 0, 480, 480, "Modules"),
@@ -82,6 +90,7 @@ BrowserWindow::BrowserWindow(boost::shared_ptr<ModuleList> const &modules,
         new PropertyListenerTramp<double>(6.5, 8.5, mbatt_, mgraph_)))->attach(
         modules->get_module_named("Motor board")->get_property_named("r_voltage"));
     Fl::add_timeout(1, &BrowserWindow::on_timeout, this);
+    callback(&quit_program);
 }
 
 void BrowserWindow::on_timeout(void *b) {

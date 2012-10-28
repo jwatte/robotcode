@@ -37,7 +37,7 @@ public:
         }
         if (!base.equal(value_, *(T *)t)) {
             value_ = *(T *)t;
-            if (editable_) {
+            if (is_edit && editable_) {
                 editable_->on_change();
             }
             this->on_change();

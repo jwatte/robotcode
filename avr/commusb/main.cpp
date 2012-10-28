@@ -8,9 +8,10 @@
 #include <stdio.h>
 
 #define LED_PIN (0|5)
-#define SERIAL_INDICATOR (1 << 4)
 #define RESET_SENSOR (1 << 2)
 #define RESET_MOTOR (1 << 3)
+#define SERIAL_INDICATOR (1 << 4)
+#define CMD_INDICATOR (1 << 5)
 
 #define BAUD_RATE 115200
 
@@ -27,7 +28,8 @@
     F   node code               node fatalled
 
     Host -> Board
-    m   node      data          send message to node
+    m   node      data          send message to node (typically offset-size-data config write)
+    c   node      data          send command to node (free-form data)
 
  */
 
@@ -38,7 +40,9 @@ info_USBInterface g_info;
 TWIMaster *twi;
 
 #define MAXCMD 30
-static unsigned char cmdbuf[2+MAXCMD];
+static unsigned char cmdbuf[2 + MAXCMD];
+static unsigned char inptr;
+static unsigned char inbuf[2 + MAXCMD];
 
 static void cmd_start(char ch) {
     PORTD |= SERIAL_INDICATOR;
@@ -90,15 +94,33 @@ public:
     virtual void data_from_slave(unsigned char n, void const *data);
     virtual void xmit_complete();
     virtual void nack();
-    void complete();
-    void enqueue();
+    virtual void complete();
+    virtual void enqueue();
     static void next(void *);
 };
 ITWIUser *ITWIUser::first_;
 
+//  The XSendUser doesn't wait for its scheduled turn, but instead
+//  immediately grabs the bus as soon as it becomes available and 
+//  sends when it has data. It's a helper used by the master for 
+//  ad-hoc requests.
+class XSendUser : public ITWIUser {
+public:
+    void tick() {}
+    void enqueue() {}
+};
+XSendUser xUser;
 
 class MyMaster : public ITWIMaster {
 public:
+        bool try_send_to(unsigned char node, unsigned char sz, unsigned char const *data) {
+            if (user_ || twi->is_busy()) {
+                return false;
+            }
+            user_ = &xUser;
+            twi->send_to(node, data, sz);
+            return true;
+        }
         virtual void data_from_slave(unsigned char n, void const *data) {
             if (!user_) {
                 fatal(FATAL_UNEXPECTED);
@@ -177,7 +199,7 @@ void ITWIUser::enqueue() {
 }
 
 void ITWIUser::next(void *) {
-    unsigned char at = 10;
+    unsigned char at = 5;
     if (master.user_ || twi->is_busy()) {
         at = 1;
     }
@@ -364,6 +386,80 @@ void blink(bool on) {
     digitalWrite(LED_PIN, on ? HIGH : LOW);
 }
 
+bool dispatch_uart_cmd(unsigned char cmd, unsigned char sz, unsigned char const *data) {
+    switch (cmd) {
+    case 'c':
+    case 'm':
+        if (sz > 1) {
+            return master.try_send_to(data[0], sz, &data[1]);
+        }
+        else {
+            //  no data after node address?
+        }
+        break;
+    default:
+        //  bad command -- fatal?
+        break;
+    }
+    return true;
+}
+
+void uart_poll(void *) {
+    after(0, &uart_poll, 0);
+    if (inptr == 0) {
+        unsigned char there = uart_available();
+        while (there > 0) {
+            unsigned char rd = uart_getch();
+            there -= 1;
+            if (rd == 0xed) {
+                inbuf[0] = rd;
+                inptr = 1;
+                goto got_packet;
+            }
+        }
+        return;
+    }
+got_packet:
+    if (inptr < sizeof(inbuf)) {
+        inptr += uart_read(sizeof(inbuf)-inptr, &inbuf[inptr]);
+    }
+    if (inbuf[0] != 0xed) {
+        fatal(FATAL_BAD_SERIAL);
+    }
+    //  format is always 0xed-len-cmd-data
+    if (inptr > 1 && inptr >= 2 + inbuf[1]) {
+        // got full cmd
+        PORTD = PORTD | CMD_INDICATOR;
+        if (inptr > 2) {
+            //  not a null cmd
+            if (!dispatch_uart_cmd(inbuf[2], inbuf[1] - 1, &inbuf[3])) {
+                //  re-try dispatching later -- note, cmd indicator will stay on
+                return;
+            }
+        }
+        PORTD &= ~CMD_INDICATOR;
+        if (inptr > 2 + inbuf[1]) {
+            unsigned char off = 2 + inbuf[1];
+            while (off < inptr) {
+                if (inbuf[off] == 0xed) {
+                    memmove(inbuf, &inbuf[off], inptr - off);
+                    inptr -= off;
+                    goto got_packet;
+                }
+                ++off;
+            }
+            //  eat junk bytes
+        }
+        inptr = 0;
+    }
+    else if (inptr >= 2 && inbuf[1] > sizeof(inbuf)-2) {
+        //  a bad command length -- flush
+        PORTD = PORTD | CMD_INDICATOR;
+        PORTD &= ~CMD_INDICATOR;
+        inptr = 0;
+    }
+}
+
 
 void read_voltage(void *);
 
@@ -379,8 +475,8 @@ void read_voltage(void *) {
 
 void setup() {
     //  reset other boards by pulling reset low
-    PORTD &= ~(SERIAL_INDICATOR | RESET_SENSOR | RESET_MOTOR);
-    DDRD |= SERIAL_INDICATOR | RESET_SENSOR | RESET_MOTOR;
+    PORTD &= ~(SERIAL_INDICATOR | RESET_SENSOR | RESET_MOTOR | CMD_INDICATOR);
+    DDRD |= SERIAL_INDICATOR | RESET_SENSOR | RESET_MOTOR | CMD_INDICATOR;
     fatal_set_blink(&blink);
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, HIGH);
@@ -399,5 +495,6 @@ void setup() {
     after(1, &ITWIUser::next, 0);
     after(1000, &read_voltage, 0);
     digitalWrite(LED_PIN, LOW);
+    uart_poll(0);
 }
 

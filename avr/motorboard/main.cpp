@@ -7,6 +7,8 @@
 #include "cmds.h"
 
 
+/* todo: I should reset if I don't see anything on I2C for, say, 10 seconds */
+
 /*  less than 6.5V in the battery pack, and I can't run. */
 #define VOLTAGE_PIN 1
 //  When to turn off motor because of undervoltage

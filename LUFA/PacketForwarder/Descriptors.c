@@ -48,17 +48,6 @@ const USB_Descriptor_Configuration_t PROGMEM ConfigurationDescriptor =
 			.InterfaceStrIndex      = NO_DESCRIPTOR
 		},
 
-    .DATA_InfoEndpoint = {
-        .Header                 = {
-            .Size = sizeof(USB_Descriptor_Endpoint_t),
-            .Type = DTYPE_Endpoint
-        },
-        .EndpointAddress        = (ENDPOINT_DIR_IN | INFO_EPNUM),
-        .Attributes             = (EP_TYPE_BULK | ENDPOINT_ATTR_NO_SYNC | ENDPOINT_USAGE_DATA),
-        .EndpointSize           = INFO_EPSIZE,
-        .PollingIntervalMS      = 0x0
-    },
-
     .DATA_DataInEndpoint = {
         .Header                 = {
             .Size = sizeof(USB_Descriptor_Endpoint_t),
@@ -78,6 +67,17 @@ const USB_Descriptor_Configuration_t PROGMEM ConfigurationDescriptor =
         .EndpointAddress        = (ENDPOINT_DIR_OUT | DATA_RX_EPNUM),
         .Attributes             = (EP_TYPE_BULK | ENDPOINT_ATTR_NO_SYNC | ENDPOINT_USAGE_DATA),
         .EndpointSize           = DATA_EPSIZE,
+        .PollingIntervalMS      = 0x0
+    },
+
+    .DATA_InfoEndpoint = {
+        .Header                 = {
+            .Size = sizeof(USB_Descriptor_Endpoint_t),
+            .Type = DTYPE_Endpoint
+        },
+        .EndpointAddress        = (ENDPOINT_DIR_IN | INFO_EPNUM),
+        .Attributes             = (EP_TYPE_BULK | ENDPOINT_ATTR_NO_SYNC | ENDPOINT_USAGE_DATA),
+        .EndpointSize           = INFO_EPSIZE,
         .PollingIntervalMS      = 0x0
     },
 

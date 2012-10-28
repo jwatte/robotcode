@@ -22,6 +22,7 @@ public:
     int height() { return h(); }
 
     void on_click();
+    int handle(int event);
 
 protected:
     PropertyDisplay(int x, int y, int w, int h, boost::shared_ptr<Property> const &prop);

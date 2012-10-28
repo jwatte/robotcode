@@ -36,6 +36,7 @@ public:
     virtual void step();
     void on_change();
     virtual std::string const &name() {
+        std::cerr << "TieDisplay::name(): " << name_ << std::endl;
         return name_;
     }
     virtual size_t num_properties() {
@@ -92,6 +93,7 @@ TieDisplay::TieDisplay(std::string const &name, boost::shared_ptr<Settings> cons
     if (!maybe_get(set, "w", w_)) {
         throw std::runtime_error("No width defined for TieDisplay " + name);
     }
+    maybe_get(set, "title", name_);
 }
 
 void TieDisplay::start(boost::shared_ptr<ModuleList> const &modules) {

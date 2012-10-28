@@ -11,6 +11,8 @@
 #include "protocol.h"
 
 
+#define WRITE_USB 0
+
 
 class Transfer {
 public:
@@ -66,6 +68,7 @@ public:
 private:
     //  must be called with lock held
     void start_out_inner() {
+        #if WRITE_USB
         if (!outPack_ && !outQueue_.empty()) {
             outPack_ = outQueue_.front();
             outQueue_.pop_front();
@@ -80,17 +83,22 @@ private:
                 outPack_ = 0;
             }
         }
+        #endif
     }
 
     static void out_callback(libusb_transfer *cbArg) {
+        #if WRITE_USB
         reinterpret_cast<Transfer *>(cbArg->user_data)->out_complete();
+        #endif
     }
 
     void out_complete() {
+        #if WRITE_USB
         boost::unique_lock<boost::mutex> lock(lock_);
         outPack_->destroy();
         outPack_ = 0;
         start_out_inner();
+        #endif
     }
 
     //  must be called with lock held
@@ -117,6 +125,7 @@ private:
     void in_complete() {
         boost::unique_lock<boost::mutex> lock(lock_);
         inPack_->set_size(inXfer_->actual_length);
+        std::cerr << "asz: " << inXfer_->actual_length << " " << inXfer_->length << std::endl;
         inQueue_.push_back(const_cast<Packet *>(inPack_));
         inPack_ = 0;
         inReady_.release();
@@ -202,7 +211,14 @@ void USBLink::step() {
                 }
             }
             if (!drop) {
-                memcpy(&sendBuf_[sendBufEnd_], pack->buffer(), size);
+                unsigned char const *pp = (unsigned char const *)pack->buffer();
+                unsigned char len = pp[0];
+                std::cerr << "seen: " << size << " len: " << (int)len << std::endl;
+                if (len > size-1) {
+                    std::cerr << "len too big" << std::endl;
+                    len = size-1;
+                }
+                memcpy(&sendBuf_[sendBufEnd_], pp+1, len);
                 sendBufEnd_ += size;
                 assert(sendBufEnd_ <= sizeof(sendBuf_));
             }

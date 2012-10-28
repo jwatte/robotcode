@@ -30,8 +30,11 @@ AVR_CFLAGS:=-Wall -Werror -Wno-switch -Os -O3 -mcall-prologues -Iavr/libavr -std
 AVR_LFLAGS:=-Lbld/avrbin -lc
 
 AVR_PARTS:=attiny84a atmega328p attiny85
-AVR_PROG_PORT?=usb #/dev/ttyACM0
-AVR_PROG:=-c avrisp2
+#AVR_PROG_PORT?=usb
+#AVR_PROG:=-c avrisp2
+AVR_PROG_PORT?=/dev/ttyACM0 -b19200
+AVR_PROG:=-c stk500v1
+
 ifneq ($(AVR_PROG_PORT),)
 AVR_PROG+= -P $(AVR_PROG_PORT)
 endif
@@ -134,8 +137,8 @@ define translate_part
 $(if $(TRANSLATE_$(1)),$(TRANSLATE_$(1)),$(1))
 endef
 
-FUSES_B?=-B 200
-FLASH_B?=-B 2
+FUSES_B?=-B 10 -i 2
+FLASH_B?=-B 1 -i 1
 
 %:	bld/avrbin/%.hex fuses_%
 	avrdude -u -V -p $(call translate_part,$(PART_$@)) -b 115200 $(FLASH_B) $(AVR_PROG) -U flash:w:$<:i

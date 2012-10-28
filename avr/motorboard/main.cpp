@@ -1,6 +1,7 @@
 
 #include <libavr.h>
-#include <nRF24L01.h>
+#include <pins_avr.h>
+//#include <nRF24L01.h>
 #include <stdio.h>
 
 #include "cmds.h"
@@ -30,14 +31,16 @@
 
 #define BTN_A (1 << 2)
 
-nRF24L01<false, 0|7, 16|4, 0|6> rf;
+//nRF24L01<false, 0|7, 16|4, 0|6> rf;
 
+/*
 class RfInt : public IPinChangeNotify {
     void pin_change(unsigned char) {
         rf.onIRQ();
     }
 };
 RfInt rf_int;
+*/
 
 info_MotorPower g_write_state;
 info_MotorPower g_actual_state;
@@ -93,7 +96,7 @@ void read_tuning()
     eeprom_read_block(&g_tuning, (void const *)EE_TUNING, sizeof(g_tuning));
     if (g_tuning.cksum != calc_cksum(sizeof(g_tuning)-1, &g_tuning)) {
         memset(&g_tuning, 0, sizeof(g_tuning));
-        g_tuning.d_steer = -16;
+        g_tuning.d_steer = -32;
         g_tuning.m_power = 128;
         g_actual_state.w_trim_steer = g_write_state.w_trim_steer = g_tuning.d_steer;
         g_actual_state.w_trim_power = g_write_state.w_trim_power = g_tuning.m_power;
@@ -229,7 +232,7 @@ void setup_motors()
     DDRD |= (MOTOR_A_PCH_D | MOTOR_B_PCH_D);
     DDRB |= (MOTOR_A_NCH_B | MOTOR_B_NCH_B);
     TCCR0A = 0x03;  //  Fast PWM, not yet turned on
-    TCCR0B = 0x02;   //  0x3 is 0.5 kHz, 0x2 is 4 kHz, 0x1 is 32 kHz
+    TCCR0B = 0x03;   //  0x3 is 0.5 kHz, 0x2 is 4 kHz, 0x1 is 32 kHz
     OCR0A = 128;
     OCR0B = 128;
 }
@@ -275,7 +278,7 @@ void update_motor_power()
         PORTB = (PORTB & ~(MOTOR_A_NCH_B)) | (MOTOR_B_NCH_B);
         PORTD = (PORTD & ~(MOTOR_B_PCH_D)) | (MOTOR_A_PCH_D);
         //  Note: tuning 255 means "full power," 0 means "almost no power"
-        OCR0A = (-(int)power * (g_actual_state.w_trim_power + 1)) >> 7;
+        OCR0B = (-(int)power * (g_actual_state.w_trim_power + 1)) >> 7;
         TCCR0A = (1 << COM0B1) | (1 << WGM01) | (1 << WGM00);  //  Fast PWM, channel B
     }
     else {
@@ -285,7 +288,7 @@ void update_motor_power()
         led |= LED_forward;
         PORTB = (PORTB & ~(MOTOR_B_NCH_B)) | (MOTOR_A_NCH_B);
         PORTD = (PORTD & ~(MOTOR_A_PCH_D)) | (MOTOR_B_PCH_D);
-        OCR0B = ((int)power * (g_actual_state.w_trim_power + 1)) >> 7;
+        OCR0A = ((int)power * (g_actual_state.w_trim_power + 1)) >> 7;
         TCCR0A = (1 << COM0A1) | (1 << WGM01) | (1 << WGM00);  //  Fast PWM, channel A
     }
     set_led_bits(led);
@@ -365,16 +368,13 @@ void poll_button(void *)
     //  If the button is held in, increment the stop counter
     if (!(PIND & (1 << PD2))) {
         g_actual_state.r_self_stop++;
-        update_motor_power();
     }
     else if (g_actual_state.r_self_stop > 20) {
         //  start again by holding for 2 seconds, and letting go
         g_actual_state.r_self_stop = 0;
-        update_motor_power();
     }
     else if (g_actual_state.r_self_stop > 0) {
         g_actual_state.r_self_stop = 1;
-        update_motor_power();
     }
     if (!(PINC & BTN_A)) {
         btn_power = true;
@@ -382,6 +382,7 @@ void poll_button(void *)
     else {
         btn_power = false;
     }
+    update_motor_power();
     after(100, &poll_button, 0);
 }
 
@@ -445,6 +446,7 @@ void dispatch_cmd(unsigned char sz, unsigned char const *d)
     apply_state();
 }
 
+/*
 void reset_radio(void *)
 {
     if (!g_actual_state.r_e_conn) {
@@ -485,6 +487,7 @@ void slow_bits_update(void *v)
     }
     after(175, &slow_bits_update, 0);
 }
+*/
 
 void setup_power()
 {
@@ -558,17 +561,18 @@ void setup()
     digitalWrite(POWEROFF_PIN, LOW);
     pinMode(POWEROFF_PIN, OUTPUT);
     eeprom_read_block(&g_actual_state.r_last_fatal, (void *)EE_FATALCODE, 1);
-    delay(100); //  wait for radio to boot
-    on_pinchange(rf.getPinIRQ(), &rf_int);
-    rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);
+    //delay(100); //  wait for radio to boot
+    //on_pinchange(rf.getPinIRQ(), &rf_int);
+    //rf.setup(ESTOP_RF_CHANNEL, ESTOP_RF_ADDRESS);
     start_twi_slave(&twiSlave, NodeMotorPower);
     //  kick off the chain of tasks
     update_servo(0);
-    poll_radio(0);
-    slow_bits_update(0);
+    g_actual_state.r_e_conn = g_write_state.r_e_conn = true;
+    //poll_radio(0);
+    //slow_bits_update(0);
     poll_button(0);
     poll_power(0);
-    reset_radio(0);
+    //reset_radio(0);
 }
 
 

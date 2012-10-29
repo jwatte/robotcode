@@ -7,7 +7,7 @@
 #include "cmds.h"
 
 
-/* todo: I should reset if I don't see anything on I2C for, say, 10 seconds */
+#define NUM_LOW_VOLTAGE_TO_CARE 50
 
 /*  less than 6.5V in the battery pack, and I can't run. */
 #define VOLTAGE_PIN 1
@@ -21,14 +21,18 @@
 //  scaler = 0xA4 * 64 / 0x83 == 80
 #define VOLTAGE_SCALER 80
 
-/* For some reason, running the servo on PWM is not very clean. */
-/* Perhaps an approach that uses timer1 interrupts for high resolution */
-/* would be better. But for now, I just schedule 30 Hz updates. */
-#define USE_SERVO_TIMER 0
-
 #define LED_GO_B (1 << PB0)
 #define LED_PAUSE_D (1 << PD7)
 
+//  Forward: MOTOR_A_PCH_D + MOTOR_B_NCH_B
+//  Backward: MOTOR_B_PCH_D + MOTOR_A_NCH_B
+
+#define MOTOR_A_PCH_D (1 << PD5)
+#define MOTOR_A_NCH_B (1 << PB2)
+#define MOTOR_B_PCH_D (1 << PD6)
+#define MOTOR_B_NCH_B (1 << PB1)
+
+//  PC0
 #define POWEROFF_PIN (8|0)
 
 #define BTN_A (1 << 2)
@@ -133,6 +137,12 @@ void blink_leds(bool on)
         PORTB &= ~LED_GO_B;
         PORTD &= ~LED_PAUSE_D;
     }
+
+    //  kill motor power to be safe
+    PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_B_PCH_D));
+    PORTB = (PORTB | MOTOR_A_NCH_B | MOTOR_B_NCH_B);
+    DDRD |= (MOTOR_A_PCH_D | MOTOR_B_PCH_D);
+    DDRB |= (MOTOR_A_NCH_B | MOTOR_B_NCH_B);
 }
 
 void setup_leds()
@@ -208,14 +218,6 @@ void set_led_bits(unsigned char state)
 }
 
 
-//  Forward: MOTOR_A_PCH_D + MOTOR_B_NCH_B
-//  Backward: MOTOR_B_PCH_D + MOTOR_A_NCH_B
-
-#define MOTOR_A_PCH_D (1 << PD5)
-#define MOTOR_A_NCH_B (1 << PB2)
-#define MOTOR_B_PCH_D (1 << PD6)
-#define MOTOR_B_NCH_B (1 << PB1)
-
 //  These were taken at 5.0V regulation.
 //  Now, there's a Schottky with 0.32V drop-out in the way.
 //  0xcc == 7.93V -> 8.47V
@@ -257,6 +259,13 @@ void update_motor_power()
         PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_B_PCH_D));
         PORTB = (PORTB & ~(MOTOR_A_NCH_B | MOTOR_B_NCH_B));
         udelay(50); // prevent shooth-through
+    }
+    if (power > g_actual_state.r_actual_power) {
+        //  ramp up over time to avoid spikes
+        int v = g_actual_state.r_actual_power + 2;
+        if (v < power) {
+            power = v;
+        }
     }
     g_actual_state.r_actual_power = power;
     unsigned char led = 0;
@@ -304,53 +313,27 @@ unsigned char tuned_angle()
     return (unsigned char)i;
 }
 
-#if USE_SERVO_TIMER
-void set_servo_timer_angle(unsigned char a)
-{
-    //  this is very approximately the angle
-    OCR2B = tuned_angle() / 3 + 16;
-}
-#endif
-
 void setup_servo()
 {
     DDRD |= (1 << PD3);
     PORTD &= ~(1 << PD3);
-#if USE_SERVO_TIMER
-    power_timer2_enable();
-    ASSR = 0;
-    //  Fast PWM on COM2B1 pin
-    TCCR2A = (1 << COM2B1) | (0 << COM2B0) | (1 << WGM21) | (1 << WGM20);
-    //  120 Hz
-    TCCR2B = (1 << CS22) | (1 << CS21) | (0 << CS20);
-    set_servo_timer_angle(tuned_angle());
-#endif
 }
 
 void actually_write_servo()
 {
-#if USE_SERVO_TIMER
-    set_servo_timer_angle(tuned_angle());
-#else
     IntDisable idi;
     PORTD |= (1 << PD3);
     udelay(tuned_angle() * 11U + 580U);
     PORTD &= ~(1 << PD3);
-#endif
 }
 
 void update_servo(void *v)
 {
-#if USE_SERVO_TIMER
-    //  this is very approximate
-    actually_write_servo();
-#else
     //  if killed from button, also kill servo
     if (!g_actual_state.r_self_stop)
     {
         actually_write_servo();
     }
-#endif
     //  2 ms spin delay every 30 ms is 7.5% of available CPU.
     after(30, &update_servo, 0);
 }
@@ -498,6 +481,7 @@ void setup_power()
 
 void poll_power(void *);
 unsigned char n_badVoltage = 0;
+unsigned char n_lowVoltage = 0;
 
 void poll_power_result(unsigned char value)
 {
@@ -506,18 +490,25 @@ void poll_power_result(unsigned char value)
     g_actual_state.r_voltage = (adcValue << 6) / VOLTAGE_SCALER;
     if (g_actual_state.r_voltage < THRESHOLD_VOLTAGE) {
         //  stopping locally -- out of juice!
-        g_actual_state.r_self_stop = true;
+        ++n_lowVoltage;
+        if (n_lowVoltage > NUM_LOW_VOLTAGE_TO_CARE) {
+            g_actual_state.r_self_stop = true;
+            uart_force_out('V');
+        }
     }
     else {
         powerfail = false;
-        n_badVoltage = 0;
+        n_lowVoltage = 0;
     }
     if (g_actual_state.r_voltage < OFF_VOLTAGE) { //   don't over-discharge
         powerfail = true;
         ++n_badVoltage;
-        if (n_badVoltage > 4) {
+        if (n_badVoltage > NUM_LOW_VOLTAGE_TO_CARE) {
             digitalWrite(POWEROFF_PIN, HIGH);
         }
+    }
+    else {
+        n_badVoltage = 0;
     }
     update_motor_power();
     after(500, &poll_power, 0);
@@ -534,7 +525,10 @@ void poll_power(void *)
 
 class MySlave : public ITWISlave {
     public:
+        bool volatile got_request;
+        MySlave() : got_request(0) {}
         virtual void data_from_master(unsigned char n, void const *data) {
+            got_request = true;
             //  packet format: start, count, <data>
             if (n != ((unsigned char const *)data)[1] + 2) {
                 fatal(FATAL_TWI_UNEXPECTED);
@@ -542,6 +536,7 @@ class MySlave : public ITWISlave {
             dispatch_cmd(n, (unsigned char const *)data);
         }
         virtual void request_from_master(void *o_buf, unsigned char &o_size) {
+            got_request = true;
             if (o_size > sizeof(g_actual_state)) {
                 o_size = sizeof(g_actual_state);
             }
@@ -549,6 +544,32 @@ class MySlave : public ITWISlave {
         }
 };
 MySlave twiSlave;
+
+unsigned char no_request_count;
+
+
+ISR(TIMER2_OVF_vect) {
+    if (!twiSlave.got_request) {
+        ++no_request_count;
+        //  appx 8000 Hz, divided by 256 == 31, so this is 3 seconds without I2C
+        if (no_request_count == 100) {
+            fatal(FATAL_TWI_TIMEOUT);
+        }
+    }
+    else {
+        no_request_count = 0;
+    }
+    twiSlave.got_request = false;
+    TIFR2 = TIFR2;
+}
+
+void start_i2c_timer_check(void *) {
+    power_timer2_enable();
+    ASSR = 0;
+    TCCR2A = 0;
+    TCCR2B = 7;  //  clock / 1024
+    TIMSK2 = 1;  //  overflow interrupt
+}
 
 void setup()
 {
@@ -575,6 +596,7 @@ void setup()
     poll_button(0);
     poll_power(0);
     //reset_radio(0);
+    after(1000, start_i2c_timer_check, 0);
 }
 
 

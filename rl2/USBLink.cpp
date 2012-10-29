@@ -347,6 +347,8 @@ USBLink::USBLink(std::string const &vid, std::string const &pid, std::string con
             name_ + ". Is another process using it? " + libusb_error_name(er));
     }
     xfer_ = new Transfer(dh_, iep_, oep_);
+    unsigned char reset_cmd[] = { 0xed, 1, 'r' };
+    xfer_->out_write(reset_cmd, sizeof(reset_cmd));
     libusb_device_descriptor ldd;
     er = libusb_get_device_descriptor(libusb_get_device(dh_), &ldd);
     if (er < 0) {
@@ -396,16 +398,18 @@ void USBLink::dispatch_board(unsigned char board, unsigned char const *info, uns
 }
 
 void USBLink::board_return(unsigned char ix, unsigned char offset, void const *data, unsigned char sz) {
-    if (sz > 30) {
+    if (sz > 29) {
         throw std::runtime_error("Too large return packet in USBLink::board_return()");
     }
-    unsigned char msg[4 + 30];
+    unsigned char msg[6 + 28];
     msg[0] = 0xed;
-    msg[1] = sz + 2;
+    msg[1] = sz + 4;
     msg[2] = 'm';
     msg[3] = ix;
-    memcpy(&msg[4], data, sz);
-    xfer_->out_write(msg, 4 + sz);
+    msg[4] = offset;
+    msg[5] = sz;
+    memcpy(&msg[6], data, sz);
+    xfer_->out_write(msg, 6 + sz);
     ++outPackets_;
 }
 

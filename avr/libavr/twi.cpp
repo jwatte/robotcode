@@ -56,7 +56,7 @@ public:
             fatal(FATAL_TWI_TOO_BIG);
         }
         memcpy(m_buf, data, n);
-        m_addr = addr; //addr << 1;
+        m_addr = addr << 1;
         m_ptr = 0;
         m_end = n;
         //  please let me know when you have a start condition

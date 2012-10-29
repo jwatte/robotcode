@@ -17,6 +17,7 @@
 #define FE_BUSY         0x4
 #define FE_UNEXPECTED   0x5
 #define FE_REUSE        0x6
+#define FE_TIMEOUT      0x7
 
 enum
 {
@@ -42,6 +43,7 @@ enum
     FATAL_TWI_TOO_BIG =         F_TWI(FE_TOOBIG),
     FATAL_TWI_BAD_CALL =        F_TWI(FE_BADCALL),
     FATAL_TWI_UNEXPECTED =      F_TWI(FE_UNEXPECTED),
+    FATAL_TWI_TIMEOUT =         F_TWI(FE_TIMEOUT),
 
     FATAL_UI_BAD_PARAM =        F_UI(FE_BADPARAM),
 };

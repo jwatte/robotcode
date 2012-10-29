@@ -30,11 +30,11 @@
     Host -> Board
     m   node      data          send message to node (typically offset-size-data config write)
     c   node      data          send command to node (free-form data)
+    r                           reset node (sensor and motor only)
 
  */
 
 #define SYNC_BYTE ((unsigned char)0xed)
-#define CMD_SENDING 0xff
 
 info_USBInterface g_info;
 TWIMaster *twi;
@@ -118,7 +118,7 @@ public:
                 return false;
             }
             user_ = &xUser;
-            twi->send_to(node, data, sz);
+            twi->send_to(sz, data, node);
             return true;
         }
         virtual void data_from_slave(unsigned char n, void const *data) {
@@ -198,12 +198,18 @@ void ITWIUser::enqueue() {
     *pp = this;
 }
 
+static unsigned short last_tick;
+static unsigned char no_i2c;
+
+
 void ITWIUser::next(void *) {
     unsigned char at = 5;
     if (master.user_ || twi->is_busy()) {
         at = 1;
     }
     else if (first_ != 0) {
+        last_tick = read_timer_fast();
+        no_i2c = 0;
         ITWIUser *it = first_;
         first_ = it->next_;
         master.user_ = it;
@@ -305,11 +311,14 @@ public:
                 break;
             default:
                 //  how did I end up here?
-                uart_force_out(0xed);
-                uart_force_out('s');
-                uart_force_out(state_);
-                uart_force_out(n);
-                fatal(FATAL_UNEXPECTED);
+                {
+                    IntDisable idi;
+                    uart_force_out(0xed);
+                    uart_force_out('s');
+                    uart_force_out(state_);
+                    uart_force_out(n);
+                    fatal(FATAL_UNEXPECTED);
+                }
         }
         next();
     }
@@ -391,11 +400,18 @@ bool dispatch_uart_cmd(unsigned char cmd, unsigned char sz, unsigned char const 
     case 'c':
     case 'm':
         if (sz > 1) {
-            return master.try_send_to(data[0], sz, &data[1]);
+            return master.try_send_to(data[0], sz-1, &data[1]);
         }
         else {
             //  no data after node address?
         }
+        break;
+    case 'r':
+        DDRD |= (RESET_MOTOR | RESET_SENSOR);
+        PORTD &= ~(RESET_MOTOR | RESET_SENSOR);
+        udelay(50);
+        PORTD |= (RESET_MOTOR | RESET_SENSOR);
+        DDRD &= ~(RESET_MOTOR | RESET_SENSOR);
         break;
     default:
         //  bad command -- fatal?
@@ -406,6 +422,13 @@ bool dispatch_uart_cmd(unsigned char cmd, unsigned char sz, unsigned char const 
 
 void uart_poll(void *) {
     after(0, &uart_poll, 0);
+    if ((read_timer_fast() - last_tick) > 1000) {
+        ++no_i2c;
+        if (no_i2c > 4) {
+            fatal(FATAL_TWI_TIMEOUT);
+        }
+        last_tick = read_timer_fast();
+    }
     if (inptr == 0) {
         unsigned char there = uart_available();
         while (there > 0) {
@@ -482,8 +505,10 @@ void setup() {
     digitalWrite(LED_PIN, HIGH);
     setup_timers(F_CPU);
     uart_setup(BAUD_RATE, F_CPU);
+    delay(1);
     adc_setup();
     //  turn reset into an input, to be voltage independent
+    PORTD |= RESET_SENSOR | RESET_MOTOR;
     DDRD &= ~(RESET_SENSOR | RESET_MOTOR);
     twi = start_twi_master(&master);
     cmd_start('O');

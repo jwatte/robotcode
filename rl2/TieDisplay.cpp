@@ -36,7 +36,6 @@ public:
     virtual void step();
     void on_change();
     virtual std::string const &name() {
-        std::cerr << "TieDisplay::name(): " << name_ << std::endl;
         return name_;
     }
     virtual size_t num_properties() {

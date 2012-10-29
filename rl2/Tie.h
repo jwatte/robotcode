@@ -14,7 +14,7 @@ class Tie : public cast_as_impl<Module, Tie> {
 public:
     static boost::shared_ptr<Module> open(boost::shared_ptr<Settings> const &set);
     TieBase &base() const;
-    void start(boost::shared_ptr<ModuleList> const &modules) const;
+    virtual void start(boost::shared_ptr<ModuleList> const &modules) const;
     static void register_class(std::string const &name, TieMaker *fac);
     virtual void step();
     virtual std::string const &name();
@@ -24,8 +24,6 @@ public:
 private:
     Tie(boost::shared_ptr<Settings> const &set);
     boost::shared_ptr<TieBase> base_;
-protected:
-    static std::map<std::string, TieMaker *> factories_;
 };
 
 class TieBase : public cast_as_impl<Module, TieBase> {

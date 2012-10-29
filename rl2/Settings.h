@@ -86,5 +86,17 @@ inline bool maybe_get(boost::shared_ptr<Settings> const &set, std::string const 
     return false;
 }
 
+template<typename T, typename D>
+inline bool maybe_get(boost::shared_ptr<Settings> const &set, std::string const &name, T &oval, D const &dflt) {
+    if (!set) return false;
+    auto v = set->get_value(name);
+    if (!!v) {
+        get(v, oval);
+        return true;
+    }
+    oval = dflt;
+    return false;
+}
+
 #endif  //  rl2_Settings_h
 

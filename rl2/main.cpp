@@ -12,6 +12,7 @@
 #include "Services.h"
 #include "DataLogger.h"
 #include "Tie.h"
+#include "dump.h"
 
 #include <cstring>
 #include <cerrno>
@@ -158,6 +159,7 @@ void setup_boards(boost::shared_ptr<ModuleList> const &modules) {
 
 void setup_ties(boost::shared_ptr<ModuleList> const &modules) {
    gTies = setup_module<Tie>("ties", modules);
+   dump(*modules);
    BOOST_FOREACH(auto tie, gTies) {
        tie->cast_as<Tie>()->start(modules);
    }
@@ -174,7 +176,7 @@ void setup_data_logger(boost::shared_ptr<ModuleList> const &modules,
 }
 
 void step_all(boost::shared_ptr<ModuleList> *all_modules) {
-    boost::this_thread::sleep(boost::posix_time::milliseconds(5));
+    boost::this_thread::sleep(boost::posix_time::milliseconds(4));
     (*all_modules)->step_all();
 }
 

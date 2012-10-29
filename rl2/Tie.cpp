@@ -5,7 +5,10 @@
 
 #include <stdexcept>
 
-std::map<std::string, TieMaker *> Tie::factories_;
+static std::map<std::string, TieMaker *> &factories() {
+    static std::map<std::string, TieMaker *> it;
+    return it;
+}
 
 boost::shared_ptr<Module> Tie::open(boost::shared_ptr<Settings> const &set) {
     return boost::shared_ptr<Module>(new Tie(set));
@@ -20,13 +23,13 @@ void Tie::start(boost::shared_ptr<ModuleList> const &modules) const {
 }
 
 void Tie::register_class(std::string const &name, TieMaker *fac) {
-    factories_[name] = fac;
+    factories()[name] = fac;
 }
 
 Tie::Tie(boost::shared_ptr<Settings> const &set) {
     std::string className(set->get_value("class")->get_string());
-    auto ptr(factories_.find(className));
-    if (ptr == factories_.end()) {
+    auto ptr(factories().find(className));
+    if (ptr == factories().end()) {
         throw std::runtime_error("No tie instance of class " + className + " found.");
     }
     base_ = (*ptr).second->make(set);

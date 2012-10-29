@@ -3,12 +3,15 @@
 #include <algorithm>
 #include <stdexcept>
 #include <boost/foreach.hpp>
+#include "dump.h"
+
 
 boost::shared_ptr<ModuleList> ModuleList::create() {
     return boost::shared_ptr<ModuleList>(new ModuleList());
 }
 
 void ModuleList::add(boost::shared_ptr<Module> m) {
+    std::cerr << "ModuleList::add(" << m->name() << ")" << std::endl;
     assert(std::find(modules_.begin(), modules_.end(), m) == modules_.end());
     modules_.push_back(m);
     on_change();
@@ -40,6 +43,7 @@ boost::shared_ptr<Module> ModuleList::get_module_named(std::string const &name) 
             return m;
         }
     }
+    dump(*this);
     throw std::runtime_error("Module " + name + " not found in ModuleList");
 }
 

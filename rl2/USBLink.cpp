@@ -53,7 +53,6 @@ public:
     }
 
     void out_write(void const *data, size_t sz) {
-        std::cerr << "out_write(" << sz << ")" << std::endl;
         Packet *p = Packet::create();
         p->set_size(sz);
         memcpy(p->buffer(), data, sz);
@@ -67,7 +66,6 @@ private:
     void start_out_inner() {
         #if WRITE_USB
         if (!outPack_ && !outQueue_.empty()) {
-            std::cerr << "start_out_inner()" << std::endl;
             outPack_ = outQueue_.front();
             outQueue_.pop_front();
             memset(outXfer_, 0, sizeof(*outXfer_));

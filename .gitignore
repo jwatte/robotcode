@@ -20,3 +20,4 @@ logfile.log
 *.map
 *.hex
 *.sym
+*.log

@@ -142,7 +142,6 @@ void Board::edit(void const *dst, void const *src, size_t sz) {
     size_t offset = (char const *)dst - (char const *)&data_[0];
     assert(sz <= 4);
     assert(offset + sz <= data_.size());
-    std::cerr << "Sending return for board " << name_ << " offset " << offset << " size " << sz << std::endl;
     return_->set_data(offset, src, (unsigned char)sz);
 }
 

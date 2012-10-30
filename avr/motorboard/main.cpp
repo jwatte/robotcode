@@ -7,7 +7,7 @@
 #include "cmds.h"
 
 
-#define NUM_LOW_VOLTAGE_TO_CARE 50
+#define NUM_LOW_VOLTAGE_TO_CARE 20
 
 /*  less than 6.5V in the battery pack, and I can't run. */
 #define VOLTAGE_PIN 1
@@ -18,8 +18,8 @@
 //  8.2V is 164 in the reading
 //  formula is (rdbyte << 6) / scaler
 //  8.2 is 0x83, 150 is 0xA4, so relation is 0x83 == (0xA4 * 64) / scaler
-//  scaler = 0xA4 * 64 / 0x83 == 80
-#define VOLTAGE_SCALER 80
+//  scaler = 0xA4 * 64 / 0x83 == 80 -> add some safety -> 82
+#define VOLTAGE_SCALER 82
 
 #define LED_GO_B (1 << PB0)
 #define LED_PAUSE_D (1 << PD7)
@@ -499,6 +499,8 @@ void poll_power_result(unsigned char value)
     else {
         powerfail = false;
         n_lowVoltage = 0;
+        //  must be over threshold to reset the "I'm running out of juice" setting.
+        n_badVoltage = 0;
     }
     if (g_actual_state.r_voltage < OFF_VOLTAGE) { //   don't over-discharge
         powerfail = true;
@@ -506,9 +508,6 @@ void poll_power_result(unsigned char value)
         if (n_badVoltage > NUM_LOW_VOLTAGE_TO_CARE) {
             digitalWrite(POWEROFF_PIN, HIGH);
         }
-    }
-    else {
-        n_badVoltage = 0;
     }
     update_motor_power();
     after(500, &poll_power, 0);

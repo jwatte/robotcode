@@ -4,6 +4,8 @@
 #include "Settings.h"
 #include "ModuleList.h"
 #include "Boards.h"
+#include "Image.h"
+#include <sstream>
 #include "str.h"
 
 
@@ -97,7 +99,7 @@ public:
     };
 
     boost::shared_ptr<Settings>         set_;
-    //PropRef<boost::shared_ptr<Image>>   leftCam_;
+    PropRef<boost::shared_ptr<Image>>   leftCam_;
     PropRef<boost::shared_ptr<Image>>   rightCam_;
     PropRef<double>                     leftUs_;
     PropRef<double>                     rightUs_;
@@ -134,7 +136,7 @@ Brain::Brain(std::string const &name, boost::shared_ptr<Settings> const &set) :
 }
 
 void Brain::start(boost::shared_ptr<ModuleList> const &modules) {
-    //leftCam_.setup(set_, "l_cam", "/dev/_Lcam.image", modules);
+    leftCam_.setup(set_, "l_cam", "/dev/_Lcam.image", modules);
     rightCam_.setup(set_, "r_cam", "/dev/_Rcam.image", modules);
     leftUs_.setup(set_, "l_us", "Input board.r_us1", modules);
     rightUs_.setup(set_, "r_us", "Input board.r_us2", modules);
@@ -150,23 +152,63 @@ void Brain::start(boost::shared_ptr<ModuleList> const &modules) {
     maybe_get(set_, "turning", turning_);
     maybe_get(set_, "ir_limit", irLimit_);
     maybe_get(set_, "us_limit", usLimit_);
-    //leftCam_.prop_->add_listener(boost::shared_ptr<Listener>(new ListenerTramp(this)));
+    leftCam_.prop_->add_listener(boost::shared_ptr<Listener>(new ListenerTramp(this)));
     rightCam_.prop_->add_listener(boost::shared_ptr<Listener>(new ListenerTramp(this)));
 }
 
+static int npic = 0;
+static int serial = 0;
+static time_t lastpic = 0;
+
 void Brain::step() {
+    time_t t;
+    time(&t);
     if (dirty_) {
         //  analyze images
+        if (t != lastpic) {
+            lastpic = t;
+            ++npic;
+            if (npic == 5) {
+                npic = 0;
+                serial += 1;
+                {
+                    boost::shared_ptr<Image> rpic(rightCam_.prop_->get<boost::shared_ptr<Image>>());
+                    if (!!rpic) {
+                        char path[128];
+                        sprintf(path, "%04d-right.jpg", serial);
+                        //  todo: really shouldn't be doing this inline..
+                        FILE *f = fopen(path, "wb");
+                        size_t sz = rpic->size(CompressedBits);
+                        void const *da = rpic->bits(CompressedBits);
+                        fwrite(da, sz, 1, f);
+                        fclose(f);
+                        std::cerr << path << std::endl;
+                    }
+                }
+                {
+                    boost::shared_ptr<Image> lpic(leftCam_.prop_->get<boost::shared_ptr<Image>>());
+                    if (!!lpic) {
+                        char path[128];
+                        sprintf(path, "%04d-left.jpg", serial);
+                        //  todo: really shouldn't be doing this inline..
+                        FILE *f = fopen(path, "wb");
+                        size_t sz = lpic->size(CompressedBits);
+                        void const *da = lpic->bits(CompressedBits);
+                        fwrite(da, sz, 1, f);
+                        fclose(f);
+                        std::cerr << path << std::endl;
+                    }
+                }
+            }
+        }
     }
     //  decide on exploration
     if (!eAllow_.get()) {   //  fresh initialize or reset board
-        selfStop_.prop_->edit(1L);
         eAllow_.prop_->edit(1L);
     }
     allowedProp_->set<long>(selfStop_.get() == 0);
+
     //  just some random movement
-    time_t t;
-    time(&t);
     double gas = 0;
     double turn = 0;
     switch ((t >> 1) & 7) {

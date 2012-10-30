@@ -4,6 +4,7 @@
 
 #include "Image.h"
 #include <vector>
+#include <climits>
 #include <boost/shared_ptr.hpp>
 
 typedef boost::shared_ptr<Image> ImagePtr;
@@ -13,11 +14,12 @@ struct Color {
         r(ir), g(ig), b(ib) {
     }
     unsigned char r, g, b;
+    //  normalized from 0 to 1
     float distance(Color const &o) const {
-        int dr = r - o.r;
-        int dg = g - o.g;
-        int db = b - o.b;
-        return dr*dr + dg*dg + db*db * (1.0f / (3 * 255.0f * 255.0f));
+        float dr = (float)r - (float)o.r;
+        float dg = (float)g - (float)o.g;
+        float db = (float)b - (float)o.b;
+        return ((float)dr*dr + (float)dg*dg + (float)db*db) * (1.0f / (3 * 255.0f * 255.0f));
     }
     unsigned char maxcomponent() const {
         if (r > g) {
@@ -43,6 +45,30 @@ struct Color {
         g = std::max(0, std::min(255, ng));
         b = std::max(0, std::min(255, nb));
     }
+    Color complement() const {
+        int rr = r;
+        int gg = g;
+        int bb = b;
+        if (rr < 64 || rr >= 192) {
+            rr = 255 - rr;
+        }
+        else {
+            rr = rr ^ 0x80;
+        }
+        if (gg < 64 || gg >= 192) {
+            gg = 255 - gg;
+        }
+        else {
+            gg = gg ^ 0x80;
+        }
+        if (bb < 64 || bb >= 192) {
+            bb = 255 - bb;
+        }
+        else {
+            bb = bb ^ 0x80;
+        }
+        return Color(rr, gg, bb);
+    }
 };
 
 struct Coordinate {
@@ -63,12 +89,20 @@ struct Area {
     int height;
     int right() const { return left + width; }
     int bottom() const { return top + height; }
+    double area() const { return std::max((double)width, 0.0) * std::max((double)height, 0.0); }
 };
 
 struct ColorArea {
+    ColorArea() :
+        color(0, 0, 0),
+        area(INT_MAX, INT_MAX, INT_MIN, INT_MIN),
+        cog(INT_MIN, INT_MIN),
+        weight(0) {
+    }
     Color color;
     Area area;
-    float weight;
+    Coordinate cog; //  center of gravity
+    float weight;   //  highest % of pixels in Area matching
 };
 
 class Pixmap {
@@ -89,10 +123,13 @@ public:
         return *(Color const *)pp;
     }
 
+    void frame_rect(Area const &a, Color c);
+
     void color_correct();
-    void find_areas_of_color(Color c, float tolerance, float normalization, int min_areas, std::vector<ColorArea> &o_areas);
+    void find_areas_of_color(Area a, Color c, float tolerance, float normalization, int min_areas, std::vector<ColorArea> &o_areas);
     size_t get_tga_header(void *data, size_t buf);
     void to_tga_order();
+    unsigned char *write_bits();
 
     unsigned char const *bits;
     size_t rowbytes;

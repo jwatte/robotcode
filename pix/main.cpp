@@ -2,6 +2,11 @@
 #include <stdio.h>
 #include "analysis.h"
 
+
+static Color the_color(180, 40, 40);
+static float tolerance = 0.02;
+static float normalization = 0.25f;
+
 int main(int argc, char const *argv[]) {
     if (argc != 2 || argv[1][0] == '-') {
         fprintf(stderr, "usage: pix input.jpg (creates .tga)\n");
@@ -25,6 +30,31 @@ int main(int argc, char const *argv[]) {
     Pixmap pm(ip, false);
     fprintf(stderr, "%dx%d\n", pm.width, pm.height);
     pm.color_correct();
+    std::vector<ColorArea> areas;
+    pm.find_areas_of_color(Area(0, 0, pm.width, pm.height), the_color, 
+        tolerance, normalization, pm.width*pm.height/10000 + 2, areas);
+    Color complement(the_color.complement());
+    fprintf(stderr, "%ld clusters\n", areas.size());
+    for (size_t i = 0, n = areas.size(); i != n; ++i) {
+        Area a(areas[i].area);
+        if (a.left > 0) {
+            a.left--;
+            a.width++;
+        }
+        if (a.top > 0) {
+            a.top--;
+            a.height++;
+        }
+        if (a.right() < pm.width-1) {
+            a.width++;
+        }
+        if (a.bottom() < pm.height-1) {
+            a.height++;
+        }
+        pm.frame_rect(a, complement);
+        fprintf(stderr, "%d,%d-%d,%d\n", a.left, a.top, a.right(), a.bottom());
+    }
+
     std::string opath(argv[1]);
     opath = opath.substr(0, opath.find_last_of("."));
     opath += ".tga";

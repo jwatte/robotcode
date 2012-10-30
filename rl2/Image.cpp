@@ -132,37 +132,35 @@ void Image::decompress(size_t size) const {
 }
 
 void Image::make_thumbnail() const {
-    thumbnail_.resize(uncompressed_.size() >> 4);
+    int width = width_ >> 2;
+    int height = height_ >> 2;
+    thumbnail_.resize(width * height * BytesPerPixel);
     unsigned char *base = (unsigned char *)&uncompressed_[0];
     size_t rowbytes = BytesPerPixel * width_;
     size_t rowbytes2 = rowbytes * 2;
     size_t rowbytes3 = rowbytes * 3;
-    size_t colcnt = width_ >> 2;
     size_t rb = BytesPerPixel - 2;
     unsigned char *tnp = (unsigned char *)&thumbnail_[0];
-    for (size_t col = 0, i = 0, n = thumbnail_.size(); i != n; i += BytesPerPixel) {
-        unsigned char *p = base;
+    for (size_t row = 0, n = height; row != n; row++) {
+        unsigned char *p = base + rowbytes * (row << 2);
         unsigned short red = 8, green = 8, blue = 8;
         //  If we're unlucky with aliasing, this needs a 5x L1 cache.
         //  For size 1920, though, it'll probably not alias that badly.
-        for (size_t q = 0; q != 4; ++q) {
-            red += p[0] + p[rowbytes] + p[rowbytes2] + p[rowbytes3];
-            p++;
-            green += p[0] + p[rowbytes] + p[rowbytes2] + p[rowbytes3];
-            p++;
-            blue += p[0] + p[rowbytes] + p[rowbytes2] + p[rowbytes3];
-            p += rb;
+        for (size_t col = 0, m = width; col != m; col++) {
+            for (size_t q = 0; q != 4; ++q) {
+                red += p[0] + p[rowbytes] + p[rowbytes2] + p[rowbytes3];
+                p++;
+                green += p[0] + p[rowbytes] + p[rowbytes2] + p[rowbytes3];
+                p++;
+                blue += p[0] + p[rowbytes] + p[rowbytes2] + p[rowbytes3];
+                p += rb;
+            }
         }
-        tnp[i] = red >> 4;
-        tnp[i+1] = green >> 4;
-        tnp[i+2] = blue >> 4;
-        col += 1;
+        tnp[0] = red >> 4;
+        tnp[1] = green >> 4;
+        tnp[2] = blue >> 4;
+        tnp += BytesPerPixel;
         base += BytesPerPixel << 2;
-        if (col == colcnt) {
-          //  This assumes rowbytes is tightly packed
-            base += rowbytes3;
-            col = 0;
-        }
     }
 }
 

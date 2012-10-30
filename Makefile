@@ -1,7 +1,9 @@
 
 -include makevars.config
 
-APPS:=rl2 simplegps simpleusb boops #simplecap robolink
+APPS:=rl2 simplegps simpleusb boops pix #simplecap robolink
+APP_LIBS:=rl2
+APPLIBS_pix:=rl2
 
 LIBUSB_LOC?=/usr/local
 OPT?=-O3
@@ -10,7 +12,7 @@ CPP_CFLAGS:=$(sort $(CPP_OPT) $(filter-out -D_FORTIFY_SOURCE%, $(filter-out -O%,
     $(filter-out -mtune=%, $(filter-out -march=%,$(shell fltk-config --use-images --cxxflags)))))) \
     -I$(LIBUSB_LOC)/include/libusb-1.0
 CPP_LFLAGS:=-ljpeg $(sort $(CPP_OPT) $(shell fltk-config --use-images --ldflags)) \
-	-lv4l2 -lgps -lboost_thread -lboost_system $(LIBUSB_LOC)/lib/libusb-1.0.so -lasound
+	-lv4l2 -lgps -lboost_thread -lboost_system $(LIBUSB_LOC)/lib/libusb-1.0.so -lasound -Lbld/bin
 ALL_APP_CPP_SRCS:=$(foreach app,$(APPS),$(wildcard $(app)/*.cpp))
 CPP_SRCS:=$(sort $(foreach app,$(APPS),$(filter-out $(app)/test_%.cpp, \
     $(filter $(app)/%.cpp, $(ALL_APP_CPP_SRCS)))))
@@ -43,7 +45,7 @@ AVR_OBJS+=$(foreach i,$(AVR_PARTS),$(patsubst avr/libavr/%.cpp,bld/avrobj/libavr
 
 OPENCV_LFLAGS:=-lopencv_highgui -lopencv_core -lopencv_imgproc -lopencv_calib3d -lopencv_features2d -lopencv_video -lwebcam
 
-all:	$(patsubst %,bld/bin/%,$(TEST_NAMES)) $(patsubst %,bld/bin/%,$(APPS)) $(patsubst %,bld/avrbin/%.hex,$(AVR_BINS))
+all:	$(patsubst %,bld/bin/%,$(TEST_NAMES)) $(patsubst %,bld/bin/%,$(APPS)) $(patsubst %,bld/avrbin/%.hex,$(AVR_BINS)) $(patsubst %,bld/bin/lib%.a,$(APP_LIBS));
 
 clean:
 	rm -rf bld
@@ -82,11 +84,18 @@ fuses_stepdirsend:	fuses_20
 fuses_littlewalker:	fuses_16
 
 define mkapp
-bld/bin/$(1):	$(filter bld/obj/$(1)/%,$(CPP_OBJS))
+bld/bin/$(1):	$(filter bld/obj/$(1)/%,$(CPP_OBJS)) $(foreach lib,$(APPLIBS_$(1)),bld/bin/lib$(lib).a)
 	@mkdir -p `dirname $$@`
-	g++ -o bld/bin/$(1) $(filter bld/obj/$(1)/%,$(CPP_OBJS)) $(CPP_LFLAGS)
+	g++ -o bld/bin/$(1) $(filter bld/obj/$(1)/%,$(CPP_OBJS)) $(CPP_LFLAGS) $(foreach lib,$(APPLIBS_$(1)),-l $(lib))
 endef
 $(foreach app,$(APPS),$(eval $(call mkapp,$(app))))
+
+define mkapplib
+bld/bin/lib$(1).a:	$(filter-out %/main.o,$(filter bld/obj/$(1)/%,$(CPP_OBJS)))
+	@mkdir -p `dirname $$@`
+	ar cr $$@ $$^
+endef
+$(foreach applib,$(APP_LIBS),$(eval $(call mkapplib,$(applib))))
 
 define mktest
 bld/bin/$(2):	$(filter-out bld/obj/$(1)/main.o,$(filter bld/obj/$(1)/%,$(CPP_OBJS))) bld/obj/$(1)/$(2).o
@@ -128,7 +137,7 @@ $(foreach i,$(AVR_PARTS),$(eval $(call build_libavr,$(i))))
 
 bld/obj/%.o:	%.cpp
 	@mkdir -p `dirname $@`
-	g++ $(CPP_CFLAGS) -c $< -o $@ -MMD
+	g++ $(CPP_CFLAGS) -c $< -o $@ -MMD $(foreach app,$(APPLIBS_$(patsubst bld/obj/%/,%,$(dir $(patsubst bld/bin/%.o,%,$@)))), -I$(app))
 
 TRANSLATE_attiny84a:=t84
 TRANSLATE_attiny85:=t85

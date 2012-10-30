@@ -22,10 +22,10 @@ public:
     //  alloc_compressed() to get a buffer of certain size
     //  then complete_compressed() when you've filled it with 
     //  JPEG data, to decompress it and calculate the thumbnail
-    void *alloc_compressed(size_t size);
+    void *alloc_compressed(size_t size, bool has_huff = false);
     void complete_compressed(size_t size);
-    size_t width() const;
-    size_t height() const;
+    size_t width(ImageBits kind = FullBits) const;
+    size_t height(ImageBits kind = FullBits) const;
     size_t width_t() const;
     size_t height_t() const;
     void const *bits(ImageBits) const;
@@ -34,6 +34,7 @@ private:
     mutable size_t width_;
     mutable size_t height_;
     mutable size_t dirty_;
+    mutable bool hashuff_;
     mutable std::vector<char> compressed_;
     mutable std::vector<char> uncompressed_;
     mutable std::vector<char> thumbnail_;

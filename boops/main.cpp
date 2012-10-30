@@ -10,6 +10,7 @@
 #include <iostream>
 
 
+#define LRAND_MAX 0x80000000
 
 struct mood_tonal {
     //  sqrt of (max freq range - min)
@@ -48,18 +49,20 @@ struct mood_rythmic {
 };
 
 struct mood {
+    char const *name;
     struct mood_tonal tonal;
     struct mood_rythmic rythmic;
 };
 
 mood happy = {
+    .name = "happy",
     .tonal = {
         .freq_scale = 70.0,
         .freq_add = 400.0,
         .mod_scale = 0.5,
         .mod_add = 0.2,
-        .mp_scale = 4.0,
-        .mp_add = 0.5,
+        .mp_scale = 3.0,
+        .mp_add = 0.7,
         .acurve_scale = 5.0,
         .acurve_add = 2.0
     },
@@ -74,19 +77,20 @@ mood happy = {
     }
 };
 mood sad = {
+    .name = "sad",
     .tonal = {
         .freq_scale = 20.0,
         .freq_add = 300.0,
         .mod_scale = 0.2,
         .mod_add = 0.1,
-        .mp_scale = 0.4,
+        .mp_scale = 0.3,
         .mp_add = 0.1,
         .acurve_scale = 2.0,
         .acurve_add = 1.0
     },
     .rythmic = {
-        .split_factor = 0.6,
-        .switch_voice = 0.1,
+        .split_factor = 0.25,
+        .switch_voice = 0.2,
         .switch_freq = 0.1,
         .switch_fmod = 0.1,
         .switch_fmodphase = 0.1,
@@ -95,19 +99,20 @@ mood sad = {
     }
 };
 mood neutral = {
+    .name = "neutral",
     .tonal = {
         .freq_scale = 50.0,
         .freq_add = 350.0,
-        .mod_scale = 0.75,
-        .mod_add = 0.25,
-        .mp_scale = 0.75,
-        .mp_add = 0.2,
+        .mod_scale = 0.4,
+        .mod_add = 0.2,
+        .mp_scale = 0.5,
+        .mp_add = 0.3,
         .acurve_scale = 3.0,
         .acurve_add = 1.2
     },
     .rythmic = {
-        .split_factor = 0.7,
-        .switch_voice = 0.2,
+        .split_factor = 0.55,
+        .switch_voice = 0.3,
         .switch_freq = 0.2,
         .switch_fmod = 0.2,
         .switch_fmodphase = 0.2,
@@ -129,14 +134,14 @@ struct section_info {
 };
 
 void initrand(section_info &si, mood const &m) {
-    si.voice = rand() * 4.0 / RAND_MAX;
-    si.freq = rand() * m.tonal.freq_scale / (float)RAND_MAX;
+    si.voice = (int)(lrand48() * 4.0 / LRAND_MAX);
+    si.freq = lrand48() * m.tonal.freq_scale / (float)LRAND_MAX;
     si.freq = si.freq * si.freq + m.tonal.freq_add;
-    si.fmod = rand() * m.tonal.mod_scale / (float)RAND_MAX + m.tonal.mod_add;
-    si.fmodphase = rand() / (float)RAND_MAX;
+    si.fmod = lrand48() * m.tonal.mod_scale / (float)LRAND_MAX + m.tonal.mod_add;
+    si.fmodphase = lrand48() / (float)LRAND_MAX;
     si.fmodphase = si.fmodphase * si.fmodphase * m.tonal.mp_scale + m.tonal.mp_add;
-    si.acurve = rand() * m.tonal.acurve_scale  / (float)RAND_MAX + m.tonal.acurve_add;
-    switch ((int)(rand() * 3.0 / RAND_MAX)) {
+    si.acurve = lrand48() * m.tonal.acurve_scale  / (float)LRAND_MAX + m.tonal.acurve_add;
+    switch ((int)(lrand48() * 3.0 / LRAND_MAX)) {
         case 0: si.mood = &happy; break;
         case 1: si.mood = &sad; break;
         default: si.mood = &neutral; break;
@@ -209,42 +214,42 @@ void mutate(section_info &si, mood const &m) {
     section_info rsi;
     initrand(rsi, m);
 
-    if (rand() / (float)RAND_MAX < m.rythmic.switch_voice) {
+    if (lrand48() / (float)LRAND_MAX < m.rythmic.switch_voice) {
         si.voice = rsi.voice;
     }
 
-    if (rand() / (float)RAND_MAX < m.rythmic.switch_freq) {
+    if (lrand48() / (float)LRAND_MAX < m.rythmic.switch_freq) {
         si.freq = rsi.freq;
     }
     else {
-        si.freq = si.freq * (0.75 + rand() * 0.5 / RAND_MAX);
+        si.freq = si.freq * (0.75 + lrand48() * 0.5 / LRAND_MAX);
     }
 
-    if (rand() / (float)RAND_MAX < m.rythmic.switch_fmod) {
+    if (lrand48() / (float)LRAND_MAX < m.rythmic.switch_fmod) {
         si.fmod = rsi.fmod;
     }
     else {
-        si.fmod = si.fmod * (0.75 + rand() * 0.5 / RAND_MAX);
+        si.fmod = si.fmod * (0.75 + lrand48() * 0.5 / LRAND_MAX);
     }
 
-    if (rand() / (float)RAND_MAX < m.rythmic.switch_fmodphase) {
+    if (lrand48() / (float)LRAND_MAX < m.rythmic.switch_fmodphase) {
         si.fmodphase = rsi.fmodphase;
     }
     else {
-        si.fmodphase = si.fmodphase * (0.75 + rand() * 0.5 / RAND_MAX);
+        si.fmodphase = si.fmodphase * (0.75 + lrand48() * 0.5 / LRAND_MAX);
     }
 
-    if (rand() / (float)RAND_MAX < m.rythmic.switch_acurve) {
+    if (lrand48() / (float)LRAND_MAX < m.rythmic.switch_acurve) {
         si.acurve = rsi.acurve;
     }
     else {
-        si.acurve = si.acurve * (0.75 + rand() * 0.5 / RAND_MAX);
+        si.acurve = si.acurve * (0.75 + lrand48() * 0.5 / LRAND_MAX);
     }
 }
 
 void generate_section(section_info const &si) {
-    if ((rand() & 0x7fff) < si.count * si.mood->rythmic.split_factor) {
-        if (rand() * 1.0 / RAND_MAX < si.mood->rythmic.triplets) {
+    if ((lrand48() & 0x7fff) < si.count * si.mood->rythmic.split_factor) {
+        if (lrand48() * 1.0 / LRAND_MAX < si.mood->rythmic.triplets) {
             //  triplets
             section_info s1 = si;
             section_info s2 = si;
@@ -321,6 +326,16 @@ void generate(short *buf, int count, mood const &m) {
     generate_section(si);
 }
 
+mood const *random_mood() {
+    mood const *imood = 0;
+    switch ((int)floorf(lrand48() * 3.0 / LRAND_MAX)) {
+        case 0: imood = &happy; break;
+        case 1: imood = &sad; break;
+        default: imood = &neutral; break;
+    }
+    return imood;
+}
+
 int main(int argc, char const *argv[]) {
 
     int err;
@@ -330,11 +345,11 @@ int main(int argc, char const *argv[]) {
     short *buf = &bufs[4096];
     int count = 65536;
     memset(bufs, 0, sizeof(bufs));
-    mood const *imood = &neutral;
+    mood const *imood = 0;
 
     time_t t;
     time(&t);
-    srand(t);
+    srand48(t ^ getpid());
     if (argv[1]) {
         if (!strcmp(argv[1], "happy")) {
             imood = &happy;
@@ -346,11 +361,8 @@ int main(int argc, char const *argv[]) {
             imood = &neutral;
         }
         else if (!strcmp(argv[1], "random")) {
-            switch ((int)(rand() * 3.0 / RAND_MAX)) {
-                case 0: imood = &happy; std::cerr << "happy" << std::endl; break;
-                case 1: imood = &sad; std::cerr << "sad" << std::endl; break;
-                default: imood = &neutral; std::cerr << "neutral" << std::endl; break;
-            }
+            imood = random_mood();
+            std::cerr << imood->name << std::endl;
         }
         else {
             fprintf(stderr, "usage: boop [happy|sad|neutral|random [hw:#,#]]\n");
@@ -358,6 +370,9 @@ int main(int argc, char const *argv[]) {
         }
         ++argv;
         --argc;
+    }
+    else {
+        imood = &neutral;
     }
     generate(buf, 65536, *imood);
     for (int i = 0; i < 100; ++i) {

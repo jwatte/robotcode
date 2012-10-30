@@ -5,7 +5,12 @@
 #include "libavr.h"
 #include <avr/pgmspace.h>
 
-#define XBEE_BD 7           //  115200 baud
+#define MAX_OUTSTANDING_PACKETS 5
+//  counted in 30-millisecond intervals
+#define TIMEOUT_BEFORE_SENDING_ANYWAY 100
+
+
+#define XBEE_BD 7           //  7 = 115200 baud
 #define XBEE_ID 6219
 #define XBEE_RECV 20
 #define XBEE_SEND 18
@@ -104,21 +109,44 @@ void read_ctr(void *c) {
     after(0, &read_ctr, (void *)(short)ctr);
 }
 
+unsigned char lastack;
 unsigned char packetseq;
 unsigned char databuf[32];
+unsigned char lastrd;
+unsigned char sendtimeout = 0;
 
 void send_data(void *) {
     after(30, &send_data, 0);
-    databuf[0] = 0xA0;      //  command byte
-    databuf[1] = packetseq;
-    ++packetseq;
-    databuf[2] = 6 * 2 + 1; //  six counters, one flags
-    databuf[3] = triggerFlags;
-    memcpy(&databuf[4], counterValues, 6 * 2);
-    //  This should always succeed anyway, because the 
-    //  data rate is lower than the baud rate by a lot, to 
-    //  compensate for lossy xbees.
-    uart_send_all(16, databuf);
+    //  look for packet acks
+    while (uart_available()) {
+        if (lastrd == 0xB0) {
+            lastack = uart_getch();
+            lastrd = 0;
+        }
+        else {
+            lastrd = uart_getch();
+        }
+    }
+    bool send_anyway = false;
+    if (sendtimeout >= TIMEOUT_BEFORE_SENDING_ANYWAY) {
+        send_anyway = true;
+    }
+    else {
+        send_anyway = true;
+    }
+    if (send_anyway || ((packetseq - lastack) < MAX_OUTSTANDING_PACKETS)) {
+        sendtimeout = 0;
+        databuf[0] = 0xA0;      //  command byte
+        databuf[1] = packetseq;
+        ++packetseq;
+        databuf[2] = 6 * 2 + 1; //  six counters, one flags
+        databuf[3] = triggerFlags;
+        memcpy(&databuf[4], counterValues, 6 * 2);
+        //  This should always succeed anyway, because the 
+        //  data rate is lower than the baud rate by a lot, to 
+        //  compensate for lossy xbees.
+        uart_send_all(16, databuf);
+    }
 }
 
 unsigned char xbee_state;
@@ -126,7 +154,7 @@ unsigned char xbee_waits;
 unsigned char xbee_okstate;
 
 char const PROGMEM PLUSSES[] = "+++";
-char const PROGMEM ATBD7[] = "ATBD7\r";
+char const PROGMEM ATBDx[] = "ATBD" STRINGIZE(XBEE_BD) "\r";
 char const PROGMEM SETUP[] = XBEE_SETUP "\r";
 char const PROGMEM ATCN[] = "ATCN\r";
 
@@ -160,7 +188,7 @@ void setup_xbee(void *) {
         }
         break;
     case 3:
-        uart_send_all(6, strcpy_P((char *)databuf, ATBD7));
+        uart_send_all(6, strcpy_P((char *)databuf, ATBDx));
         xbee_waits = 0;
         ++xbee_state;
         break;

@@ -14,43 +14,49 @@ extern unsigned int huff_size;
 Image::Image() :
     width_(0),
     height_(0),
-    dirty_(0) {
+    dirty_(0),
+    hashuff_(false) {
 }
 
 Image::~Image() {
 }
 
-void *Image::alloc_compressed(size_t size) {
-    compressed_.resize(size + huff_size);
-    return &compressed_[huff_size];
+void *Image::alloc_compressed(size_t size, bool has_huff) {
+    hashuff_ = has_huff;
+    size_t offset = has_huff ? 0 : huff_size;
+    compressed_.resize(size + offset);
+    return &compressed_[offset];
 }
 
 void Image::complete_compressed(size_t size) {
-    unsigned char *ptr = (unsigned char *)&compressed_[huff_size];
+    size_t offset = hashuff_ ? 0 : huff_size;
+    unsigned char *ptr = (unsigned char *)&compressed_[offset];
     unsigned char *end = ptr + size;
-    while (ptr < end) {
-        if (ptr[0] == 0xff && ptr[1] == 0xda) {
-            break;
+    if (!hashuff_) {
+        while (ptr < end) {
+            if (ptr[0] == 0xff && ptr[1] == 0xda) {
+                break;
+            }
+            ++ptr;
         }
-        ++ptr;
+        if (ptr == end) {
+            throw std::runtime_error("Invalid MJPEG data in Image::complete_compressed()");
+        }
+        unsigned char *dstart = (unsigned char *)&compressed_[huff_size];
+        memmove(&compressed_[0], dstart, ptr - dstart);
+        memcpy(ptr - huff_size, huff_table, huff_size);
     }
-    if (ptr == end) {
-        throw std::runtime_error("Invalid MJPEG data in Image::complete_compressed()");
-    }
-    unsigned char *dstart = (unsigned char *)&compressed_[huff_size];
-    memmove(&compressed_[0], dstart, ptr - dstart);
-    memcpy(ptr - huff_size, huff_table, huff_size);
     dirty_ = size;
 }
 
-size_t Image::width() const {
+size_t Image::width(ImageBits kind) const {
     undirty();
-    return width_;
+    return (kind == ThumbnailBits) ? width_t() : width_;
 }
 
-size_t Image::height() const {
+size_t Image::height(ImageBits kind) const {
     undirty();
-    return height_;
+    return (kind == ThumbnailBits) ? height_t() : height_;
 }
 
 size_t Image::width_t() const {
@@ -90,7 +96,7 @@ std::vector<char> const &Image::vec(ImageBits ib) const {
 
 void Image::undirty() const {
     if (dirty_) {
-        decompress(dirty_ + huff_size);
+        decompress(dirty_ + (hashuff_ ? 0 : huff_size));
         make_thumbnail();
         dirty_ = 0;
     }

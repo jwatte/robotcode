@@ -65,6 +65,7 @@ private:
     double fps_;
     double fpsStep_;
     long underflows_;
+    int nbad_;
     v4l2_requestbuffers rbufs_;
     v4l2_buffer vbufs_[NUM_BUFS];
     struct buffer {

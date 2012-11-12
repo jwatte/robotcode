@@ -29,6 +29,7 @@ Camera::Camera(std::string const &devname, unsigned int capWidth, unsigned int c
     fps_(30),
     fpsStep_(30),
     underflows_(0),
+    nbad_(0),
     imageProperty_(new PropertyImpl<boost::shared_ptr<Image>>(str_image)),
     fpsProperty_(new PropertyImpl<double>(str_fps)),
     fpsStepProperty_(new PropertyImpl<double>(str_fpsstep)),
@@ -241,10 +242,21 @@ void Camera::wait() {
     void *iptr = bufs_[vbuf.index].ptr;
     void *optr = forGrabbing_[nextImgToUse_]->alloc_compressed(osz);
     memcpy(optr, iptr, osz);
-    forGrabbing_[nextImgToUse_]->complete_compressed(osz);
-    nextImgToUse_ += 1;
-    if (nextImgToUse_ == NUM_BUFS) {
-        nextImgToUse_ = 0;
+    try {
+        forGrabbing_[nextImgToUse_]->complete_compressed(osz);
+        nextImgToUse_ += 1;
+        if (nextImgToUse_ == NUM_BUFS) {
+            nextImgToUse_ = 0;
+        }
+        nbad_ = 0;
+    }
+    catch (std::runtime_error const &re) {
+        std::cerr << "Camera got error: " << re.what() << std::endl;
+        ++nbad_;
+        if (nbad_ >= 10) {
+            //rethrow
+            throw;
+        }
     }
 }
 

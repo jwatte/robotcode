@@ -13,6 +13,7 @@
 #include "DataLogger.h"
 #include "Tie.h"
 #include "dump.h"
+#include "async.h"
 
 #include <cstring>
 #include <cerrno>
@@ -209,6 +210,13 @@ int main(int argc, char const *argv[]) {
     config_pulse(modules);
 
     try {
+        {
+            time_t now;
+            time(&now);
+            char dpath[256];
+            strftime(dpath, 256, "imagecap/%Y-%m-%d_%H_%M_%S", localtime(&now));
+            start_async_file_dump(dpath);
+        }
         setup_cameras(modules);
         setup_gps(modules);
         setup_usblinks(modules);

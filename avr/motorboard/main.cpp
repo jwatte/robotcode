@@ -24,13 +24,15 @@
 #define LED_GO_B (1 << PB0)
 #define LED_PAUSE_D (1 << PD7)
 
-//  Forward: MOTOR_A_PCH_D + MOTOR_B_NCH_B
-//  Backward: MOTOR_B_PCH_D + MOTOR_A_NCH_B
+//  Port D6: Direction
+//  Port D5: Drive (PWM) (OCR0B)
+//  Port B2: FF1
+//  Port B1: FF2
 
-#define MOTOR_A_PCH_D (1 << PD5)
-#define MOTOR_A_NCH_B (1 << PB2)
-#define MOTOR_B_PCH_D (1 << PD6)
-#define MOTOR_B_NCH_B (1 << PB1)
+#define MOTOR_DIR_D (1 << PD6)
+#define MOTOR_PWM_D (1 << PD5)
+#define MOTOR_FF1_B (1 << PB2)
+#define MOTOR_FF2_B (1 << PB1)
 
 //  PC0
 #define POWEROFF_PIN (8|0)
@@ -139,10 +141,10 @@ void blink_leds(bool on)
     }
 
     //  kill motor power to be safe
-    PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_B_PCH_D));
-    PORTB = (PORTB | MOTOR_A_NCH_B | MOTOR_B_NCH_B);
-    DDRD |= (MOTOR_A_PCH_D | MOTOR_B_PCH_D);
-    DDRB |= (MOTOR_A_NCH_B | MOTOR_B_NCH_B);
+    PORTD = (PORTD & ~(MOTOR_DIR_D | MOTOR_PWM_D));
+    PORTB = (PORTB & ~(MOTOR_FF1_B | MOTOR_FF2_B));
+    DDRD |= (MOTOR_DIR_D | MOTOR_PWM_D);
+    DDRB &= ~(MOTOR_FF1_B | MOTOR_FF2_B);
 }
 
 void setup_leds()
@@ -231,10 +233,10 @@ void setup_motors()
     TIMSK0 = 0;
     TIFR0 = 0x7;
 
-    PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_B_PCH_D));
-    PORTB = (PORTB | MOTOR_A_NCH_B | MOTOR_B_NCH_B);
-    DDRD |= (MOTOR_A_PCH_D | MOTOR_B_PCH_D);
-    DDRB |= (MOTOR_A_NCH_B | MOTOR_B_NCH_B);
+    PORTD = (PORTD & ~(MOTOR_DIR_D | MOTOR_PWM_D));
+    PORTB = (PORTB & ~(MOTOR_FF1_B | MOTOR_FF2_B));
+    DDRD |= (MOTOR_DIR_D | MOTOR_PWM_D);
+    DDRB &= ~(MOTOR_FF1_B | MOTOR_FF2_B);
     TCCR0A = 0x03;  //  Fast PWM, not yet turned on
     TCCR0B = 0x03;   //  0x3 is 0.5 kHz, 0x2 is 4 kHz, 0x1 is 32 kHz
     OCR0A = 128;
@@ -256,13 +258,12 @@ void update_motor_power()
                 (power < 0 && g_actual_state.r_actual_power < 0))) {
         //  turn everything off in preparation for change
         TCCR0A = 0x03;  //  Fast PWM, not yet turned on
-        PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_B_PCH_D));
-        PORTB = (PORTB & ~(MOTOR_A_NCH_B | MOTOR_B_NCH_B));
-        udelay(50); // prevent shooth-through
+        PORTD = (PORTD & ~(MOTOR_DIR_D | MOTOR_PWM_D));
+        udelay(10); // prevent shooth-through
     }
     if (power > g_actual_state.r_actual_power) {
         //  ramp up over time to avoid spikes
-        int v = g_actual_state.r_actual_power + 2;
+        int v = g_actual_state.r_actual_power + 10;
         if (v < power) {
             power = v;
         }
@@ -277,8 +278,7 @@ void update_motor_power()
     }
     if (power == 0) {
         //  ground everything out
-        PORTD = (PORTD & ~(MOTOR_A_PCH_D | MOTOR_B_PCH_D));
-        PORTB = (PORTB | MOTOR_A_NCH_B | MOTOR_B_NCH_B);
+        PORTD = (PORTD & ~(MOTOR_DIR_D | MOTOR_PWM_D));
         TCCR0A = 0x03;  //  Fast PWM, not yet turned on
     }
     else if (power < 0) {
@@ -286,8 +286,7 @@ void update_motor_power()
             power = -127;
         }
         led |= LED_backward;
-        PORTB = (PORTB & ~(MOTOR_A_NCH_B)) | (MOTOR_B_NCH_B);
-        PORTD = (PORTD & ~(MOTOR_B_PCH_D)) | (MOTOR_A_PCH_D);
+        PORTD |= MOTOR_DIR_D;
         //  Note: tuning 255 means "full power," 0 means "almost no power"
         OCR0B = (-(int)power * (g_actual_state.w_trim_power + 1)) >> 7;
         TCCR0A = (1 << COM0B1) | (1 << WGM01) | (1 << WGM00);  //  Fast PWM, channel B
@@ -297,10 +296,10 @@ void update_motor_power()
             power = 127;
         }
         led |= LED_forward;
-        PORTB = (PORTB & ~(MOTOR_B_NCH_B)) | (MOTOR_A_NCH_B);
-        PORTD = (PORTD & ~(MOTOR_A_PCH_D)) | (MOTOR_B_PCH_D);
-        OCR0A = ((int)power * (g_actual_state.w_trim_power + 1)) >> 7;
-        TCCR0A = (1 << COM0A1) | (1 << WGM01) | (1 << WGM00);  //  Fast PWM, channel A
+        PORTD &= ~MOTOR_DIR_D;
+        //  Note: tuning 255 means "full power," 0 means "almost no power"
+        OCR0B = ((int)power * (g_actual_state.w_trim_power + 1)) >> 7;
+        TCCR0A = (1 << COM0B1) | (1 << WGM01) | (1 << WGM00);  //  Fast PWM, channel B
     }
     set_led_bits(led);
 }

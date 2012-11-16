@@ -1,5 +1,5 @@
 
-APP:=control
+APP:=command
 OBJ_DIR:=../../bld/obj/$(APP)
 BIN_DIR:=../../bld/bin
 APP_CPPS:=$(wildcard *.cpp)

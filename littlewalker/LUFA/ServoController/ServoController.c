@@ -13,6 +13,8 @@
 #define CMD_PWMRATE CMD_TWOBYTEARG
 #define CMD_SETPWM 5
 #define CMD_WAIT 6
+#define CMD_TWOARG 7
+#define CMD_LERPPWM CMD_TWOARG
 
 
 void Reconfig(void);
@@ -40,9 +42,15 @@ unsigned short pwm_timers[NUM_PWM_TIMERS] = {
     DEFAULT_PWM_TIME,
     DEFAULT_PWM_TIME
     };
-unsigned char pwm_values[NUM_PWM_TIMERS];
-unsigned short pwm_times[NUM_PWM_TIMERS];
+unsigned short pwm_targets[NUM_PWM_TIMERS] = {
+    0
+};
+unsigned char pwm_lerp_counts[NUM_PWM_TIMERS] = {
+    0
+};
 unsigned short pwm_rate = 60000;     //  30 ms
+unsigned char c_pwm_values[NUM_PWM_TIMERS];
+unsigned short c_pwm_times[NUM_PWM_TIMERS];
 
 void DebugWrite(uint8_t ch) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
@@ -203,8 +211,8 @@ void recalc_pwm(void) {
             }
         }
         base = next;
-        pwm_values[ix] = on;
-        pwm_times[ix] = on ? next : 0;
+        c_pwm_values[ix] = on;
+        c_pwm_times[ix] = on ? next : 0;
         ++ix;
     }
 }
@@ -223,8 +231,20 @@ void run_pwm(void) {
     }
 }
 
+void update_animated_pwm(void) {
+    for (unsigned char i = 0; i < NUM_PWM_TIMERS; ++i) {
+        unsigned char lt = pwm_lerp_counts[i];
+        if (lt) {
+            pwm_timers[i] += (int)(pwm_targets[i] - pwm_timers[i]) / lt;
+            pwm_dirty = true;
+            pwm_lerp_counts[i] -= 1;
+        }
+    }
+}
+
 void one_pwm(void) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        update_animated_pwm();
         if (pwm_dirty) {
             recalc_pwm();
             pwm_dirty = false;
@@ -244,8 +264,8 @@ void one_pwm(void) {
             unsigned short next = 0;
             unsigned char ix = 0;
             while (ix < NUM_PWM_TIMERS) {
-                PORTB = pwm_values[ix];
-                next = pwm_times[ix];
+                PORTB = c_pwm_values[ix];
+                next = c_pwm_times[ix];
                 if (!next) {
                     break;
                 }
@@ -263,10 +283,8 @@ void one_pwm(void) {
 }
 
 ISR(TIMER3_OVF_vect) {
-    PORTD |= 1;
     one_pwm();
     TIFR3 = TIFR3;
-    PORTD &= ~1;
 }
 
 void do_pwmrate(unsigned char cmd, unsigned short arg) {
@@ -292,6 +310,8 @@ void do_setpwm(unsigned char cmd, unsigned short arg) {
     }
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         pwm_timers[ix] = arg;
+        //  go directly to target, do not pass lerp
+        pwm_lerp_counts[ix] = 0;
         pwm_dirty = true;
     }
 }
@@ -322,7 +342,18 @@ void do_wait(unsigned char ctarg, unsigned short us) {
     }
 }
 
-void do_cmd(unsigned char ccode, unsigned char ctarg, unsigned short arg) {
+void do_lerppwm(unsigned char channel, unsigned short target, unsigned char count) {
+    if (channel > NUM_PWM_TIMERS) {
+        ++nerrors;
+        return;
+    }
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        pwm_targets[channel] = target;
+        pwm_lerp_counts[channel] = count;
+    }
+}
+
+void do_cmd(unsigned char ccode, unsigned char ctarg, unsigned short arg, unsigned short arg2) {
     switch (ccode) {
     case CMD_DDR:
         do_ddr(ctarg, arg);
@@ -334,22 +365,16 @@ void do_cmd(unsigned char ccode, unsigned char ctarg, unsigned short arg) {
         do_pin(ctarg, arg);
         break;
     case CMD_PWMRATE:
-        DDRD |= 0x3;
-        PORTD |= 0x3;
         do_pwmrate(ctarg, arg);
-        PORTD &= ~0x3;
         break;
     case CMD_SETPWM:
-        DDRD |= 0x3;
-        PORTD = (PORTD & ~3) | 0x2;
         do_setpwm(ctarg, arg);
-        PORTD &= ~0x3;
         break;
     case CMD_WAIT:
-        DDRD |= 0x3;
-        PORTD = (PORTD & ~3) | 0x1;
         do_wait(ctarg, arg);
-        PORTD &= ~0x3;
+        break;
+    case CMD_LERPPWM:
+        do_lerppwm(ctarg, arg, arg2);
         break;
     default:
         ++nerrors;
@@ -359,37 +384,32 @@ void do_cmd(unsigned char ccode, unsigned char ctarg, unsigned short arg) {
 
 void do_cmds(unsigned char const *cmd, unsigned char cnt) {
     while (cnt > 0) {
-        DDRD |= 0x80;
-        PORTD |= 0x80;
         if (cnt > sizeof(scratch)) {
-            DDRD |= 0x3;
-            PORTD = (PORTD & 3) | 0x2;
-            PORTD &= ~0x80;
             ++nerrors;
             return;
         }
         unsigned char ccode = cmd[0] >> 4;
         unsigned char ctarg = cmd[0] & 0xf;
         unsigned char csz = 2;
+        unsigned char arg2 = 0;
         if (ccode >= CMD_TWOBYTEARG) {
             csz = 3;
         }
         if (cnt < csz) {
             ++nerrors;
-            DDRD |= 0x3;
-            PORTD = (PORTD & 3) | 0x1;
-            PORTD &= ~0x80;
             return;
         }
         unsigned short arg = cmd[1];
         if (ccode >= CMD_TWOBYTEARG) {
             arg = ((unsigned short)arg << 8u) | cmd[2];
         }
+        if (ccode >= CMD_TWOARG) {
+            arg2 = cmd[csz];
+            csz += 1;
+        }
         cmd += csz;
         cnt -= csz;
-        DDRD |= 0x80;
-        PORTD &= ~0x80;
-        do_cmd(ccode, ctarg, arg);
+        do_cmd(ccode, ctarg, arg, arg2);
     }
 }
 
@@ -417,8 +437,6 @@ void ServoController_Task(void) {
     Endpoint_SelectEndpoint(DATA_RX_EPNUM);
     Endpoint_SetEndpointDirection(ENDPOINT_DIR_OUT);
     if (Endpoint_IsConfigured() && Endpoint_IsOUTReceived() && Endpoint_IsReadWriteAllowed()) {
-        DDRD |= 0x80;
-        PORTD |= 0x80;
         uint8_t n = Endpoint_BytesInEndpoint();
         unsigned char g = 0;
         while (n > 0) {
@@ -427,7 +445,6 @@ void ServoController_Task(void) {
             --n;
         }
         Endpoint_ClearOUT();
-        PORTD &= ~0x80;
         do_cmds(scratch, g);
     }
 

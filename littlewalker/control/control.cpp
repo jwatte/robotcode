@@ -50,6 +50,7 @@ struct packet_hdr {
     unsigned char cmd;
 };
 char const *myname;
+bool verbose = false;
 
 float g_forward;
 float g_turn;
@@ -86,7 +87,9 @@ void geterrcnt(libusb_device_handle *dh) {
         fprintf(stderr, "There have been %d errors since last check.\n", err);
     }
     else {
-        fprintf(stderr, "No errors so far.\n");
+        if (verbose) {
+            fprintf(stderr, "No errors so far.\n");
+        }
     }
 }
 
@@ -373,9 +376,11 @@ struct cmd_frame : public packet_hdr {
 
 void handle_ping(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
     char buf[256];
-    memcpy(buf, &((cmd_ping *)hdr)[0], ((cmd_ping *)hdr)->slen);
+    memcpy(buf, &((cmd_ping *)hdr)[1], ((cmd_ping *)hdr)->slen);
     buf[((cmd_ping *)hdr)->slen] = 0;
-    fprintf(stderr, "got ping from %s\n", buf);
+    if (verbose) {
+        fprintf(stderr, "got ping from %s\n", buf);
+    }
     cmd_pong *cp = (cmd_pong *)buf;
     cp->cmd = cPong;
     cp->pong_type = typeRobot;
@@ -423,7 +428,9 @@ cmd_handler handlers[] = {
 void dispatch_packet(void const *packet, size_t size, sockaddr_in const *from) {
     char ipaddr[30];
     getaddr(from, ipaddr);
-    fprintf(stderr, "%d bytes from %s\n", (int)size, ipaddr);
+    if (verbose) {
+        fprintf(stderr, "%d bytes from %s\n", (int)size, ipaddr);
+    }
     if (!verify_csum(packet, size)) {
         //  not intended for my kind
         fprintf(stderr, "packet checksum was wrong from %s\n", ipaddr);
@@ -433,7 +440,9 @@ void dispatch_packet(void const *packet, size_t size, sockaddr_in const *from) {
     for (size_t i = 0, n = sizeof(handlers)/sizeof(handlers[0]); i != n; ++i) {
         if (handlers[i].cmd == hdr->cmd) {
             if (size >= handlers[i].min_size) {
-                fprintf(stderr, "handling packet %d from %s\n", hdr->cmd, ipaddr);
+                if (verbose) {
+                    fprintf(stderr, "handling packet %d from %s\n", hdr->cmd, ipaddr);
+                }
                 (*handlers[i].handle)(hdr, size, from);
                 return;
             }
@@ -444,7 +453,9 @@ void dispatch_packet(void const *packet, size_t size, sockaddr_in const *from) {
             }
         }
     }
-    fprintf(stderr, "packet type %d from %s not recognized\n", hdr->cmd, ipaddr);
+    if (verbose) {
+        fprintf(stderr, "packet type %d from %s not recognized\n", hdr->cmd, ipaddr);
+    }
 }
 
 char dpacket[65536];

@@ -26,12 +26,14 @@ struct packet_hdr {
     unsigned char cmd;
 };
 char const *myname;
+bool verbose = false;
 
 volatile bool interrupted;
 
 void onintr(int) {
     interrupted = true;
 }
+
 
 double now() {
     struct timespec tspec;
@@ -210,9 +212,11 @@ struct cmd_frame : public packet_hdr {
 
 void handle_pong(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
     char buf[256];
-    memcpy(buf, &((cmd_pong *)hdr)[0], ((cmd_pong *)hdr)->slen);
+    memcpy(buf, &((cmd_pong *)hdr)[1], ((cmd_pong *)hdr)->slen);
     buf[((cmd_pong *)hdr)->slen] = 0;
-    fprintf(stderr, "got pong from %s\n", buf);
+    if (verbose) {
+        fprintf(stderr, "got pong from %s\n", buf);
+    }
 }
 
 struct cmd_handler {
@@ -228,7 +232,9 @@ cmd_handler handlers[] = {
 void dispatch_packet(void const *packet, size_t size, sockaddr_in const *from) {
     char ipaddr[30];
     getaddr(from, ipaddr);
-    fprintf(stderr, "got packet from %s\n", ipaddr);
+    if (verbose) {
+        fprintf(stderr, "got packet from %s\n", ipaddr);
+    }
     if (!verify_csum(packet, size)) {
         //  not intended for my kind
         fprintf(stderr, "packet checksum was wrong from %s\n", ipaddr);
@@ -238,7 +244,9 @@ void dispatch_packet(void const *packet, size_t size, sockaddr_in const *from) {
     for (size_t i = 0, n = sizeof(handlers)/sizeof(handlers[0]); i != n; ++i) {
         if (handlers[i].cmd == hdr->cmd) {
             if (size >= handlers[i].min_size) {
-                fprintf(stderr, "handling packet %d from %s\n", hdr->cmd, ipaddr);
+                if (verbose) {
+                    fprintf(stderr, "handling packet %d from %s\n", hdr->cmd, ipaddr);
+                }
                 (*handlers[i].handle)(hdr, size, from);
                 return;
             }
@@ -249,7 +257,9 @@ void dispatch_packet(void const *packet, size_t size, sockaddr_in const *from) {
             }
         }
     }
-    fprintf(stderr, "packet type %d from %s not recognized\n", hdr->cmd, ipaddr);
+    if (verbose) {
+        fprintf(stderr, "packet type %d from %s not recognized\n", hdr->cmd, ipaddr);
+    }
 }
 
 char dpacket[65536];
@@ -270,7 +280,7 @@ void poll_socket() {
     FD_ZERO(&fds);
     FD_SET(sock, &fds);
     struct timeval tv = { 0, 10000 };
-    if (select(sock, &fds, 0, 0, &tv) > 0) {
+    if (select(sock + 1, &fds, 0, 0, &tv) > 0) {
         recv_one();
     }
 }
@@ -286,7 +296,6 @@ void commander_worker() {
         last_request = n;
     }
     if (n - last_ping > 2) {
-        fprintf(stderr, "sending ping\n");
         char buf[256];
         cmd_pong *cp = (cmd_pong *)buf;
         cp->cmd = cPing;

@@ -12,46 +12,16 @@
 #include <errno.h>
 #include <signal.h>
 #include <sys/signal.h>
+#include <time.h>
 
-#include <libusb.h>
 #include <openssl/md5.h>
 
 #include <unordered_map>
 #include <list>
 
+#include "../lib/defs.h"
+#include "../lib/usb.h"
 
-#define CONTROL_PORT 7331
-
-
-#define RIGHT_CENTER 3200
-#define LEFT_CENTER 3200
-#define CENTER_CENTER 3100
-
-//  in half-microseconds
-#define PWM_FREQ 30000
-
-#define WALK_EXTENT 560
-#define LIFT_EXTENT 800
-
-
-#define DATA_INFO_EPNUM 0x81
-#define DATA_IN_EPNUM 0x82
-#define DATA_OUT_EPNUM 0x03
-
-#define CMD_DDR 1
-#define CMD_POUT 2
-#define CMD_PIN 3
-#define CMD_TWOBYTEARG 4
-#define CMD_PWMRATE CMD_TWOBYTEARG
-#define CMD_SETPWM 5
-#define CMD_WAIT 6
-#define CMD_LERPPWM 7
-
-
-
-struct packet_hdr {
-    unsigned char cmd;
-};
 char const *myname;
 bool verbose = false;
 
@@ -66,15 +36,6 @@ void onintr(int) {
     interrupted = true;
 }
 
-
-enum ctr_id {
-    ctrFastErrors = 0,
-    ctrSlowErrors = 1,
-    ctrPackets = 2,
-    ctrPings = 3,
-    ctrForward = 4,
-    ctrTurn = 5
-};
 
 struct counter {
     counter(ctr_id cid, char const *str, double decay = 0.9) : id_(cid), name_(str), value_(0), decay_(0.9) {
@@ -131,78 +92,6 @@ void getaddr(sockaddr_in const *from, char *obuf) {
 }
 
 
-void geterrcnt(libusb_device_handle *dh) {
-    int x = 0;
-    unsigned char err = 0;
-    int i = libusb_bulk_transfer(dh, DATA_INFO_EPNUM, &err, 1, &x, 1000);
-    if (i < 0) {
-        fprintf(stderr, "error getting DATA_INFO_EPNUM: %d (%s)\n", i, libusb_error_name(i));
-        exit(14);
-    }
-    if (err > 0) {
-        fprintf(stderr, "There have been %d errors since last check.\n", err);
-    }
-    else {
-        if (verbose) {
-            fprintf(stderr, "No errors so far.\n");
-        }
-    }
-}
-
-libusb_context *ctx = 0;
-libusb_device_handle *dh = 0;
-
-void init_usb() {
-    int i = libusb_init(&ctx);
-    if (i != 0) {
-        fprintf(stderr, "libusb_init() failed\n");
-        exit(1);
-    }
-    libusb_set_debug(ctx, 3);
-
-    dh = libusb_open_device_with_vid_pid(ctx, 0xf000, 0x0002);
-    if (!dh) {
-        fprintf(stderr, "Could not find device 0xf000 / 0x0002\n");
-        exit(2);
-    }
-
-    i = libusb_claim_interface(dh, 0);
-    if (i != 0) {
-        fprintf(stderr, "Could not claim interface 0: %d\n", i);
-        exit(3);
-    }
-
-    unsigned char cmd[64];
-    int x = 0;
-    cmd[0] = (CMD_DDR << 4) | 0;
-    cmd[1] = 0xff;
-    cmd[2] = (CMD_POUT << 4) | 0;
-    cmd[3] = 0;
-    i = libusb_bulk_transfer(dh, DATA_OUT_EPNUM, cmd, 20, &x, 1000);
-    if (i != 0) {
-        fprintf(stderr, "Could not configure pin directions: %d\n", i);
-        exit(4);
-    }
-    geterrcnt(dh);
-
-    //  turn on pwm
-    cmd[0] = (4 << 4);  //  CMD_PWMRATE
-    cmd[1] = (PWM_FREQ >> 8) & 0xff;
-    cmd[2] = PWM_FREQ & 0xff;
-    i = libusb_bulk_transfer(dh, DATA_OUT_EPNUM, cmd, 3, &x, 1000);
-    if (i < 0) {
-        fprintf(stderr, "error turning on PWM: %d (%s)\n", i, libusb_error_name(i));
-        exit(5);
-    }
-    geterrcnt(dh);
-}
-
-enum ledtype {
-    lRunning = 0,
-    lConnected = 1,
-    lForward = 2,
-    lBackward = 3
-};
 unsigned char oldledState;
 unsigned char ledState;
 void setled(ledtype led, bool on) {
@@ -219,12 +108,7 @@ void updateled() {
         unsigned char cmd[10];
         cmd[0] = (CMD_POUT << 4) | 2;   //  D port
         cmd[1] = ledState;
-        int x, i;
-        i = libusb_bulk_transfer(dh, DATA_OUT_EPNUM, cmd, 2, &x, 1000);
-        if (i < 0) {
-            fprintf(stderr, "error setting LED: %d (%s)\n", i, libusb_error_name(i));
-            exit(100);
-        }
+        send_usb(cmd, 2);
         oldledState = ledState;
         if (verbose) {
             fprintf(stderr, "LED state 0x%02x\n", ledState);
@@ -244,13 +128,8 @@ void rest() {
         cmd[n++] = (val >> 8) & 0xff;
         cmd[n++] = val & 0xff;
     }
-    int x;
-    int i = libusb_bulk_transfer(dh, DATA_OUT_EPNUM, cmd, n, &x, 1000);
-    if (i < 0) {
-        fprintf(stderr, "error writing PWM data: %d (%s)\n", i, libusb_error_name(i));
-        exit(8);
-    }
-    geterrcnt(dh);
+    send_usb(cmd, n);
+    geterrcnt("rest PWM");
 }
 
 void walk() {
@@ -270,7 +149,6 @@ void walk() {
     unsigned char cmd[64];
     size_t phase = -1;
     long delay = 0;
-    int i, x;
     while (!interrupted) {
         phase = phase + 1;
         if (phase >= sizeof(gait)/sizeof(gait[0])) {
@@ -295,12 +173,8 @@ void walk() {
         cmd[n++] = (t >> 8) & 0xff;
         cmd[n++] = t & 0xff;
         cmd[n++] = delay / PWM_FREQ;
-        i = libusb_bulk_transfer(dh, DATA_OUT_EPNUM, cmd, n, &x, 1000);
-        if (i < 0) {
-            fprintf(stderr, "error stepping PWM: %d (%s)\n", i, libusb_error_name(i));
-            exit(9);
-        }
-        geterrcnt(dh);
+        send_usb(cmd, n);
+        geterrcnt("walk step PWM");
         usleep(delay / 2);
     }
 }
@@ -380,63 +254,6 @@ void do_send(void const *buf, size_t size, sockaddr_in const *to) {
 }
 
 
-enum {
-    cPing = 1,
-    cPong = 2,
-    cControl = 3,
-    cFire = 5,
-    cReports = 6,
-    cCamera = 7,
-    cPower = 8,
-    cReport = 9,
-    cFrame = 10
-};
-
-enum {
-    typeController = 1,
-    typeRobot = 2
-};
-
-struct cmd_ping : public packet_hdr {
-    unsigned char ping_type;
-    unsigned char slen;
-};
-
-struct cmd_pong : public packet_hdr {
-    unsigned char pong_type;
-    unsigned char slen;
-};
-
-struct cmd_control : public packet_hdr {
-    //  negative means backwards
-    //  4096 is "nominal"
-    short speed;
-    short rate;
-};
-
-struct cmd_fire : public packet_hdr {
-    //  number of shots to fire
-    unsigned char num_shots;
-};
-
-struct cmd_reports : public packet_hdr {
-    //  milliseconds, 0 for off
-    unsigned short interval;
-    //  after num_reports, will shut off reporting
-    unsigned char num_reports;
-};
-
-struct cmd_camera : public packet_hdr {
-    //  0 for off; after num_frames, will shut off streaming
-    unsigned char num_frames;
-};
-
-struct cmd_power : public packet_hdr {
-    //  0 for off, 255 for on
-    unsigned char power;
-};
-
-
 struct report_info {
     sockaddr_in sin;
     unsigned short interval;
@@ -460,31 +277,6 @@ struct hash<sockaddr_in_h> {
 }
 
 std::unordered_map<sockaddr_in_h, report_info> reports;
-
-enum {
-    ptString = 1,
-    ptByte = 2,
-    ptShort = 3,
-    ptFloat = 4,
-};
-
-struct cmd_report_param {
-    unsigned char type; //  data type of param
-    unsigned char code; //  "name" of param
-    unsigned char data[1];  //  actual data, based on type
-};
-
-struct cmd_report : public packet_hdr {
-    unsigned char num_params;
-    cmd_report_param params[1];
-};
-
-struct cmd_frame : public packet_hdr {
-    //  correlate milliseconds
-    unsigned short millis;
-    //  MJPEG data
-    unsigned char data[1];   //  actually, often very big
-};
 
 
 void handle_ping(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
@@ -687,12 +479,7 @@ double walk_advance() {
     cmd[n++] = (t >> 8) & 0xff;
     cmd[n++] = t & 0xff;
     cmd[n++] = time;
-    int x;
-    int i = libusb_bulk_transfer(dh, DATA_OUT_EPNUM, cmd, n, &x, 1000);
-    if (i < 0) {
-        fprintf(stderr, "error stepping PWM: %d (%s)\n", i, libusb_error_name(i));
-        exit(9);
-    }
+    send_usb(cmd, n);
     return delay;
 }
 
@@ -738,7 +525,7 @@ double last_report = 0;
 void robot_worker() {
     double n = now();
     if (n - last_errcheck > 0.5) {
-        geterrcnt(dh);
+        geterrcnt("robot_worker");
         last_errcheck = n;
     }
     if (n >= next_walk) {
@@ -768,16 +555,12 @@ void robot_worker() {
 void init_led() {
     unsigned char cmd[200];
     int n = 0;
-    cmd[n++] = (CMD_DDR << 4) | 2;
+    cmd[n++] = (1 << 4) | 2;
     cmd[n++] = 0xff;
-    cmd[n++] = (CMD_POUT << 4) | 2;
-    cmd[n++] = 0;
-    int x;
-    int i = libusb_bulk_transfer(dh, DATA_INFO_EPNUM, cmd, n, &x, 1000);
-    if (i < 0) {
-        fprintf(stderr, "error setting LED DDR: %d (%s)\n", i, libusb_error_name(i));
-        exit(14);
-    }
+    cmd[n++] = (2 << 4) | 2;
+    cmd[n++] = 0xff;
+    send_usb(cmd, n);
+    geterrcnt("init_led()");
 }
 
 int main(int argc, char const *argv[]) {

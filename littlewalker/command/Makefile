@@ -7,6 +7,8 @@ APP_OS:=$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(APP_CPPS))
 APP_DS:=$(patsubst %.o,%.d,$(APP_OS))
 APP_BIN:=$(BIN_DIR)/$(APP)
 
+all:	$(APP_BIN)
+
 $(APP_BIN):	$(APP_OS)
 	@mkdir -p $(BIN_DIR)
 	g++ -o $@ $(APP_OS) -g -lusb-1.0 -lrt -lcrypto

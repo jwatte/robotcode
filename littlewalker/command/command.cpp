@@ -16,15 +16,9 @@
 
 #include <openssl/md5.h>
 
-
-#define CONTROL_PORT 7331
-
+#include "../lib/defs.h"
 
 
-
-struct packet_hdr {
-    unsigned char cmd;
-};
 char const *myname;
 bool verbose = true;
 
@@ -122,88 +116,6 @@ void do_send(void const *buf, size_t size, sockaddr_in const *to) {
     }
 }
 
-
-enum {
-    cPing = 1,
-    cPong = 2,
-    cControl = 3,
-    cFire = 5,
-    cReports = 6,
-    cCamera = 7,
-    cPower = 8,
-    cReport = 9,
-    cFrame = 10
-};
-
-enum {
-    typeController = 1,
-    typeRobot = 2
-};
-
-struct cmd_ping : public packet_hdr {
-    unsigned char ping_type;
-    unsigned char slen;
-};
-
-struct cmd_pong : public packet_hdr {
-    unsigned char pong_type;
-    unsigned char slen;
-};
-
-struct cmd_control : public packet_hdr {
-    //  negative means backwards
-    //  4096 is "nominal"
-    short speed;
-    //  negative means left
-    //  4096 is "nominal right"
-    short rate;
-};
-
-struct cmd_fire : public packet_hdr {
-    //  number of shots to fire
-    unsigned char num_shots;
-};
-
-struct cmd_reports : public packet_hdr {
-    //  milliseconds, 0 for off
-    unsigned short interval;
-    //  after num_reports, will shut off reporting
-    unsigned char num_reports;
-};
-
-struct cmd_camera : public packet_hdr {
-    //  0 for off; after num_frames, will shut off streaming
-    unsigned char num_frames;
-};
-
-struct cmd_power : public packet_hdr {
-    //  0 for off, 255 for on
-    unsigned char power;
-};
-
-enum {
-    ptString = 1,
-    ptByte = 2,
-    ptShort = 3,
-};
-
-struct cmd_report_param {
-    unsigned char type; //  data type of param
-    unsigned char code; //  "name" of param
-    unsigned char data[1];  //  actual data, based on type
-};
-
-struct cmd_report : public packet_hdr {
-    unsigned char num_params;
-    cmd_report_param params[1];
-};
-
-struct cmd_frame : public packet_hdr {
-    //  correlate milliseconds
-    unsigned short millis;
-    //  MJPEG data
-    unsigned char data[1];   //  actually, often very big
-};
 
 
 void handle_pong(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {

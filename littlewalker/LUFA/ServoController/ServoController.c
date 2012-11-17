@@ -88,12 +88,12 @@ void SetupHardware(void) {
 
     DDRB = 0;
     DDRC = 0;
-    DDRD = 0;
+    DDRD = 0xff;
     DDRE = 0;
     DDRF = 0;
     PORTB = 0;
     PORTC = 0;
-    PORTD = 0;
+    PORTD = 0xff;
     PORTE = 0;
     PORTF = 0;
 
@@ -115,6 +115,9 @@ void SetupHardware(void) {
 	USB_Init();
 
     run_pwm();
+
+    bad_delay();
+    PORTD = 0;
 }
 
 void EVENT_USB_Device_Connect(void) {

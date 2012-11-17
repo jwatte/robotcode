@@ -26,7 +26,7 @@ struct packet_hdr {
     unsigned char cmd;
 };
 char const *myname;
-bool verbose = false;
+bool verbose = true;
 
 volatile bool interrupted;
 
@@ -126,8 +126,7 @@ void do_send(void const *buf, size_t size, sockaddr_in const *to) {
 enum {
     cPing = 1,
     cPong = 2,
-    cForward = 3,
-    cTurn = 4,
+    cControl = 3,
     cFire = 5,
     cReports = 6,
     cCamera = 7,
@@ -151,16 +150,13 @@ struct cmd_pong : public packet_hdr {
     unsigned char slen;
 };
 
-struct cmd_forward : public packet_hdr {
+struct cmd_control : public packet_hdr {
     //  negative means backwards
     //  4096 is "nominal"
-    short rate;
-};
-
-struct cmd_turn : public packet_hdr {
+    short speed;
     //  negative means left
     //  4096 is "nominal right"
-    short speed;
+    short rate;
 };
 
 struct cmd_fire : public packet_hdr {

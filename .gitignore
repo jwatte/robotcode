@@ -21,3 +21,4 @@ logfile.log
 *.hex
 *.sym
 *.log
+*.eep

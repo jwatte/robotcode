@@ -117,14 +117,20 @@ void do_send(void const *buf, size_t size, sockaddr_in const *to) {
 }
 
 
+bool gotrobo = false;
+sockaddr_in roboaddr;
 
 void handle_pong(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
     char buf[256];
     memcpy(buf, &((cmd_pong *)hdr)[1], ((cmd_pong *)hdr)->slen);
     buf[((cmd_pong *)hdr)->slen] = 0;
+    char addr[256];
+    getaddr(from, addr);
     if (verbose) {
-        fprintf(stderr, "got pong from %s\n", buf);
+        fprintf(stderr, "got pong from %s (%s)\n", buf, addr);
     }
+    gotrobo = true;
+    roboaddr = *from;
 }
 
 struct cmd_handler {
@@ -218,6 +224,17 @@ void commander_worker() {
     }
 }
 
+void control(float forward, float turn) {
+    if (gotrobo) {
+        cmd_control cc;
+        cc.cmd = cControl;
+        cc.speed = (short)(forward * 4096);
+        cc.rate = (short)(turn * 4096);
+        do_send(&cc, sizeof(cc), &roboaddr);
+        fprintf(stderr, "do_send(%d, %d)\n", cc.speed, cc.rate);
+    }
+}
+
 int main(int argc, char const *argv[]) {
     if (argc > 1) {
         myname = argv[1];
@@ -243,9 +260,32 @@ int main(int argc, char const *argv[]) {
     signal(SIGINT, onintr);
     init_socket();
 
+    double last = now() - 12;
+    int state = 0;
     while (!interrupted) {
         poll_socket();
         commander_worker();
+        if (now() - last > 15) {
+            last = now();
+            state = (state + 1) & 3;
+            switch (state) {
+            case 0:
+                control(1, 0);
+                break;
+            case 1:
+                control(1, 0);
+                break;
+            case 2:
+                control(0, 0);
+                break;
+            case 3:
+                control(-1, 0);
+                break;
+            }
+            if (!gotrobo) {
+                last -= 12;
+            }
+        }
     }
 
     return 0;

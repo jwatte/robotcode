@@ -67,25 +67,16 @@ int main() {
     fprintf(stderr, "configured pins\n");
     geterrcnt(dh);
 
-    unsigned char bits = 1;
-    char dir = 1;
+    unsigned char bits = 0;
+    unsigned char lookup[] = {
+        1, 2, 4, 8, 4, 2
+    };
     while (true) {
         cmd[0] = (2 << 4) | 2;
-        cmd[1] = bits;
+        cmd[1] = lookup[bits];
         i = libusb_bulk_transfer(dh, DATA_OUT_EPNUM, cmd, 2, &x, 1000);
         usleep(100000);
-        if (bits == 8) {
-            dir = -1;
-        }
-        else if (bits == 1) {
-            dir = 1;
-        }
-        if (dir > 0) {
-            bits = bits << 1;
-        }
-        else {
-            bits = bits >> 1;
-        }
+        bits = (bits + 1) % sizeof(lookup);
     }
 
     /*NOTREACHED*/

@@ -16,6 +16,9 @@
 #include <libusb.h>
 #include <openssl/md5.h>
 
+#include <unordered_map>
+#include <list>
+
 
 #define CONTROL_PORT 7331
 
@@ -56,11 +59,64 @@ float g_forward;
 float g_turn;
 int g_phase = -1;
 
+
 volatile bool interrupted;
 
 void onintr(int) {
     interrupted = true;
 }
+
+
+enum ctr_id {
+    ctrFastErrors = 0,
+    ctrSlowErrors = 1,
+    ctrPackets = 2,
+    ctrPings = 3,
+    ctrForward = 4,
+    ctrTurn = 5
+};
+
+struct counter {
+    counter(ctr_id cid, char const *str, double decay = 0.9) : id_(cid), name_(str), value_(0), decay_(0.9) {
+        next_ = first_;
+        first_ = this;
+        ++count_;
+    }
+
+    static void decay() {
+        for (counter *f = first_; f != NULL; f = f->next_) {
+            f->step();
+        }
+    }
+    static counter *first_;
+    static int count_;
+    counter *next_;
+    ctr_id id_;
+    char const *name_;
+    double value_;
+    double decay_;
+
+    void update(double value) {
+        value_ = value_ + value;
+    }
+    void set(double value) {
+        value_ = value;
+    }
+    void step() {
+        value_ = value_ * decay_;
+    }
+};
+
+counter *counter::first_;
+int counter::count_;
+
+counter ctr_fast_errors(ctrFastErrors, "errors.fast", 0);
+counter ctr_slow_errors(ctrSlowErrors, "errors.slow", 0.99);
+counter ctr_packets(ctrPackets, "packets.count");
+counter ctr_pings(ctrPings, "packets.ping.count");
+counter ctr_forward(ctrForward, "movement.forward", 1);
+counter ctr_turn(ctrTurn, "movement.turn", 1);
+
 
 double now() {
     struct timespec tspec;
@@ -141,7 +197,44 @@ void init_usb() {
     geterrcnt(dh);
 }
 
+enum ledtype {
+    lRunning = 0,
+    lConnected = 1,
+    lForward = 2,
+    lBackward = 3
+};
+unsigned char oldledState;
+unsigned char ledState;
+void setled(ledtype led, bool on) {
+    if (on) {
+        ledState |= (1 << led);
+    }
+    else {
+        ledState &= ~(1 << led);
+    }
+}
+
+void updateled() {
+    if (oldledState != ledState) {
+        unsigned char cmd[10];
+        cmd[0] = (CMD_POUT << 4) | 2;   //  D port
+        cmd[1] = ledState;
+        int x, i;
+        i = libusb_bulk_transfer(dh, DATA_OUT_EPNUM, cmd, 2, &x, 1000);
+        if (i < 0) {
+            fprintf(stderr, "error setting LED: %d (%s)\n", i, libusb_error_name(i));
+            exit(100);
+        }
+        oldledState = ledState;
+        if (verbose) {
+            fprintf(stderr, "LED state 0x%02x\n", ledState);
+        }
+    }
+}
+
 void rest() {
+    g_forward = 0;
+    g_turn = 0;
     unsigned char cmd[64];
     //  set to rest values
     int n = 0;
@@ -290,8 +383,7 @@ void do_send(void const *buf, size_t size, sockaddr_in const *to) {
 enum {
     cPing = 1,
     cPong = 2,
-    cForward = 3,
-    cTurn = 4,
+    cControl = 3,
     cFire = 5,
     cReports = 6,
     cCamera = 7,
@@ -315,15 +407,10 @@ struct cmd_pong : public packet_hdr {
     unsigned char slen;
 };
 
-struct cmd_forward : public packet_hdr {
+struct cmd_control : public packet_hdr {
     //  negative means backwards
     //  4096 is "nominal"
     short speed;
-};
-
-struct cmd_turn : public packet_hdr {
-    //  negative means left
-    //  4096 is "nominal right"
     short rate;
 };
 
@@ -349,10 +436,36 @@ struct cmd_power : public packet_hdr {
     unsigned char power;
 };
 
+
+struct report_info {
+    sockaddr_in sin;
+    unsigned short interval;
+    unsigned char num_left;
+    double last_report;
+};
+
+struct sockaddr_in_h {
+    sockaddr_in sin;
+    inline bool operator==(sockaddr_in_h const &o) const {
+        return !memcmp(&sin.sin_addr, &o.sin.sin_addr, 4) && sin.sin_port == o.sin.sin_port;
+    }
+};
+namespace std {
+template<>
+struct hash<sockaddr_in_h> {
+    inline unsigned int operator()(sockaddr_in_h const &sa) const {
+        return *(unsigned int const *)&sa.sin.sin_addr ^ (sa.sin.sin_port * 2011);
+    }
+};
+}
+
+std::unordered_map<sockaddr_in_h, report_info> reports;
+
 enum {
     ptString = 1,
     ptByte = 2,
     ptShort = 3,
+    ptFloat = 4,
 };
 
 struct cmd_report_param {
@@ -375,6 +488,7 @@ struct cmd_frame : public packet_hdr {
 
 
 void handle_ping(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
+    ctr_pings.update(1);
     char buf[256];
     memcpy(buf, &((cmd_ping *)hdr)[1], ((cmd_ping *)hdr)->slen);
     buf[((cmd_ping *)hdr)->slen] = 0;
@@ -389,18 +503,24 @@ void handle_ping(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
     do_send(buf, sizeof(*cp) + cp->slen, from);
 }
 
-void handle_forward(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
-    g_forward = ((cmd_forward const *)hdr)->speed / 4096.0;
-}
-
-void handle_turn(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
-    g_turn = ((cmd_turn const *)hdr)->rate / 4096.0;
+void handle_control(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
+    g_forward = ((cmd_control const *)hdr)->speed / 4096.0;
+    g_turn = ((cmd_control const *)hdr)->rate / 4096.0;
 }
 
 void handle_fire(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
 }
 
 void handle_reports(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
+    cmd_reports const *crep = (cmd_reports const *)hdr;
+    sockaddr_in_h sinh;
+    sinh.sin = *from;
+    report_info ri;
+    ri.sin = *from;
+    ri.interval = crep->interval;
+    ri.num_left = crep->num_reports;
+    ri.last_report = 0;
+    reports[sinh] = ri;
 }
 
 void handle_camera(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
@@ -417,8 +537,7 @@ struct cmd_handler {
 
 cmd_handler handlers[] = {
     { cPing, sizeof(cmd_ping), &handle_ping },
-    { cForward, sizeof(cmd_forward), &handle_forward },
-    { cTurn, sizeof(cmd_turn), &handle_turn },
+    { cControl, sizeof(cmd_control), &handle_control },
     { cFire, sizeof(cmd_fire), &handle_fire },
     { cReports, sizeof(cmd_reports), &handle_reports },
     { cCamera, sizeof(cmd_camera), &handle_camera },
@@ -426,6 +545,7 @@ cmd_handler handlers[] = {
 };
 
 void dispatch_packet(void const *packet, size_t size, sockaddr_in const *from) {
+    ctr_packets.update(1);
     char ipaddr[30];
     getaddr(from, ipaddr);
     if (verbose) {
@@ -460,8 +580,10 @@ void dispatch_packet(void const *packet, size_t size, sockaddr_in const *from) {
 
 char dpacket[65536];
 int dpacketlen;
+double last_packet;
 
 void recv_one() {
+    last_packet = now();
     struct sockaddr_in sin;
     memset(&sin, 0, sizeof(sin));
     socklen_t slen = sizeof(sin);
@@ -574,8 +696,44 @@ double walk_advance() {
     return delay;
 }
 
+char report[65532];
+
+void update_report(sockaddr_in const *sin) {
+    cmd_report *cr = (cmd_report *)report;
+    int n = 2;
+    cr->cmd = cReport;
+    cr->num_params = counter::count_;
+    for (counter const *c = counter::first_; c != NULL; c = c->next_) {
+        report[n++] = c->id_;
+        report[n++] = ptFloat;
+        float val(c->value_);
+        memcpy(&report[n], &val, sizeof(val));
+        n += 4;
+    }
+    do_send(report, n, sin);
+}
+
+void do_report(double n) {
+    std::list<std::unordered_map<sockaddr_in_h, report_info>::iterator> toremove;
+    for (auto ptr(reports.begin()), end(reports.end()); ptr != end; ++ptr) {
+        if ((*ptr).second.last_report + (*ptr).second.interval * 0.001 < n) {
+            update_report(&(*ptr).first.sin);
+            (*ptr).second.last_report = n;
+            (*ptr).second.num_left -= 1;
+            if ((*ptr).second.num_left == 0) {
+                toremove.push_back(ptr);
+            }
+        }
+    }
+    for (auto ptr(toremove.begin()), end(toremove.end()); ptr != end; ++ptr) {
+        reports.erase(*ptr);
+    }
+}
+
 double last_errcheck = 0;
 double next_walk = 0;
+double last_decay = 0;
+double last_report = 0;
 
 void robot_worker() {
     double n = now();
@@ -585,6 +743,40 @@ void robot_worker() {
     }
     if (n >= next_walk) {
         next_walk = n + walk_advance();
+    }
+    if (n - last_decay > 1) {
+        setled(lRunning, true);
+        counter::decay();
+        last_decay = n;
+    }
+    if (n - last_packet < 1.0) {
+        setled(lConnected, true);
+    }
+    else {
+        setled(lConnected, false);
+    }
+    if (n - last_report > 0.1) {
+        do_report(n);
+    }
+    ctr_forward.set(g_forward);
+    setled(lForward, g_forward > 0.1);
+    setled(lBackward, g_forward < -0.1);
+    ctr_turn.set(g_turn);
+    updateled();
+}
+
+void init_led() {
+    unsigned char cmd[200];
+    int n = 0;
+    cmd[n++] = (CMD_DDR << 4) | 2;
+    cmd[n++] = 0xff;
+    cmd[n++] = (CMD_POUT << 4) | 2;
+    cmd[n++] = 0;
+    int x;
+    int i = libusb_bulk_transfer(dh, DATA_INFO_EPNUM, cmd, n, &x, 1000);
+    if (i < 0) {
+        fprintf(stderr, "error setting LED DDR: %d (%s)\n", i, libusb_error_name(i));
+        exit(14);
     }
 }
 
@@ -613,6 +805,7 @@ int main(int argc, char const *argv[]) {
     init_usb();
     signal(SIGINT, onintr);
     init_socket();
+    init_led();
 
     rest();
 

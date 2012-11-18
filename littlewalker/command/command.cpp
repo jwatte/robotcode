@@ -449,11 +449,11 @@ static void cb_forward(Fl_Widget *) {
 }
 
 static void cb_left(Fl_Widget *) {
-    control(0, -0.25);
+    control(0, -1);
 }
 
 static void cb_right(Fl_Widget *) {
-    control(0, 0.25);
+    control(0, 1);
 }
 
 static void cb_backward(Fl_Widget *) {

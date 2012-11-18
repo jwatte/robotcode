@@ -29,6 +29,7 @@ bool verbose = false;
 float g_forward;
 float g_turn;
 int g_phase = -1;
+double delay_save = 0;
 
 struct setting {
     setting(int t, char const *name) : t_(t), name_(name) {
@@ -368,6 +369,7 @@ void handle_tune(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
     if (s) {
         rest();
         s->set(ct->value.value);
+        delay_save = now() + 10;
     }
     else {
         fprintf(stderr, "setting not found in tune: %s\n", ct->value.name);
@@ -487,9 +489,9 @@ double walk_advance() {
     if (g_phase >= 4) {
         g_phase = 0;
     }
-    float ltarget = -0.25;
+    float ltarget = 0.25;
     float ctarget = 0;
-    float rtarget = -0.25;
+    float rtarget = 0.25;
     double delay = 0.01;
     switch (g_phase) {
         case 0:
@@ -527,8 +529,8 @@ double walk_advance() {
         }
         else {
             //  stand still
-            ltarget = -0.25;
-            rtarget = -0.25;
+            ltarget = 0.25;
+            rtarget = 0.25;
             ctarget = 0;
         }
     }
@@ -639,6 +641,11 @@ void robot_worker() {
     if (n - last_report > 0.1) {
         do_report(n);
     }
+    if (delay_save != 0 && n > delay_save) {
+        setting_save_all("/root/robot/settings.ini");
+        delay_save = 0;
+        fprintf(stderr, "saved settings\n");
+    }
     ctr_forward.set(g_forward);
     setled(lForward, g_forward > 0.1);
     setled(lBackward, g_forward < -0.1);
@@ -683,7 +690,7 @@ int main(int argc, char const *argv[]) {
     signal(SIGINT, onintr);
     init_socket();
     init_led();
-    setting_save_all("/root/robot/settings.ini");
+    setting_load_all("/root/robot/settings.ini");
 
     rest();
 

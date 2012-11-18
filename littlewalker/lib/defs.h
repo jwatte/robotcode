@@ -1,6 +1,9 @@
 #if !defined(littlewalker_defs_h)
 #define littlewalker_defs_h
 
+#include <stdlib.h>
+#include <netinet/in.h>
+
 #define CONTROL_PORT 7331
 
 
@@ -33,6 +36,11 @@
 
 struct packet_hdr {
     unsigned char cmd;
+};
+
+class PacketHandler {
+public:
+    virtual void onPacket(packet_hdr const *hdr, size_t size, sockaddr_in const *from) = 0;
 };
 
 enum ctr_id {

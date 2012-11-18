@@ -1,3 +1,4 @@
+#include "../lib/defs.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -16,11 +17,26 @@
 
 #include <openssl/md5.h>
 
-#include "../lib/defs.h"
+#include <unordered_map>
+#include <string>
+#include <memory>
+
+#include <FL/Fl.H>
+#include <FL/Fl_Double_Window.H>
+#include <FL/Fl_Button.H>
+#include <FL/Fl_Counter.H>
+
+
+class ControlWindow : public Fl_Double_Window {
+public:
+    ControlWindow();
+    ~ControlWindow();
+};
 
 
 char const *myname;
 bool verbose = true;
+ControlWindow *mainWindow;
 
 volatile bool interrupted;
 
@@ -133,6 +149,17 @@ void handle_pong(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
     roboaddr = *from;
 }
 
+PacketHandler *alltune_handler;
+
+void handle_alltune(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
+    if (alltune_handler) {
+        alltune_handler->onPacket(hdr, size, from);
+    }
+    else if (verbose) {
+        fprintf(stderr, "got cAllTune without handler\n");
+    }
+}
+
 struct cmd_handler {
     unsigned char cmd;
     size_t min_size;
@@ -141,6 +168,7 @@ struct cmd_handler {
 
 cmd_handler handlers[] = {
     { cPong, sizeof(cmd_pong), &handle_pong },
+    { cAllTune, sizeof(cmd_alltune), &handle_alltune },
 };
 
 void dispatch_packet(void const *packet, size_t size, sockaddr_in const *from) {
@@ -199,32 +227,12 @@ void poll_socket() {
     }
 }
 
-double last_request = 0;
-double last_ping = 0;
-
-void commander_worker() {
-    double n = now();
-    if (n - last_request > 0.5) {
-        //  request reports
-        //  request images
-        last_request = n;
-    }
-    if (n - last_ping > 2) {
-        char buf[256];
-        cmd_pong *cp = (cmd_pong *)buf;
-        cp->cmd = cPing;
-        cp->slen = strlen(myname);
-        memcpy(&cp[1], myname, cp->slen);
-        struct sockaddr_in bc;
-        memset(&bc, 0, sizeof(bc));
-        memset(&bc.sin_addr, 0xff, sizeof(bc.sin_addr));
-        bc.sin_port = htons(CONTROL_PORT);
-        do_send(buf, sizeof(*cp) + cp->slen, &bc);
-        last_ping = n;
-    }
-}
+float g_lastForward;
+float g_lastTurn;
 
 void control(float forward, float turn) {
+    g_lastForward = forward;
+    g_lastTurn = turn;
     if (gotrobo) {
         cmd_control cc;
         cc.cmd = cControl;
@@ -233,6 +241,251 @@ void control(float forward, float turn) {
         do_send(&cc, sizeof(cc), &roboaddr);
         fprintf(stderr, "do_send(%d, %d)\n", cc.speed, cc.rate);
     }
+}
+
+
+class Activity {
+public:
+    Activity(Activity *below = 0) : below_(below) {}
+    Activity *below_;
+    virtual void start() {
+        if (below_) {
+            below_->start();
+        }
+    }
+    virtual void step() {
+        if (below_) {
+            below_->step();
+        }
+    }
+    virtual void stop() {
+        if (below_) {
+            below_->stop();
+        }
+    }
+};
+
+Activity *cur_activity;
+
+void set_activity(Activity *act) {
+    if (cur_activity) {
+        cur_activity->stop();
+    }
+    cur_activity = act;
+    if (cur_activity) {
+        cur_activity->start();
+    }
+    mainWindow->redraw();
+}
+
+double last_request = 0;
+
+void commander_worker() {
+    double n = now();
+    if (n - last_request > 0.5) {
+        //  request reports
+        //  request images
+        last_request = n;
+    }
+}
+
+
+void main_idle(void *) {
+    poll_socket();
+    cur_activity->step();
+}
+
+class IdleActivity : public Activity {
+public:
+    void start() {
+        Activity::start();
+        last_control = 0;
+        last_ping = 0;
+    }
+    void step() {
+        Activity::step();
+        double n = now();
+        if (n - last_control > 1) {
+            control(g_lastForward, g_lastTurn);
+            last_control = n;
+        }
+        if (n - last_ping > 2) {
+            char buf[256];
+            cmd_pong *cp = (cmd_pong *)buf;
+            cp->cmd = cPing;
+            cp->slen = strlen(myname);
+            memcpy(&cp[1], myname, cp->slen);
+            struct sockaddr_in bc;
+            memset(&bc, 0, sizeof(bc));
+            memset(&bc.sin_addr, 0xff, sizeof(bc.sin_addr));
+            bc.sin_port = htons(CONTROL_PORT);
+            do_send(buf, sizeof(*cp) + cp->slen, &bc);
+            last_ping = n;
+        }
+    }
+    void stop() {
+        Activity::stop();
+    }
+    double last_control;
+    double last_ping;
+};
+
+IdleActivity idle;
+
+class DisplayActivity : public Activity {
+public:
+    DisplayActivity(Activity *below = 0) :
+        Activity(below)
+    {
+    }
+};
+
+DisplayActivity displayIdle(&idle);
+
+
+
+void quit_program(Fl_Widget *) {
+    if (Fl::event() == FL_SHORTCUT && Fl::event_key() == FL_Escape) {
+        return; //  don't quit on Escape
+    }
+    fprintf(stderr, "Quit program received.\n");
+    exit(0);
+}
+
+class TuneActivity : public Activity, public PacketHandler {
+public:
+    TuneActivity(Activity *below) :
+        Activity(below)
+    {
+    }
+    static void exitb_cb(Fl_Widget *) {
+        set_activity(&displayIdle);
+    }
+    void start() {
+        fprintf(stderr, "TuneActivity::start()\n");
+        Activity::start();
+        last_poll = 0;
+        alltune_handler = this;
+        exitb = new Fl_Button(110, 10, 100, 24, "<< Done");
+        exitb->callback(exitb_cb);
+        mainWindow->add(exitb);
+        exitb->redraw();
+    }
+    void step() {
+        Activity::step();
+        double n = now();
+        if (n - last_poll > 1) {
+            send_poll();
+            last_poll = n;
+        }
+    }
+    void stop() {
+        alltune_handler = 0;
+        counters_.clear();
+        delete exitb;
+        Activity::stop();
+    }
+
+    static void tweak_tune(Fl_Widget *wig, void *arg) {
+        if (gotrobo) {
+            char buf[300];
+            cmd_tune *ct = (cmd_tune *)buf;
+            ct->cmd = cTune;
+            ct->value.value = static_cast<Fl_Counter *>(wig)->value();
+            ct->value.slen = strlen((char *)arg);
+            memcpy(ct->value.name, arg, ct->value.slen);
+            do_send(buf, sizeof(*ct) + ct->value.slen, &roboaddr);
+        }
+    }
+
+    void onPacket(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
+        cmd_alltune const *at = (cmd_alltune const *)hdr;
+        tune_value const *tv = at->values;
+        for (int i = 0; i < at->cnt; ++i) {
+            char name[256];
+            memcpy(name, tv->name, tv->slen);
+            name[tv->slen] = 0;
+            Fl_Counter *ctr = counters_[name].get();
+            if (!ctr) {
+                std::unordered_map<std::string, std::unique_ptr<Fl_Counter>>::iterator ptr(
+                    counters_.find(name));
+                (*ptr).second.reset(new Fl_Counter(120, 10 + int(32 * counters_.size()),
+                    150, 24, (*ptr).first.c_str()));
+                (*ptr).second->callback(tweak_tune, (void *)(*ptr).first.c_str());
+                (*ptr).second->lstep(100);
+                mainWindow->add((*ptr).second.get());
+                (*ptr).second->align(FL_ALIGN_LEFT);
+                ctr = (*ptr).second.get();
+            }
+            ctr->value(tv->value);
+            ctr->redraw();
+            tv = (tune_value const *)(((char *)&tv[1]) + tv->slen);
+        }
+        mainWindow->redraw();
+    }
+    void send_poll() {
+        if (gotrobo) {
+            cmd_gettune cgt;
+            cgt.cmd = cGetAllTune;
+            do_send(&cgt, sizeof(cgt), &roboaddr);
+        }
+    }
+
+    std::unordered_map<std::string, std::unique_ptr<Fl_Counter>> counters_;
+    double last_poll;
+    Fl_Button *exitb;
+};
+
+TuneActivity tuneActivity(&displayIdle);
+
+void cb_tune(Fl_Widget *btn) {
+    fprintf(stderr, "cb_tune()\n");
+    set_activity(&tuneActivity);
+}
+
+
+static void cb_forward(Fl_Widget *) {
+    control(1, 0);
+}
+
+static void cb_left(Fl_Widget *) {
+    control(0, -0.25);
+}
+
+static void cb_right(Fl_Widget *) {
+    control(0, 0.25);
+}
+
+static void cb_backward(Fl_Widget *) {
+    control(-1, 0);
+}
+
+static void cb_stop(Fl_Widget *) {
+    control(0, 0);
+}
+
+ControlWindow::ControlWindow() :
+    Fl_Double_Window(10, 30, 1000, 800, "Robot Control")
+{
+    begin();
+    Fl_Button *tune = new Fl_Button(10, 10+600, 100, 24, "Tune");
+    tune->callback(cb_tune);
+    Fl_Button *forward = new Fl_Button(42, 42+600, 32, 32, "@8->");
+    forward->callback(cb_forward);
+    Fl_Button *left = new Fl_Button(10, 74+600, 32, 32, "@4->");
+    left->callback(cb_left);
+    Fl_Button *stop = new Fl_Button(42, 74+600, 32, 32, "@+53+");
+    stop->callback(cb_stop);
+    Fl_Button *right = new Fl_Button(74, 74+600, 32, 32, "@->");
+    right->callback(cb_right);
+    Fl_Button *down = new Fl_Button(42, 106+600, 32, 32, "@2->");
+    down->callback(cb_backward);
+    end();
+    callback(&quit_program);
+}
+
+ControlWindow::~ControlWindow()
+{
 }
 
 int main(int argc, char const *argv[]) {
@@ -260,33 +513,10 @@ int main(int argc, char const *argv[]) {
     signal(SIGINT, onintr);
     init_socket();
 
-    double last = now() - 12;
-    int state = 0;
-    while (!interrupted) {
-        poll_socket();
-        commander_worker();
-        if (now() - last > 15) {
-            last = now();
-            state = (state + 1) & 3;
-            switch (state) {
-            case 0:
-                control(1, 0);
-                break;
-            case 1:
-                control(1, 0);
-                break;
-            case 2:
-                control(0, 0);
-                break;
-            case 3:
-                control(-1, 0);
-                break;
-            }
-            if (!gotrobo) {
-                last -= 12;
-            }
-        }
-    }
+    (mainWindow = new ControlWindow())->show();
+    set_activity(&displayIdle);
+    Fl::add_idle(main_idle, 0);
+    Fl::run();
 
     return 0;
 }

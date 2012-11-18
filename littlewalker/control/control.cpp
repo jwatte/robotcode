@@ -496,27 +496,27 @@ double walk_advance() {
     switch (g_phase) {
         case 0:
             ltarget = -1;
-            ctarget = -1;
+            ctarget = 0;
             rtarget = -1;
             delay = 0.4 * 1000 / tune_speed;
             break;
         case 1:
-            ltarget = 1;
+            ltarget = 0;
             ctarget = -1;
-            rtarget = 1;
-            delay = 0.6 * 1000 / tune_speed;
+            rtarget = 0;
+            delay = 0.4 * 1000 / tune_speed;
             break;
         case 2:
             ltarget = 1;
-            ctarget = 1;
+            ctarget = 0;
             rtarget = 1;
             delay = 0.4 * 1000 / tune_speed;
             break;
         case 3:
-            ltarget = -1;
+            ltarget = 0;
             ctarget = 1;
-            rtarget = -1;
-            delay = 0.6 * 1000 / tune_speed;
+            rtarget = 0;
+            delay = 0.4 * 1000 / tune_speed;
             break;
         default:
             break;
@@ -524,8 +524,8 @@ double walk_advance() {
     if (g_forward > -0.1 && g_forward < 0.1) {
         //  am I turning?
         if (g_turn > 0.1 || g_turn < -0.1) {
-            ltarget *= g_forward + g_turn * 2;
-            rtarget *= g_forward - g_turn * 2;
+            ltarget *= g_forward + std::max(g_turn, 0.f);
+            rtarget *= g_forward - std::min(g_turn, 0.f);
         }
         else {
             //  stand still
@@ -535,8 +535,8 @@ double walk_advance() {
         }
     }
     else {
-        ltarget *= g_forward + g_turn * 2;
-        rtarget *= g_forward - g_turn * 2;
+        ltarget *= g_forward + std::max(g_turn, 0.f);
+        rtarget *= g_forward - std::min(g_turn, 0.f);
     }
     if (ltarget > 1) {
         ltarget = 1;

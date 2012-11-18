@@ -60,7 +60,10 @@ enum {
     cCamera = 7,
     cPower = 8,
     cReport = 9,
-    cFrame = 10
+    cFrame = 10,
+    cTune = 11,
+    cGetAllTune = 12,
+    cAllTune = 13
 };
 
 enum {
@@ -107,6 +110,23 @@ struct cmd_power : public packet_hdr {
     unsigned char power;
 };
 
+struct tune_value {
+    int value;
+    unsigned char slen;
+    char name[0];
+};
+struct cmd_tune : public packet_hdr {
+    tune_value value;
+};
+
+struct cmd_gettune : public packet_hdr {
+};
+
+struct cmd_alltune : public packet_hdr {
+    unsigned char cnt;
+    tune_value values[0];
+};
+
 
 enum {
     ptString = 1,
@@ -118,19 +138,19 @@ enum {
 struct cmd_report_param {
     unsigned char type; //  data type of param
     unsigned char code; //  "name" of param
-    unsigned char data[1];  //  actual data, based on type
+    unsigned char data[0];  //  actual data, based on type
 };
 
 struct cmd_report : public packet_hdr {
     unsigned char num_params;
-    cmd_report_param params[1];
+    cmd_report_param params[0];
 };
 
 struct cmd_frame : public packet_hdr {
     //  correlate milliseconds
     unsigned short millis;
     //  MJPEG data
-    unsigned char data[1];   //  actually, often very big
+    unsigned char data[0];   //  actually, often very big
 };
 
 #endif  //  littlewalker_defs_h

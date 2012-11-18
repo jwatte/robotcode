@@ -17,6 +17,7 @@
 #include <openssl/md5.h>
 
 #include <unordered_map>
+#include <vector>
 #include <list>
 
 #include "../lib/defs.h"
@@ -28,6 +29,88 @@ bool verbose = false;
 float g_forward;
 float g_turn;
 int g_phase = -1;
+
+struct setting {
+    setting(int t, char const *name) : t_(t), name_(name) {
+        next_ = all_;
+        all_ = this;
+    }
+    void set(int v) {
+        t_ = v;
+    }
+    int t_;
+    char const *name_;
+    static setting *all_;
+    setting *next_;
+
+    operator int() const { return t_; }
+};
+
+setting tune_l_center(LEFT_CENTER, "tune_l_center");
+setting tune_c_center(CENTER_CENTER, "tune_c_center");
+setting tune_r_center(RIGHT_CENTER, "tune_r_center");
+setting tune_walk_extent(WALK_EXTENT, "tune_walk_extent");
+setting tune_lift_extent(LIFT_EXTENT, "tune_lift_extent");
+setting tune_speed(1000, "tune_speed");
+
+setting *setting::all_;
+
+void settings_all(void (*func)(setting &set, void *arg), void *arg) {
+    for (setting *s = setting::all_; s != NULL; s = s->next_) {
+        func(*s, arg);
+    }
+}
+
+void save_func(setting &set, void *file) {
+    fprintf((FILE *)file, "%s=%d\n", set.name_, set.t_);
+}
+
+void setting_save_all(char const *name) {
+    FILE *file = fopen(name, "wb");
+    if (!file) {
+        fprintf(stderr, "Could not save settings to %s\n", name);
+        return;
+    }
+    fprintf(file, "\n");
+    settings_all(save_func, file);
+    fclose(file);
+}
+
+void load_func(setting &set, void *arg) {
+    char buf[100];
+    sprintf(buf, "\n%s=", set.name_);
+    char *val = strstr((char *)arg, buf);
+    if (val) {
+        val += strlen(buf);
+        set.t_ = atoi(val);
+    }
+}
+
+void setting_load_all(char const *name) {
+    FILE *file = fopen(name, "rb");
+    if (!file) {
+        fprintf(stderr, "Could not load settings from %s\n", name);
+        return;
+    }
+    fseek(file, 0, 2);
+    long l = ftell(file) + 1;
+    fseek(file, 0, 0);
+    char *block = (char *)malloc(l);
+    fread(block, 1, l, file);
+    block[l] = 0;
+    settings_all(load_func, block);
+    fclose(file);
+    free(block);
+}
+
+setting *setting_find(char const *name) {
+    for (setting *s = setting::all_; s != NULL; s = s->next_) {
+        if (!strcmp(name, s->name_)) {
+            return s;
+        }
+    }
+    return 0;
+}
 
 
 volatile bool interrupted;
@@ -132,53 +215,6 @@ void rest() {
     geterrcnt("rest PWM");
 }
 
-void walk() {
-
-    static struct {
-        float left;
-        float center;
-        float right;
-        int delay;
-    }
-    gait[] = {
-        { -WALK_EXTENT, -LIFT_EXTENT, -WALK_EXTENT, 200000 },
-        { WALK_EXTENT, -LIFT_EXTENT, WALK_EXTENT, 300000 },
-        { WALK_EXTENT, LIFT_EXTENT, WALK_EXTENT, 200000 },
-        { -WALK_EXTENT, LIFT_EXTENT, -WALK_EXTENT, 300000 },
-    };
-    unsigned char cmd[64];
-    size_t phase = -1;
-    long delay = 0;
-    while (!interrupted) {
-        phase = phase + 1;
-        if (phase >= sizeof(gait)/sizeof(gait[0])) {
-            phase = 0;
-        }
-        delay = gait[phase].delay * 4;
-        printf("phase %ld delay %ld\n", (long)phase, (long)delay);
-        printf("left %f\n", gait[phase].left);
-        unsigned short t = (unsigned short)(RIGHT_CENTER + gait[phase].right);
-        int n = 0;
-        cmd[n++] = (CMD_LERPPWM << 4) | 0;
-        cmd[n++] = (t >> 8) & 0xff;
-        cmd[n++] = t & 0xff;
-        cmd[n++] = delay / PWM_FREQ;
-        t = (unsigned short)(CENTER_CENTER + gait[phase].center);
-        cmd[n++] = (CMD_LERPPWM << 4) | 1;
-        cmd[n++] = (t >> 8) & 0xff;
-        cmd[n++] = t & 0xff;
-        cmd[n++] = delay / PWM_FREQ;
-        t = (unsigned short)(LEFT_CENTER + gait[phase].left);
-        cmd[n++] = (CMD_LERPPWM << 4) | 2;
-        cmd[n++] = (t >> 8) & 0xff;
-        cmd[n++] = t & 0xff;
-        cmd[n++] = delay / PWM_FREQ;
-        send_usb(cmd, n);
-        geterrcnt("walk step PWM");
-        usleep(delay / 2);
-    }
-}
-
 
 int sock;
 
@@ -279,7 +315,10 @@ struct hash<sockaddr_in_h> {
 std::unordered_map<sockaddr_in_h, report_info> reports;
 
 
+double lastping;
+
 void handle_ping(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
+    lastping = now();
     ctr_pings.update(1);
     char buf[256];
     memcpy(buf, &((cmd_ping *)hdr)[1], ((cmd_ping *)hdr)->slen);
@@ -321,6 +360,52 @@ void handle_camera(packet_hdr const *hdr, size_t size, sockaddr_in const *from) 
 void handle_power(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
 }
 
+void handle_tune(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
+    cmd_tune *ct = (cmd_tune *)hdr;
+    //  I know I'll always have padding space here because the receive buffer is big enough
+    ct->value.name[ct->value.slen] = 0;
+    setting *s = setting_find(ct->value.name);
+    if (s) {
+        rest();
+        s->set(ct->value.value);
+    }
+    else {
+        fprintf(stderr, "setting not found in tune: %s\n", ct->value.name);
+    }
+}
+
+struct gt {
+    std::vector<char> packet;
+    int n;
+};
+static void fn_gettune(setting &set, void *g) {
+    gt *data = (gt *)g;
+    data->n++;
+    char buf[200];
+    tune_value *tv = (tune_value *)buf;
+    tv->value = set;
+    tv->slen = strlen(set.name_);
+    memcpy(tv->name, set.name_, tv->slen);
+    data->packet.insert(data->packet.end(), buf, buf + sizeof(*tv) + tv->slen);
+}
+
+void handle_gettune(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
+
+    gt data;
+
+    cmd_alltune at;
+    at.cmd = cAllTune;
+    at.cnt = 0;
+    data.packet.insert(data.packet.end(), (char *)&at, (char *)&at + sizeof(at));
+
+    settings_all(fn_gettune, &data);
+
+    (*(cmd_alltune *)&data.packet[0]).cnt = data.n;
+    do_send(&data.packet[0], data.packet.size(), from);
+}
+
+
+
 struct cmd_handler {
     unsigned char cmd;
     size_t min_size;
@@ -328,12 +413,14 @@ struct cmd_handler {
 };
 
 cmd_handler handlers[] = {
-    { cPing, sizeof(cmd_ping), &handle_ping },
+    { cPing, sizeof(cmd_ping) + 1, &handle_ping },
     { cControl, sizeof(cmd_control), &handle_control },
     { cFire, sizeof(cmd_fire), &handle_fire },
     { cReports, sizeof(cmd_reports), &handle_reports },
     { cCamera, sizeof(cmd_camera), &handle_camera },
     { cPower, sizeof(cmd_power), &handle_power },
+    { cTune, sizeof(cmd_tune) + 1, &handle_tune },
+    { cGetAllTune, sizeof(cmd_gettune) + 1, &handle_gettune },
 };
 
 void dispatch_packet(void const *packet, size_t size, sockaddr_in const *from) {
@@ -409,25 +496,25 @@ double walk_advance() {
             ltarget = -1;
             ctarget = -1;
             rtarget = -1;
-            delay = 0.8;
+            delay = 0.4 * 1000 / tune_speed;
             break;
         case 1:
             ltarget = 1;
             ctarget = -1;
             rtarget = 1;
-            delay = 1.2;
+            delay = 0.6 * 1000 / tune_speed;
             break;
         case 2:
             ltarget = 1;
             ctarget = 1;
             rtarget = 1;
-            delay = 0.8;
+            delay = 0.4 * 1000 / tune_speed;
             break;
         case 3:
             ltarget = -1;
             ctarget = 1;
             rtarget = -1;
-            delay = 1.2;
+            delay = 0.6 * 1000 / tune_speed;
             break;
         default:
             break;
@@ -464,22 +551,25 @@ double walk_advance() {
     unsigned char cmd[64];
     int n = 0;
     unsigned char time = delay * (2000000.0 / PWM_FREQ);
-    unsigned short t = LEFT_CENTER + ltarget * WALK_EXTENT;
+    unsigned short t = tune_l_center + ltarget * tune_walk_extent;
     cmd[n++] = (CMD_LERPPWM << 4) | 0;
     cmd[n++] = (t >> 8) & 0xff;
     cmd[n++] = t & 0xff;
     cmd[n++] = time;
-    t = CENTER_CENTER + ctarget * LIFT_EXTENT;
+    t = tune_c_center + ctarget * tune_lift_extent;
     cmd[n++] = (CMD_LERPPWM << 4) | 1;
     cmd[n++] = (t >> 8) & 0xff;
     cmd[n++] = t & 0xff;
     cmd[n++] = time;
-    t = RIGHT_CENTER + rtarget * WALK_EXTENT;
+    t = tune_r_center + rtarget * tune_walk_extent;
     cmd[n++] = (CMD_LERPPWM << 4) | 2;
     cmd[n++] = (t >> 8) & 0xff;
     cmd[n++] = t & 0xff;
     cmd[n++] = time;
     send_usb(cmd, n);
+    if (verbose) {
+        fprintf(stderr, "do_walk %g %g %g for speed %g turn %g phase %d\n", ltarget, ctarget, rtarget, g_forward, g_turn, g_phase);
+    }
     return delay;
 }
 
@@ -524,6 +614,10 @@ double last_report = 0;
 
 void robot_worker() {
     double n = now();
+    if (n - lastping > 5) {
+        //  make sure there's communication, else stop
+        rest();
+    }
     if (n - last_errcheck > 0.5) {
         geterrcnt("robot_worker");
         last_errcheck = n;
@@ -589,6 +683,7 @@ int main(int argc, char const *argv[]) {
     signal(SIGINT, onintr);
     init_socket();
     init_led();
+    setting_save_all("/root/robot/settings.ini");
 
     rest();
 

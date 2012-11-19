@@ -11,7 +11,7 @@ all:	$(APP_BIN)
 
 $(APP_BIN):	$(APP_OS)
 	@mkdir -p $(BIN_DIR)
-	g++ -o $@ $(APP_OS) -g -lusb-1.0 -lrt -lcrypto $(shell fltk-config --use-images --ldflags)
+	g++ -o $@ $(APP_OS) -g -lusb-1.0 -lrt -lcrypto $(shell fltk-config --use-images --ldflags) -lv4l2
 
 $(OBJ_DIR)/%.o:	%.cpp
 	@mkdir -p $(OBJ_DIR)

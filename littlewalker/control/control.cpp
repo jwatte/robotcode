@@ -355,7 +355,12 @@ void handle_reports(packet_hdr const *hdr, size_t size, sockaddr_in const *from)
     reports[sinh] = ri;
 }
 
+int n_frames;
+sockaddr_in addr_frames;
+
 void handle_camera(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
+    n_frames = ((cmd_camera const *)hdr)->num_frames;
+    addr_frames = *from;
 }
 
 void handle_power(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
@@ -651,6 +656,27 @@ void robot_worker() {
     setled(lBackward, g_forward < -0.1);
     ctr_turn.set(g_turn);
     updateled();
+
+    void const *data = 0;
+    size_t size = 0;
+    capture_frame(data, size);
+    if (size > 65000) {
+        fprintf(stderr, "MJPEG image too big: %Ld\n", (long long)size);
+    }
+    else {
+        if (n_frames) {
+            //  re-use existing buffer
+            //  There's a bit of an inefficiency here -- I copy data 
+            //  from the buffer to dpacket, and then again from dpacket to spacket, 
+            //  to send it.
+            cmd_frame &cf = *(cmd_frame *)dpacket;
+            cf.cmd = cFrame;
+            cf.millis = unsigned short(now() * 1000);
+            memcpy(cf.data, data, size);
+            do_send(dpacket, size + sizeof(cf));
+            --n_frames;
+        }
+    }
 }
 
 void init_led() {
@@ -688,16 +714,25 @@ int main(int argc, char const *argv[]) {
 
     init_usb();
     signal(SIGINT, onintr);
+    signal(SIGHUP, onintr);
     init_socket();
     init_led();
     setting_load_all("/root/robot/settings.ini");
 
     rest();
 
+    open_dev("/dev/video0", VIDEO_WIDTH, VIDEO_HEIGHT);
+    start_capture();
+
     while (!interrupted) {
         poll_socket();
         robot_worker();
     }
+
+    rest();
+
+    stop_capture();
+    close_dev();
 
     return 0;
 }

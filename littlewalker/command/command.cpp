@@ -39,6 +39,8 @@ public:
     std::vector<unsigned char> buf_;
     Fl_JPEG_Image *img_;
     Fl_Box *imgBox_;
+    Fl_Box *roboName_;
+    Fl_Box *roboAddr_;
 };
 
 
@@ -69,6 +71,12 @@ static const unsigned int huff_size = sizeof(huff_data);
 char const *myname;
 bool verbose = true;
 ControlWindow *mainWindow;
+
+double gotrobo = 0;
+sockaddr_in roboaddr;
+
+char robo_name[256] = "none";
+char robo_addr[256] = "0.0.0.0";
 
 volatile bool interrupted;
 
@@ -165,8 +173,13 @@ void do_send(void const *buf, size_t size, sockaddr_in const *to) {
 }
 
 
-bool gotrobo = false;
-sockaddr_in roboaddr;
+void set_robo_name(char const *name, char const *addr) {
+    strcpy(robo_name, name);
+    strcpy(robo_addr, addr);
+    mainWindow->roboName_->redraw();
+    mainWindow->roboAddr_->redraw();
+    mainWindow->redraw();
+}
 
 void handle_pong(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
     char buf[256];
@@ -177,8 +190,12 @@ void handle_pong(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
     if (verbose) {
         fprintf(stderr, "got pong from %s (%s)\n", buf, addr);
     }
-    gotrobo = true;
-    roboaddr = *from;
+    //  don't replace with another robot
+    if (!gotrobo || !strcmp(robo_addr, addr)) {
+        set_robo_name(buf, addr);
+        gotrobo = now();
+        roboaddr = *from;
+    }
 }
 
 PacketHandler *alltune_handler;
@@ -192,6 +209,16 @@ void handle_alltune(packet_hdr const *hdr, size_t size, sockaddr_in const *from)
     }
 }
 
+void handle_frame(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
+    if (verbose) {
+        char buf[256];
+        getaddr(from, buf);
+        fprintf(stderr, "got frame from %s\n", buf);
+    }
+    cmd_frame const *cf = (cmd_frame const *)hdr;
+    mainWindow->set_mjpeg(cf->data, size - sizeof(*cf));
+}
+
 struct cmd_handler {
     unsigned char cmd;
     size_t min_size;
@@ -201,6 +228,7 @@ struct cmd_handler {
 cmd_handler handlers[] = {
     { cPong, sizeof(cmd_pong), &handle_pong },
     { cAllTune, sizeof(cmd_alltune), &handle_alltune },
+    { cFrame, sizeof(cmd_frame) + 1000, &handle_frame },
 };
 
 void dispatch_packet(void const *packet, size_t size, sockaddr_in const *from) {
@@ -325,12 +353,6 @@ void commander_worker() {
 void main_idle(void *) {
     poll_socket();
     cur_activity->step();
-    /*
-    void *out_ptr = 0;
-    size_t out_size = 0;
-    capture_frame(out_ptr, out_size);
-    mainWindow->set_mjpeg(out_ptr, out_size);
-    */
 }
 
 class IdleActivity : public Activity {
@@ -339,15 +361,22 @@ public:
         Activity::start();
         last_control = 0;
         last_ping = 0;
+        last_frames = 0;
     }
     void step() {
         Activity::step();
         double n = now();
+        if (gotrobo && n - gotrobo > 5) {
+            //  lost connection!
+            gotrobo = 0;
+            set_robo_name("none", "0.0.0.0");
+        }
         if (n - last_control > 1) {
             control(g_lastForward, g_lastTurn);
             last_control = n;
         }
-        if (n - last_ping > 2) {
+        //  ping every 2 seconds when connected, and 0.5 second when not connected
+        if ((n - last_ping > 2) || (!gotrobo && (n - last_ping > 0.5))) {
             char buf[256];
             cmd_pong *cp = (cmd_pong *)buf;
             cp->cmd = cPing;
@@ -360,12 +389,21 @@ public:
             do_send(buf, sizeof(*cp) + cp->slen, &bc);
             last_ping = n;
         }
+        if (gotrobo && (n - last_frames > 1)) {
+            cmd_camera cc;
+            cc.cmd = cCamera;
+            cc.num_frames = 50;
+            fprintf(stderr, "sending cCamera\n");
+            do_send(&cc, sizeof(cc), &roboaddr);
+            last_frames = n;
+        }
     }
     void stop() {
         Activity::stop();
     }
     double last_control;
     double last_ping;
+    double last_frames;
 };
 
 IdleActivity idle;
@@ -503,7 +541,7 @@ static void cb_stop(Fl_Widget *) {
 }
 
 ControlWindow::ControlWindow() :
-    Fl_Double_Window(10, 30, 1000, 800, "Robot Control")
+    Fl_Double_Window(10, 30, 1200, 750, "Robot Control")
 {
     begin();
     Fl_Button *tune = new Fl_Button(10, 10+600, 100, 24, "Tune");
@@ -519,7 +557,11 @@ ControlWindow::ControlWindow() :
     Fl_Button *down = new Fl_Button(42, 106+600, 32, 32, "@2->");
     down->callback(cb_backward);
     img_ = 0;
-    imgBox_ = new Fl_Box(120, 100, VIDEO_WIDTH, VIDEO_HEIGHT, "");
+    imgBox_ = new Fl_Box(330, 100, VIDEO_WIDTH, VIDEO_HEIGHT, "");
+    roboName_ = new Fl_Box(240, 10, 100, 24, robo_name);
+    roboName_->align(FL_ALIGN_INSIDE);
+    roboAddr_ = new Fl_Box(330, 10, 100, 24, robo_addr);
+    roboAddr_->align(FL_ALIGN_INSIDE);
     end();
     callback(&quit_program);
 }

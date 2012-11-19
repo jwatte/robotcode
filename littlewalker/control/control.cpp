@@ -364,7 +364,9 @@ void handle_camera(packet_hdr const *hdr, size_t size, sockaddr_in const *from) 
     addr_frames = *from;
     char buf[256];
     getaddr(from, buf);
-    fprintf(stderr, "got camera request from %s for %d\n", buf, n_frames);
+    if (verbose) {
+        fprintf(stderr, "got camera request from %s for %d\n", buf, n_frames);
+    }
 }
 
 void handle_power(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
@@ -403,6 +405,7 @@ static void fn_gettune(setting &set, void *g) {
 void handle_gettune(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
 
     gt data;
+    data.n = 0;
 
     cmd_alltune at;
     at.cmd = cAllTune;
@@ -412,6 +415,7 @@ void handle_gettune(packet_hdr const *hdr, size_t size, sockaddr_in const *from)
     settings_all(fn_gettune, &data);
 
     (*(cmd_alltune *)&data.packet[0]).cnt = data.n;
+    fprintf(stderr, "sending alltime size %ld count %d\n", data.packet.size(), data.n);
     do_send(&data.packet[0], data.packet.size(), from);
 }
 

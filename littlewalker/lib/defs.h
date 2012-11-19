@@ -6,8 +6,8 @@
 
 #define CONTROL_PORT 7331
 
-#define VIDEO_WIDTH 800
-#define VIDEO_HEIGHT 448
+#define VIDEO_WIDTH 432
+#define VIDEO_HEIGHT 240
 
 #define RIGHT_CENTER 3200
 #define LEFT_CENTER 3200

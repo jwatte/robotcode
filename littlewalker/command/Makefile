@@ -15,7 +15,7 @@ $(APP_BIN):	$(APP_OS)
 
 $(OBJ_DIR)/%.o:	%.cpp
 	@mkdir -p $(OBJ_DIR)
-	g++ -Wall -c -std=gnu++11 -I /usr/include/libusb-1.0 -O0 -g -pipe $(shell fltk-config --use-images --cxxflags) -o $@ $<
+	g++ -Wall -c -std=gnu++11 -I /usr/include/libusb-1.0 -O0 -g -pipe $(shell fltk-config --use-images --cxxflags) -MMD -o $@ $<
 
 clean:
 	rm -rf $(OBJ_DIR) $(APP_BIN)

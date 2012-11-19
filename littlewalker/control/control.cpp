@@ -22,6 +22,7 @@
 
 #include "../lib/defs.h"
 #include "../lib/usb.h"
+#include "video.h"
 
 char const *myname;
 bool verbose = false;
@@ -361,6 +362,9 @@ sockaddr_in addr_frames;
 void handle_camera(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
     n_frames = ((cmd_camera const *)hdr)->num_frames;
     addr_frames = *from;
+    char buf[256];
+    getaddr(from, buf);
+    fprintf(stderr, "got camera request from %s for %d\n", buf, n_frames);
 }
 
 void handle_power(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
@@ -657,7 +661,7 @@ void robot_worker() {
     ctr_turn.set(g_turn);
     updateled();
 
-    void const *data = 0;
+    void *data = 0;
     size_t size = 0;
     capture_frame(data, size);
     if (size > 65000) {
@@ -671,9 +675,9 @@ void robot_worker() {
             //  to send it.
             cmd_frame &cf = *(cmd_frame *)dpacket;
             cf.cmd = cFrame;
-            cf.millis = unsigned short(now() * 1000);
+            cf.millis = (unsigned short)(now() * 1000);
             memcpy(cf.data, data, size);
-            do_send(dpacket, size + sizeof(cf));
+            do_send(dpacket, size + sizeof(cf), &addr_frames);
             --n_frames;
         }
     }

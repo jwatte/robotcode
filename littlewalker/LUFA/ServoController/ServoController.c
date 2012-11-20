@@ -1,6 +1,7 @@
 
 #include "ServoController.h"
 #include <avr/io.h>
+#include <avr/eeprom.h>
 #include <util/atomic.h>
 
 
@@ -9,12 +10,14 @@
 #define CMD_DDR 1
 #define CMD_POUT 2
 #define CMD_PIN 3
-#define CMD_TWOBYTEARG 4
+#define CMD_TWOBYTEARG 8
 #define CMD_PWMRATE CMD_TWOBYTEARG
-#define CMD_SETPWM 5
-#define CMD_WAIT 6
-#define CMD_TWOARG 7
+#define CMD_SETPWM 9
+#define CMD_WAIT 10
+#define CMD_TWOARG 16
 #define CMD_LERPPWM CMD_TWOARG
+#define CMD_TWOTWOBYTEARG 24
+#define CMD_SETMINMAX CMD_TWOTWOBYTEARG
 
 
 void Reconfig(void);
@@ -26,9 +29,8 @@ unsigned char scratch[BUFFER_SIZE];
 unsigned char indatasz;
 unsigned char indata[BUFFER_SIZE];
 
+#define MIN_PWM_RATE 6000
 #define NUM_PWM_TIMERS 8
-#define MIN_PWM_TIME 600        //  0.3 ms
-#define MAX_PWM_TIME 5400       //  2.7 ms
 #define DEFAULT_PWM_TIME 3200   //  1.6 ms
 
 bool pwm_dirty = true;
@@ -51,6 +53,10 @@ unsigned char pwm_lerp_counts[NUM_PWM_TIMERS] = {
 unsigned short pwm_rate = 60000;     //  30 ms
 unsigned char c_pwm_values[NUM_PWM_TIMERS];
 unsigned short c_pwm_times[NUM_PWM_TIMERS];
+unsigned short c_pwm_min[NUM_PWM_TIMERS] = { 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000 };
+unsigned short c_pwm_max[NUM_PWM_TIMERS] = { 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000 };
+unsigned short write_countdown;
+unsigned short write_last_timer;
 
 void DebugWrite(uint8_t ch) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
@@ -81,9 +87,16 @@ int main(void) {
 	}
 }
 
+void write_minmax(void) {
+    eeprom_write_block(c_pwm_min, (void *)16, sizeof(c_pwm_min));
+    eeprom_write_block(c_pwm_max, (void *)32, sizeof(c_pwm_max));
+    eeprom_write_word((void *)0, 0x3264);
+}
+
 void SetupHardware(void) {
 
-	MCUSR &= ~(1 << WDRF);
+	unsigned short sig;
+    MCUSR &= ~(1 << WDRF);
 	wdt_disable();
 
     DDRB = 0;
@@ -114,6 +127,14 @@ void SetupHardware(void) {
 
 	USB_Init();
 
+    sig = eeprom_read_word((void *)0);
+    if (sig != 0x3264) {
+        write_minmax();
+    }
+    else {
+        eeprom_read_block(c_pwm_min, (void *)16, sizeof(c_pwm_min));
+        eeprom_read_block(c_pwm_max, (void *)32, sizeof(c_pwm_max));
+    }
     run_pwm();
 
     bad_delay();
@@ -292,7 +313,7 @@ ISR(TIMER3_OVF_vect) {
 
 void do_pwmrate(unsigned char cmd, unsigned short arg) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-        if (arg < MIN_PWM_TIME) {
+        if (arg < MIN_PWM_RATE) {
             ++nerrors;
             return;
         }
@@ -307,9 +328,11 @@ void do_setpwm(unsigned char cmd, unsigned short arg) {
         ++nerrors;
         return;
     }
-    if ((arg < MIN_PWM_TIME && arg != 0) || (arg > MAX_PWM_TIME)) {
-        ++nerrors;
-        return;
+    if (arg < c_pwm_min[ix] && arg != 0) {
+        arg = c_pwm_min[ix];
+    }
+    if (arg > c_pwm_max[ix]) {
+        arg = c_pwm_max[ix];
     }
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         pwm_timers[ix] = arg;
@@ -350,9 +373,40 @@ void do_lerppwm(unsigned char channel, unsigned short target, unsigned char coun
         ++nerrors;
         return;
     }
+    if (target > c_pwm_max[channel]) {
+        target = c_pwm_max[channel];
+    }
+    if (target < c_pwm_min[channel]) {
+        target = c_pwm_min[channel];
+    }
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         pwm_targets[channel] = target;
         pwm_lerp_counts[channel] = count;
+    }
+}
+
+void do_setminmax(unsigned char channel, unsigned short min, unsigned short max) {
+    if (channel >= 8) {
+        ++nerrors;
+        return;
+    }
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        if (pwm_targets[channel] > max) {
+            pwm_targets[channel] = max;
+        }
+        if (pwm_targets[channel] < min) {
+            pwm_targets[channel] = min;
+        }
+        if (pwm_timers[channel] > max) {
+            pwm_timers[channel] = max;
+        }
+        if (pwm_timers[channel] < min) {
+            pwm_timers[channel] = min;
+        }
+        c_pwm_min[channel] = min;
+        c_pwm_max[channel] = max;
+        write_countdown = 200;  //  6 seconds? Something like that
+        pwm_dirty = true;
     }
 }
 
@@ -379,6 +433,9 @@ void do_cmd(unsigned char ccode, unsigned char ctarg, unsigned short arg, unsign
     case CMD_LERPPWM:
         do_lerppwm(ctarg, arg, arg2);
         break;
+    case CMD_SETMINMAX:
+        do_setminmax(ctarg, arg, arg2);
+        break;
     default:
         ++nerrors;
         break;
@@ -398,17 +455,23 @@ void do_cmds(unsigned char const *cmd, unsigned char cnt) {
         if (ccode >= CMD_TWOBYTEARG) {
             csz = 3;
         }
-        if (cnt < csz) {
-            ++nerrors;
-            return;
-        }
         unsigned short arg = cmd[1];
         if (ccode >= CMD_TWOBYTEARG) {
             arg = ((unsigned short)arg << 8u) | cmd[2];
         }
         if (ccode >= CMD_TWOARG) {
-            arg2 = cmd[csz];
-            csz += 1;
+            if (ccode >= CMD_TWOTWOBYTEARG) {
+                arg2 = ((unsigned short)cmd[csz] << 8u) | cmd[csz+1];
+                csz += 2;
+            }
+            else {
+                arg2 = cmd[csz];
+                csz += 1;
+            }
+        }
+        if (cnt < csz) {
+            ++nerrors;
+            return;
         }
         cmd += csz;
         cnt -= csz;
@@ -421,6 +484,23 @@ void ServoController_Task(void) {
 
 	if (USB_DeviceState != DEVICE_STATE_Configured) {
 	  return;
+    }
+
+    if (write_countdown > 0) {
+        unsigned short timer = TCNT3L;
+        timer |= (TCNT3H << 8u);
+        if (timer < write_last_timer) {
+            ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+                --write_countdown;
+                if (write_countdown == 0) {
+                    unsigned char old = PORTD;
+                    PORTD |= 0xf;
+                    write_minmax();
+                    PORTD = old;
+                }
+            }
+        }
+        write_last_timer = timer;
     }
 
     if (indatasz > 0) {

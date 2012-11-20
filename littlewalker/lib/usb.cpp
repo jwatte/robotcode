@@ -27,7 +27,7 @@ void geterrcnt(char const *name) {
     }
     else {
         if (verbose) {
-            fprintf(stderr, "No errors so far.\n");
+            fprintf(stderr, "%s: No errors so far.\n", name);
         }
     }
 }

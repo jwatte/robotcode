@@ -1,9 +1,6 @@
 #if !defined(littlewalker_defs_h)
 #define littlewalker_defs_h
 
-#include <stdlib.h>
-#include <netinet/in.h>
-
 #define CONTROL_PORT 7331
 
 #define VIDEO_WIDTH 432
@@ -13,7 +10,7 @@
 #define LEFT_CENTER 3200
 #define CENTER_CENTER 3100
 
-//  in half-microseconds
+/*  in half-microseconds */
 #define PWM_FREQ 30000
 
 #define WALK_EXTENT 560
@@ -24,19 +21,24 @@
 #define DATA_IN_EPNUM 0x82
 #define DATA_OUT_EPNUM 0x03
 
+/* there's only 16 commands total */
 #define CMD_DDR 1
 #define CMD_POUT 2
 #define CMD_PIN 3
-#define CMD_TWOBYTEARG 8
+#define CMD_TWOBYTEARG 4
 #define CMD_PWMRATE CMD_TWOBYTEARG
-#define CMD_SETPWM 9
-#define CMD_WAIT 10
-#define CMD_TWOARGS 16
+#define CMD_SETPWM 5
+#define CMD_WAIT 6
+#define CMD_TWOARGS 8
 #define CMD_LERPPWM CMD_TWOARGS
-#define CMD_TWOTWOBYTEARG 24
+#define CMD_TWOTWOBYTEARG 12
 #define CMD_SETMINMAX CMD_TWOTWOBYTEARG
 
 
+#if defined(__cplusplus)
+
+#include <stdlib.h>
+#include <netinet/in.h>
 
 struct packet_hdr {
     unsigned char cmd;
@@ -177,5 +179,7 @@ struct cmd_setpwm : public packet_hdr {
     unsigned char channel;
     unsigned short value;
 };
+
+#endif /* __cplusplus */
 
 #endif  //  littlewalker_defs_h

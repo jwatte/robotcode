@@ -4,20 +4,9 @@
 #include <avr/eeprom.h>
 #include <util/atomic.h>
 
+#include "../../lib/defs.h"
 
 #define BUFFER_SIZE DATA_EPSIZE
-
-#define CMD_DDR 1
-#define CMD_POUT 2
-#define CMD_PIN 3
-#define CMD_TWOBYTEARG 8
-#define CMD_PWMRATE CMD_TWOBYTEARG
-#define CMD_SETPWM 9
-#define CMD_WAIT 10
-#define CMD_TWOARG 16
-#define CMD_LERPPWM CMD_TWOARG
-#define CMD_TWOTWOBYTEARG 24
-#define CMD_SETMINMAX CMD_TWOTWOBYTEARG
 
 
 void Reconfig(void);
@@ -459,7 +448,7 @@ void do_cmds(unsigned char const *cmd, unsigned char cnt) {
         if (ccode >= CMD_TWOBYTEARG) {
             arg = ((unsigned short)arg << 8u) | cmd[2];
         }
-        if (ccode >= CMD_TWOARG) {
+        if (ccode >= CMD_TWOARGS) {
             if (ccode >= CMD_TWOTWOBYTEARG) {
                 arg2 = ((unsigned short)cmd[csz] << 8u) | cmd[csz+1];
                 csz += 2;

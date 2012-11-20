@@ -8,11 +8,8 @@
 #include <errno.h>
 
 #include <libusb.h>
+#include "../lib/defs.h"
 
-
-#define DATA_INFO_EPNUM 0x81
-#define DATA_IN_EPNUM 0x82
-#define DATA_OUT_EPNUM 0x03
 
 
 void geterrcnt(libusb_device_handle *dh) {

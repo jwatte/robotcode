@@ -7,11 +7,8 @@
 #include <errno.h>
 
 #include <libusb.h>
+#include "../lib/defs.h"
 
-
-#define DATA_INFO_EPNUM 0x81
-#define DATA_IN_EPNUM 0x82
-#define DATA_OUT_EPNUM 0x03
 
 
 void geterrcnt(libusb_device_handle *dh) {
@@ -53,9 +50,9 @@ int main() {
 
     unsigned char cmd[64];
     for (int i = 0; i < 5; ++i) {
-        cmd[i*4] = (1 << 4) | i;        //  CMD_DDR
+        cmd[i*4] = (CMD_DDR << 4) | i;        //  CMD_DDR
         cmd[i*4 + 1] = 0xff;
-        cmd[i*4 + 2] = (2 << 4) | i;    //  CMD_POUT
+        cmd[i*4 + 2] = (CMD_POUT << 4) | i;    //  CMD_POUT
         cmd[i*4 + 3] = 0;
     }
     int x = 0;
@@ -85,7 +82,7 @@ int main() {
     geterrcnt(dh);
 
     //  turn on pwm
-    cmd[0] = (4 << 4);  //  CMD_PWMRATE
+    cmd[0] = (CMD_PWMRATE << 4);  //  CMD_PWMRATE
     cmd[1] = (40000 >> 8) & 0xff;
     cmd[2] = 40000 & 0xff;
     i = libusb_bulk_transfer(dh, DATA_OUT_EPNUM, cmd, 3, &x, 1000);
@@ -100,7 +97,7 @@ int main() {
         int pos = (rand() & 0xfff) + 1000;
         int n = 0;
         for (int i = 0; i < 8; ++i) {
-            cmd[n++] = (5 << 4) | i;    //  CMD_SETPWM
+            cmd[n++] = (CMD_SETPWM << 4) | i;    //  CMD_SETPWM
             cmd[n++] = (pos >> 8) & 0xff;
             cmd[n++] = pos & 0xff;
         }

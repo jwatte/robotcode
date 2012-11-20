@@ -7,30 +7,10 @@
 #include <errno.h>
 
 #include <libusb.h>
-
-#define RIGHT_CENTER 3200
-#define LEFT_CENTER 3200
-#define CENTER_CENTER 3100
+#include "../lib/defs.h"
 
 //  in half-microseconds
 #define PWM_FREQ 30000
-
-#define WALK_EXTENT 28
-#define LIFT_EXTENT 40
-
-
-#define DATA_INFO_EPNUM 0x81
-#define DATA_IN_EPNUM 0x82
-#define DATA_OUT_EPNUM 0x03
-
-#define CMD_DDR 1
-#define CMD_POUT 2
-#define CMD_PIN 3
-#define CMD_TWOBYTEARG 4
-#define CMD_PWMRATE CMD_TWOBYTEARG
-#define CMD_SETPWM 5
-#define CMD_WAIT 6
-#define CMD_LERPPWM 7
 
 
 
@@ -86,7 +66,7 @@ int main() {
     geterrcnt(dh);
 
     //  turn on pwm
-    cmd[0] = (4 << 4);  //  CMD_PWMRATE
+    cmd[0] = (CMD_PWMRATE << 4);  //  CMD_PWMRATE
     cmd[1] = (PWM_FREQ >> 8) & 0xff;
     cmd[2] = PWM_FREQ & 0xff;
     i = libusb_bulk_transfer(dh, DATA_OUT_EPNUM, cmd, 3, &x, 1000);
@@ -121,17 +101,17 @@ int main() {
         printf("left %f\n", gait[phase].left);
         unsigned short t = (unsigned short)(RIGHT_CENTER + gait[phase].right * 20);
         int n = 0;
-        cmd[n++] = (CMD_LERPPWM << 4) | 0;
+        cmd[n++] = (unsigned char)(CMD_LERPPWM << 4) | 0;
         cmd[n++] = (t >> 8) & 0xff;
         cmd[n++] = t & 0xff;
         cmd[n++] = delay / PWM_FREQ;
         t = (unsigned short)(CENTER_CENTER + gait[phase].center * 20);
-        cmd[n++] = (CMD_LERPPWM << 4) | 1;
+        cmd[n++] = (unsigned char)(CMD_LERPPWM << 4) | 1;
         cmd[n++] = (t >> 8) & 0xff;
         cmd[n++] = t & 0xff;
         cmd[n++] = delay / PWM_FREQ;
         t = (unsigned short)(LEFT_CENTER + gait[phase].left * 20);
-        cmd[n++] = (CMD_LERPPWM << 4) | 2;
+        cmd[n++] = (unsigned char)(CMD_LERPPWM << 4) | 2;
         cmd[n++] = (t >> 8) & 0xff;
         cmd[n++] = t & 0xff;
         cmd[n++] = delay / PWM_FREQ;

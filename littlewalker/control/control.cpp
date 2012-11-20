@@ -417,7 +417,9 @@ void handle_gettune(packet_hdr const *hdr, size_t size, sockaddr_in const *from)
     settings_all(fn_gettune, &data);
 
     (*(cmd_alltune *)&data.packet[0]).cnt = data.n;
-    fprintf(stderr, "sending alltime size %ld count %d\n", data.packet.size(), data.n);
+    if (verbose) {
+        fprintf(stderr, "sending alltime size %d count %d\n", data.packet.size(), data.n);
+    }
     do_send(&data.packet[0], data.packet.size(), from);
 }
 
@@ -522,7 +524,7 @@ void poll_socket() {
     fd_set fds;
     FD_ZERO(&fds);
     FD_SET(sock, &fds);
-    struct timeval tv = { 0, 10000 };
+    struct timeval tv = { 0, 10000 };   //  10 millisecond sleep in each poll
     if (select(sock+1, &fds, 0, 0, &tv) > 0) {
         recv_one();
     }

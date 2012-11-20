@@ -29,6 +29,8 @@ bool verbose = false;
 
 float g_forward;
 float g_turn;
+float g_panHeading;
+float g_panTilt;
 int g_phase = -1;
 double delay_save = 0;
 
@@ -419,6 +421,33 @@ void handle_gettune(packet_hdr const *hdr, size_t size, sockaddr_in const *from)
     do_send(&data.packet[0], data.packet.size(), from);
 }
 
+void handle_setminmax(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
+    cmd_setminmax const *cmd = (cmd_setminmax const *)hdr;
+    if (cmd->channel >= 8) {
+        fprintf(stderr, "Bad channel in handle_setminmax(): %d\n", cmd->channel);
+        return;
+    }
+    char buf[10];
+    buf[0] = (CMD_SETMINMAX << 4) | cmd->channel;
+    buf[1] = (cmd->min >> 8) & 0xff;
+    buf[2] = cmd->min & 0xff;
+    buf[3] = (cmd->max >> 8) & 0xff;
+    buf[4] = cmd->max & 0xff;
+    send_usb(buf, 5);
+}
+
+void handle_setpwm(packet_hdr const *hdr, size_t size, sockaddr_in const *from) {
+    cmd_setpwm const *cmd = (cmd_setpwm const *)hdr;
+    if (cmd->channel >= 8) {
+        fprintf(stderr, "Bad channel in handle_setpwm(): %d\n", cmd->channel);
+        return;
+    }
+    char buf[10];
+    buf[0] = (CMD_SETPWM << 4) | cmd->channel;
+    buf[1] = (cmd->value >> 8) & 0xff;
+    buf[2] = cmd->value & 0xff;
+    send_usb(buf, 3);
+}
 
 
 struct cmd_handler {
@@ -436,6 +465,8 @@ cmd_handler handlers[] = {
     { cPower, sizeof(cmd_power), &handle_power },
     { cTune, sizeof(cmd_tune) + 1, &handle_tune },
     { cGetAllTune, sizeof(cmd_gettune) + 1, &handle_gettune },
+    { cSetMinMax, sizeof(cmd_setminmax), &handle_setminmax },
+    { cSetPWM, sizeof(cmd_setpwm), &handle_setpwm },
 };
 
 void dispatch_packet(void const *packet, size_t size, sockaddr_in const *from) {
@@ -567,18 +598,18 @@ double walk_advance() {
     int n = 0;
     unsigned char time = delay * (2000000.0 / PWM_FREQ);
     unsigned short t = tune_l_center + ltarget * tune_walk_extent;
-    cmd[n++] = (CMD_LERPPWM << 4) | 0;
-    cmd[n++] = (t >> 8) & 0xff;
+    cmd[n++] = (unsigned char)(CMD_LERPPWM << 4) | 0;
+    cmd[n++] = (unsigned char)(t >> 8) & 0xff;
     cmd[n++] = t & 0xff;
     cmd[n++] = time;
     t = tune_c_center + ctarget * tune_lift_extent;
-    cmd[n++] = (CMD_LERPPWM << 4) | 1;
-    cmd[n++] = (t >> 8) & 0xff;
+    cmd[n++] = (unsigned char)(CMD_LERPPWM << 4) | 1;
+    cmd[n++] = (unsigned char)(t >> 8) & 0xff;
     cmd[n++] = t & 0xff;
     cmd[n++] = time;
     t = tune_r_center + rtarget * tune_walk_extent;
-    cmd[n++] = (CMD_LERPPWM << 4) | 2;
-    cmd[n++] = (t >> 8) & 0xff;
+    cmd[n++] = (unsigned char)(CMD_LERPPWM << 4) | 2;
+    cmd[n++] = (unsigned char)(t >> 8) & 0xff;
     cmd[n++] = t & 0xff;
     cmd[n++] = time;
     send_usb(cmd, n);

@@ -27,12 +27,14 @@
 #define CMD_DDR 1
 #define CMD_POUT 2
 #define CMD_PIN 3
-#define CMD_TWOBYTEARG 4
+#define CMD_TWOBYTEARG 8
 #define CMD_PWMRATE CMD_TWOBYTEARG
-#define CMD_SETPWM 5
-#define CMD_WAIT 6
-#define CMD_TWOARGS 7
+#define CMD_SETPWM 9
+#define CMD_WAIT 10
+#define CMD_TWOARGS 16
 #define CMD_LERPPWM CMD_TWOARGS
+#define CMD_TWOTWOBYTEARG 24
+#define CMD_SETMINMAX CMD_TWOTWOBYTEARG
 
 
 
@@ -73,7 +75,9 @@ enum {
     cFrame = 10,
     cTune = 11,
     cGetAllTune = 12,
-    cAllTune = 13
+    cAllTune = 13,
+    cSetMinMax = 14,
+    cSetPWM = 15
 };
 
 enum {
@@ -161,6 +165,17 @@ struct cmd_frame : public packet_hdr {
     unsigned short millis;
     //  MJPEG data
     unsigned char data[0];   //  actually, often very big
+};
+
+struct cmd_setminmax : public packet_hdr {
+    unsigned char channel;
+    unsigned short min;
+    unsigned short max;
+};
+
+struct cmd_setpwm : public packet_hdr {
+    unsigned char channel;
+    unsigned short value;
 };
 
 #endif  //  littlewalker_defs_h

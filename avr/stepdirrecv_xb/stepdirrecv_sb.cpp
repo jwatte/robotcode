@@ -62,7 +62,7 @@ void do_packet(unsigned char sz, unsigned char const *data) {
 
 void recv_data(void *) {
     after(10, &recv_data, 0);
-    unsigned char n = uart_read(sizeof(recv_data) - dataptr, recv_data);
+    unsigned char n = uart_read(sizeof(databuf) - dataptr, databuf);
 try_another:
     //  if dataptr == 0, we're looking for packet start
     if (dataptr == 0) {
@@ -81,13 +81,13 @@ try_another:
     else {
         dataptr += n;
         if (dataptr >= 3) {
-            if (databuf[2] + 3 > sizeof(databuf)) {
+            if ((size_t)databuf[2] + 3 > sizeof(databuf)) {
                 //  no chance of receiving this packet
                 dataptr = 0;
             }
             else if (databuf[2] + 3 <= dataptr) {
                 //  handle incoming packet
-                do_packet(&databuf[3], databuf[2]);
+                do_packet(databuf[2], &databuf[3]);
                 //  ack the sequence number
                 char ack[2];
                 ack[0] = 0xB0;
@@ -143,7 +143,7 @@ void setup_xbee(void *) {
         }
         break;
     case 3:
-        uart_send_all(6, strcpy_P((char *)databuf, ATBD7));
+        uart_send_all(6, strcpy_P((char *)databuf, ATBDx));
         xbee_waits = 0;
         ++xbee_state;
         break;

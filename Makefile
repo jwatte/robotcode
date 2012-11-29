@@ -34,8 +34,10 @@ AVR_LFLAGS:=-Lbld/avrbin -lc
 AVR_PARTS:=attiny84a atmega328p attiny85
 #AVR_PROG_PORT?=usb
 #AVR_PROG:=-c avrisp2
-AVR_PROG_PORT?=/dev/ttyACM0 -b19200
-AVR_PROG:=-c stk500v1
+#AVR_PROG_PORT?=/dev/ttyACM0 -b19200
+#AVR_PROG:=-c stk500v1
+AVR_PROG_PORT?=usb
+AVR_PROG:=-c usbtiny
 
 ifneq ($(AVR_PROG_PORT),)
 AVR_PROG+= -P $(AVR_PROG_PORT)
@@ -52,36 +54,48 @@ clean:
 	mkdir bld
 
 PART_motorboard:=atmega328p
+PART_motor2:=atmega328p
 PART_estop:=atmega328p
 PART_usbboard:=atmega328p
 PART_commusb:=atmega328p
 PART_testuart:=atmega328p
 PART_sensorboard:=atmega328p
 PART_blink:=atmega328p
+PART_zumo1:=atmega328p
 PART_stepdirsend:=atmega328p
+PART_stepdirsend_xb:=atmega328p
 PART_stepdirrecv:=atmega328p
+PART_stepdirrecv_rs:=atmega328p
+PART_stepdirrecv_xb:=atmega328p
 PART_display:=atmega328p
 PART_display2:=atmega328p
 PART_readcompass:=atmega328p
 PART_test85:=attiny85
-PART_stepdirsend:=atmega328p
 PART_littlewalker:=atmega328p
+PART_zumo1:=atmega328p
+PART_quadrature:=attiny84a
 
 fuses_motorboard:	fuses_8
+fuses_motor2:	fuses_20
 fuses_estop:	fuses_8
 #fuses_usbboard:	fuses_16
 fuses_commusb:	fuses_16
 fuses_testuart:	fuses_16
 fuses_sensorboard:	fuses_8
 fuses_blink:	fuses_8
+fuses_blink:	fuses_16
 fuses_stepdirsend:	fuses_8
+fuses_stepdirsend_xb:	fuses_16
 fuses_stepdirrecv:	fuses_8
+fuses_stepdirrecv_rs:	fuses_16
+fuses_stepdirrecv_xb:	fuses_16
 fuses_display:	fuses_20
 fuses_display2:	fuses_20
 fuses_readcompass:	fuses_16
 fuses_test85:	fuses_8_85
-fuses_stepdirsend:	fuses_20
 fuses_littlewalker:	fuses_16
+fuses_zumo1:	fuses_16
+fuses_quadrature:	fuses_8_84
 
 define mkapp
 bld/bin/$(1):	$(filter bld/obj/$(1)/%,$(CPP_OBJS)) $(foreach lib,$(APPLIBS_$(1)),bld/bin/lib$(lib).a)
@@ -164,6 +178,10 @@ fuses_tiny_8:
 fuses_8_85:
 	# 8 MHz, internal osc, 2.7V brown-out, 65k + 4.1ms boot delay
 	avrdude -e -u -V -p t85 -b 115200 $(FUSES_B) $(AVR_PROG) -U lfuse:w:0xD2:m -U hfuse:w:0xDD:m -U efuse:w:0xFF:m
+
+fuses_8_84:
+	# 8 MHz, internal osc, 2.7V brown-out, 65k + 4.1ms boot delay
+	avrdude -e -u -V -p t84 -b 115200 $(FUSES_B) $(AVR_PROG) -U lfuse:w:0xD2:m -U hfuse:w:0xDD:m -U efuse:w:0x01:m
 
 fuses_16:
 	# 16 MHz, crystal osc, 2.7V brown-out, 16k + 4.1ms boot delay

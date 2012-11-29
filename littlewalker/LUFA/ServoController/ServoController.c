@@ -18,6 +18,14 @@ unsigned char scratch[BUFFER_SIZE];
 unsigned char indatasz;
 unsigned char indata[BUFFER_SIZE];
 
+void sendin(char const *str) {
+    unsigned char l = strlen(str);
+    if (l + indatasz > BUFFER_SIZE) {
+        l = BUFFER_SIZE - indatasz;
+    }
+    memcpy(&indata[indatasz], str, l);
+    indatasz += l;
+}
 #define MIN_PWM_RATE 6000
 #define NUM_PWM_TIMERS 8
 #define DEFAULT_PWM_TIME 3200   //  1.6 ms
@@ -375,7 +383,11 @@ void do_lerppwm(unsigned char channel, unsigned short target, unsigned char coun
 }
 
 void do_setminmax(unsigned char channel, unsigned short min, unsigned short max) {
-    if (channel >= 8) {
+    if (channel >= NUM_PWM_TIMERS) {
+        ++nerrors;
+        return;
+    }
+    if (min >= max || min < 600 || min > 30000 || max < 600 || max > 30000) {
         ++nerrors;
         return;
     }
@@ -440,22 +452,18 @@ void do_cmds(unsigned char const *cmd, unsigned char cnt) {
         unsigned char ccode = cmd[0] >> 4;
         unsigned char ctarg = cmd[0] & 0xf;
         unsigned char csz = 2;
-        unsigned char arg2 = 0;
-        if (ccode >= CMD_TWOBYTEARG) {
-            csz = 3;
-        }
+        unsigned short arg2 = 0;
         unsigned short arg = cmd[1];
         if (ccode >= CMD_TWOBYTEARG) {
             arg = ((unsigned short)arg << 8u) | cmd[2];
+            csz = 3;
         }
         if (ccode >= CMD_TWOARGS) {
+            arg2 = cmd[3];
+            csz = 4;
             if (ccode >= CMD_TWOTWOBYTEARG) {
-                arg2 = ((unsigned short)cmd[csz] << 8u) | cmd[csz+1];
-                csz += 2;
-            }
-            else {
-                arg2 = cmd[csz];
-                csz += 1;
+                arg2 = ((unsigned short)arg2 << 8u) | cmd[4];
+                csz = 5;
             }
         }
         if (cnt < csz) {

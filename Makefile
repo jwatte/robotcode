@@ -61,7 +61,6 @@ PART_commusb:=atmega328p
 PART_testuart:=atmega328p
 PART_sensorboard:=atmega328p
 PART_blink:=atmega328p
-PART_zumo1:=atmega328p
 PART_stepdirsend:=atmega328p
 PART_stepdirsend_xb:=atmega328p
 PART_stepdirrecv:=atmega328p
@@ -97,6 +96,8 @@ fuses_littlewalker:	fuses_16
 fuses_zumo1:	fuses_16
 fuses_quadrature:	fuses_8_84
 
+SUPPRESS_LIBS_zumo1:=-lavr_atmega328p
+
 define mkapp
 bld/bin/$(1):	$(filter bld/obj/$(1)/%,$(CPP_OBJS)) $(foreach lib,$(APPLIBS_$(1)),bld/bin/lib$(lib).a)
 	@mkdir -p `dirname $$@`
@@ -125,7 +126,7 @@ $(foreach test,$(CPP_TESTS),$(eval $(call mktest,$(patsubst %/,%,$(dir $(test)))
 define mkavrbin
 bld/avrbin/$(1):	$$(filter bld/avrobj/$(1)/%,$(AVR_OBJS)) bld/avrbin/libavr_$$(PART_$(1)).a
 	mkdir -p `dirname $$@`
-	avr-gcc -o bld/avrbin/$(1) $(filter bld/avrobj/$(1)/%,$(AVR_OBJS)) -lavr_$$(PART_$(1)) $(AVR_LFLAGS) -mmcu=$$(PART_$(1))
+	avr-gcc -o bld/avrbin/$(1) $(filter bld/avrobj/$(1)/%,$(AVR_OBJS)) $$(filter-out $$(SUPPRESS_LIBS_$(1)),-lavr_$$(PART_$(1)) $(AVR_LFLAGS)) -mmcu=$$(PART_$(1))
 bld/avrbin/$(1).hex:	bld/avrbin/$(1)
 	rm -f $$@
 	mkdir -p `dirname $$@`

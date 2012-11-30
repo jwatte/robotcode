@@ -1,12 +1,88 @@
 
 #define F_CPU 16000000
 
-#include <libavr.h>
 #include <pins_avr.h>
 #include <avr/io.h>
+#include <avr/interrupt.h>
+
+
+#define PWMKHZ 7
+#define RUNTIME 20L
+
+#if PWMKHZ == 62
+enum {
+    Timer1ClockBits = (1 << CS10)    //  60 kHz PWM
+};
+enum {
+    SECOND_MULTIPLIER = 62000
+};
+#elif PWMKHZ == 7
+enum {
+    Timer1ClockBits = (1 << CS11)    //  7.5 kHz PWM
+};
+enum {
+    SECOND_MULTIPLIER = 7812
+};
+#elif PWMKHZ == 1
+enum {
+    Timer1ClockBits = (1 << CS11) | (1 << CS10)    //  900 Hz PWM
+};
+enum {
+    SECOND_MULTIPLIER = 980
+};
+#else
+#error "define PWMKHZ correctly"
+#endif
+unsigned char debounce = 20;
 
 unsigned char x = 0xff;
 bool on_boop = false;
+bool button = false;
+
+typedef unsigned long timer_t;
+
+volatile timer_t _timer = 0;
+
+ISR(TIMER1_OVF_vect) {
+    _timer += 1;
+}
+
+timer_t ticks() {
+    timer_t ret;
+    unsigned char v = disable_interrupts();
+    ret = _timer;
+    restore_interrupts(v);
+    return ret;
+}
+
+unsigned long randseed = 0x1337;
+
+unsigned char randbyte() {
+    randseed = randseed * 587381 + 592693;
+    return (randseed >> 8) & 0xff;
+}
+
+void read_button() {
+    button = false;
+    if (!(PINB & (1 << PB4))) {
+        if (debounce != 0xff) {
+            --debounce;
+        }
+        button = (debounce == 0);
+    }
+    else {
+        debounce = 20;
+    }
+}
+
+void light(bool on) {
+    if (on) {
+        PORTB |= (1 << PB5);
+    }
+    else {
+        PORTB &= ~(1 << PB5);
+    }
+}
 
 void boop_on() {
     if (!on_boop) {
@@ -26,59 +102,182 @@ void boop_off() {
 
 
 void motors_start() {
-    TCCR1B = (1 << WGM12) | (1 << CS11) | (1 << CS10);
+    TCCR1A = (1 << COM1A1) | (1 << COM1B1) | (1 << WGM10);
 }
 
 void motors_stop() {
-    TCCR1B = (1 << WGM12);
+    TCCR1A = (1 << WGM10);
+    PORTB &= ~((1 << PB1) | (1 << PB2));
 }
+
+//  tweakables
+unsigned char fwdleft = 200;
+unsigned char fwdright = 190;
 
 void motors_power(int left, int right) {
     if (left < 0) {
-        PORTD |= 0x80;
+        PORTD |= (1 << PD7);
         left = -left;
     }
     else {
-        PORTD &= ~0x80;
+        PORTD &= ~(1 << PD7);
     }
     if (left > 255) {
         left = 255;
     }
     if (right < 0) {
-        PORTB |= 0x1;
+        PORTB |= (1 << PB0);
         right = -right;
     }
     else {
-        PORTB &= ~0x1;
+        PORTB &= ~(1 << PB0);
     }
     if (right > 255) {
         right = 255;
     }
     OCR1AH = 0;
-    OCR1AL = left;
+    OCR1AL = left * fwdleft >> 8;
     OCR1BH = 0;
-    OCR1BL = right;
+    OCR1BL = right * fwdright >> 8;
 }
 
 bool on_nav = false;
+timer_t nav_start = 0;
 
 void nav_on() {
     if (!on_nav) {
         on_nav = true;
-        PORTB |= (1 << 5);
+        nav_start = ticks();
+        light(true);
         motors_power(0, 0);
         motors_start();
     }
 }
 
 void nav_off() {
-    PORTB &= ~(1 << 5);
+    light(false);
     on_nav = false;
     motors_stop();
 }
 
-void blink(void *p)
+bool leftSensor = false;
+bool rightSensor = false;
+
+void read_sensors() {
+    leftSensor = (PIND & (1 << PD5)) == 0;
+    rightSensor = (PINB & (1 << PB3)) == 0;
+}
+
+unsigned char state = 0;
+unsigned char maxpower = 0;
+timer_t state_start = 0;
+enum {
+    Forward = 0,
+    BackwardThenLeft = 1,
+    BackwardThenRight = 2,
+    Left = 3,
+    Right = 4,
+    TurningLeft = 5,
+    TurningRight = 6
+};
+
+
+void update_nav() {
+    timer_t timeinstate = ticks() - state_start;
+    unsigned char newstate = state;
+    switch (state) {
+    case TurningLeft:
+    case TurningRight:
+    case Forward:
+        if (leftSensor) {
+            if (rightSensor) {
+                if (randbyte() & 1) {
+                    newstate = BackwardThenLeft;
+                    maxpower = 0;
+                }
+                else {
+                    newstate = BackwardThenRight;
+                    maxpower = 0;
+                }
+            }
+            else {
+                newstate = TurningRight;
+            }
+        }
+        else if (rightSensor) {
+            newstate = TurningLeft;
+        }
+        else {
+            newstate = Forward;
+        }
+        break;
+    case BackwardThenRight:
+        if (timeinstate > SECOND_MULTIPLIER) {
+            newstate = Right;
+            maxpower = 100;
+        }
+        break;
+    case BackwardThenLeft:
+        if (timeinstate > SECOND_MULTIPLIER) {
+            newstate = Left;
+            maxpower = 100;
+        }
+        break;
+    case Left:
+    case Right:
+        if (timeinstate > SECOND_MULTIPLIER / 2) {
+            newstate = Forward;
+        }
+        break;
+    }
+    //  This loop runs too often, so this doesn't do much 
+    //  of mechanical acceleration; it ramps up very quickly.
+    if (maxpower < 255) {
+        maxpower += 1;
+    }
+    if (newstate != state) {
+        state_start = ticks();
+        state = newstate;
+    }
+    int back = -maxpower / 5;
+    int half = maxpower / 4;
+    switch (state) {
+    case TurningLeft:
+        motors_power(maxpower / 2, maxpower);
+        break;
+    case TurningRight:
+        motors_power(maxpower, maxpower / 2);
+        break;
+    case Forward:
+        motors_power(maxpower, maxpower);
+        break;
+    case BackwardThenRight:
+    case BackwardThenLeft:
+        motors_power(back, back);
+        break;
+    case Right:
+        motors_power(half, back);
+        break;
+    case Left:
+        motors_power(back, half);
+        break;
+    }
+}
+
+timer_t last_update;
+
+void update()
 {
+    timer_t this_update, diff;
+    //  run no more than 500 times a second
+    do {
+        this_update = ticks();
+        diff = this_update - last_update;
+        //  run no more than 500 times a second
+    }
+    while (diff < SECOND_MULTIPLIER >> 9);
+    last_update = this_update;
+
     if (on_boop) {
         OCR2A = x;
         OCR2B = (x >> 1) + 1;
@@ -90,43 +289,56 @@ void blink(void *p)
         }
     }
     else if (on_nav) {
-        motors_power(255, -255);
-        if (!(PINB & (1 << 4))) {
+        timer_t nav_time = ticks() - nav_start;
+        if (nav_time > (RUNTIME * SECOND_MULTIPLIER) || button) {
             nav_off();
+        }
+        else {
+            light((diff % SECOND_MULTIPLIER) < (SECOND_MULTIPLIER >> 1));
+            update_nav();
         }
     }
     else {
-        if (!(PINB & (1 << 4))) {
+        if (button) {
             boop_on();
         }
     }
 }
 
-void setup() {
+int main() {
     //  I can't use timers!
     //  So I can't use "after"!
     //setup_timers(F_CPU);
     //  buzzer
-    PORTB = (1 << 4);   //  pull-up
+    PORTB = (1 << PB4);   //  pull-up
     DDRB = (1 << 5) | (1 << 2) | (1 << 1) | (1 << 0);
-    PORTD = 0;
+    PORTD = 0; //  pull-up
     DDRD = (1 << 3) | (1 << 7);
 
     power_timer2_enable();
     ASSR = 0;
 
     power_timer1_enable();
-    TCCR1A = (1 << COM1A1) | (1 << COM1B1) | (1 << WGM10);
-    TCCR1B = (1 << WGM12);
+    TCCR1A = (1 << WGM10);
+    TCCR1B = (1 << WGM12) | Timer1ClockBits;
     TCNT1H = 0;
     TCNT1L = 0;
+    TIMSK1 = (1 << TOIE1);
     OCR1AH = 0;
     OCR1AL = 0;
     OCR1BH = 0;
     OCR1BL = 0;
 
+    power_adc_enable();
+    enable_interrupts();
 
     while (true) {
-        blink(0);
+        read_button();
+        read_sensors();
+        update();
     }
+
+    return 0;
 }
+
+

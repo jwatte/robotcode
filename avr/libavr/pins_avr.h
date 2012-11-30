@@ -254,6 +254,10 @@ inline void restore_interrupts(uint8_t val) {
     }
 }
 
+inline void enable_interrupts() {
+    sei();
+}
+
 class IntDisable
 {
     public:

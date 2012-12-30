@@ -7,7 +7,15 @@
 
 
 #define PWMKHZ 7
-#define RUNTIME 20L
+#define RUNTIME 120L
+
+//  Vref is 5V
+//  resistor divider is 2:1 after R10 mod
+//  -> full scale == 10V
+//  -> 65/100 of full scale is approximately 6.5V, which is a good cut-off point for 2S lipo
+#define BATTERY_WARNING (0xffffUL * 65 / 100)
+//  3/10th of 1 Volt in hysteresis before we detect battery is OK again
+#define BATTERY_HYSTERESIS (0xffffUL * 3 / 100)
 
 #if PWMKHZ == 62
 enum {
@@ -101,11 +109,15 @@ void boop_off() {
 }
 
 
+bool motors_are_on = false;
+
 void motors_start() {
+    motors_are_on = true;
     TCCR1A = (1 << COM1A1) | (1 << COM1B1) | (1 << WGM10);
 }
 
 void motors_stop() {
+    motors_are_on = false;
     TCCR1A = (1 << WGM10);
     PORTB &= ~((1 << PB1) | (1 << PB2));
 }
@@ -214,19 +226,20 @@ void update_nav() {
     case BackwardThenRight:
         if (timeinstate > SECOND_MULTIPLIER) {
             newstate = Right;
-            maxpower = 100;
+            maxpower = 200;
         }
         break;
     case BackwardThenLeft:
         if (timeinstate > SECOND_MULTIPLIER) {
             newstate = Left;
-            maxpower = 100;
+            maxpower = 200;
         }
         break;
     case Left:
     case Right:
         if (timeinstate > SECOND_MULTIPLIER / 2) {
             newstate = Forward;
+            maxpower = 0;
         }
         break;
     }
@@ -239,8 +252,8 @@ void update_nav() {
         state_start = ticks();
         state = newstate;
     }
-    int back = -maxpower / 5;
-    int half = maxpower / 4;
+    int back = -maxpower / 3;
+    int half = maxpower / 2;
     switch (state) {
     case TurningLeft:
         motors_power(maxpower / 2, maxpower);
@@ -264,16 +277,68 @@ void update_nav() {
     }
 }
 
+unsigned short battery = 0xffff;
+
+void read_adc_battery() {
+    ADCSRA |= (1 << ADSC);
+    while (ADCSRA & (1 << ADSC)) {
+        //  do nothing
+    }
+    battery = ADCL;
+    battery |= ((unsigned short)ADCH << 8);
+}
+
+void battery_shutdown() {
+    motors_power(0, 0);
+    bool motors_were_on = motors_are_on;
+    motors_stop();  //  turns off PWM, but timer keeps running
+    timer_t t;
+    while (true) {
+        boop_on();
+        OCR2A = 0x40;
+        OCR2B = 0x20;
+        light(false);
+        t = ticks();
+        while (ticks() - t < (SECOND_MULTIPLIER >> 2)) {
+            wdt_reset();
+        }
+        boop_off();
+        light(true);
+        t = ticks();
+        while (ticks() - t < (SECOND_MULTIPLIER >> 2)) {
+            wdt_reset();
+        }
+        read_adc_battery();
+        if (battery > BATTERY_WARNING + BATTERY_HYSTERESIS) {
+            break;
+        }
+    }
+    if (motors_were_on) {
+        motors_start();
+    }
+}
+
+
 timer_t last_update;
 
 void update()
 {
     timer_t this_update, diff;
     //  run no more than 500 times a second
+    bool adc_read = false;
     do {
+        //  read the ADC
+        if (!adc_read) {
+            read_adc_battery();
+            if (battery <= BATTERY_WARNING) {
+                battery_shutdown();
+            }
+        }
+        adc_read = true;
+
+        //  calculate sleep time
         this_update = ticks();
         diff = this_update - last_update;
-        //  run no more than 500 times a second
     }
     while (diff < SECOND_MULTIPLIER >> 9);
     last_update = this_update;
@@ -330,6 +395,12 @@ int main() {
     OCR1BL = 0;
 
     power_adc_enable();
+    ADCSRA = (1 << ADEN) | (7 << ADPS0);    //  slow clock
+    ADCSRB = 0;
+    DIDR0 = (1 << ADC1D);
+    ADMUX = (1 << REFS0) | (1 << ADLAR) | (1 << MUX0);
+
+
     enable_interrupts();
 
     while (true) {

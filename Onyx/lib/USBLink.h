@@ -22,7 +22,7 @@ public:
     size_t size() const { return size_; };
     size_t max_size() const { return sizeof(data_); }
 private:
-    unsigned char data_[64];
+    unsigned char data_[128];
     size_t size_;
     Packet() : size_(0) {}
 };
@@ -45,10 +45,11 @@ public:
     void raw_send(void const *data, unsigned char sz);
     unsigned char const *begin_receive(size_t &oSize);
     void end_receive(size_t sz);
+    size_t queue_depth();
 private:
     friend class USBReturn;
-    USBLink(std::string const &vid, std::string const &pid, std::string const &ep_input,
-        std::string const &ep_output);
+    USBLink(std::string const &vid, std::string const &pid,
+        std::string const &ep_input, std::string const &ep_output);
     void thread_fn();
 
     std::string vid_;

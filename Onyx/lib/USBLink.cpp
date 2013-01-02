@@ -24,7 +24,9 @@ public:
         inReady_(0),
         inXfer_(libusb_alloc_transfer(0)),
         outPack_(0),
-        outXfer_(libusb_alloc_transfer(0)) {
+        outXfer_(libusb_alloc_transfer(0)),
+        outQueueDepth_(0),
+        outRetrying_(false) {
 
         boost::unique_lock<boost::mutex> lock(lock_);
         start_in_inner();
@@ -57,8 +59,22 @@ public:
         p->set_size(sz);
         memcpy(p->buffer(), data, sz);
         boost::unique_lock<boost::mutex> lock(lock_);
+        if (outQueueDepth_ > 50) {
+            if (!(outQueueDepth_ & 63)) {
+                std::cerr << "outQueueDepth_: " << outQueueDepth_ << std::endl;
+            }
+            if (outQueueDepth_ >= 500) {
+                //  drop the packet
+                return;
+            }
+        }
         outQueue_.push_back(p);
+        outQueueDepth_ = outQueue_.size();
         start_out_inner();
+    }
+
+    size_t out_queue_depth() {
+        return outQueueDepth_;
     }
 
 private:
@@ -68,19 +84,25 @@ private:
         if (!outPack_ && !outQueue_.empty()) {
             outPack_ = outQueue_.front();
             outQueue_.pop_front();
-            memset(outXfer_, 0, sizeof(*outXfer_));
-            outXfer_->dev_handle = dh_;
-            libusb_fill_bulk_transfer(outXfer_, dh_, oep_, outPack_->buffer(), outPack_->size(),
-                    &Transfer::out_callback, this, 1000); //  a second is a long time!
-            int err = libusb_submit_transfer(outXfer_);
-            if (err != 0) {
-                std::cerr << "libusb_submit_transfer() failed writing to board: "
-                    << libusb_error_name(err) << " (" << err << ")" << std::endl;
-                outPack_->destroy();
-                outPack_ = 0;
-            }
+            outQueueDepth_ = outQueue_.size();
+            start_out_xfer();
         }
         #endif
+    }
+
+    void start_out_xfer() {
+        memset(outXfer_, 0, sizeof(*outXfer_));
+        outXfer_->dev_handle = dh_;
+        libusb_fill_bulk_transfer(outXfer_, dh_, oep_, outPack_->buffer(), outPack_->size(),
+                &Transfer::out_callback, this, 1000); //  a second is a long time!
+        int err = libusb_submit_transfer(outXfer_);
+        if (err != 0) {
+            std::cerr << "libusb_submit_transfer() failed writing to board: "
+                << libusb_error_name(err) << " (" << err << ")" << std::endl;
+            outPack_->destroy();
+            outPack_ = 0;
+            throw std::runtime_error("Failed writing to board.");
+        }
     }
 
     static void out_callback(libusb_transfer *cbArg) {
@@ -91,10 +113,21 @@ private:
 
     void out_complete() {
         #if WRITE_USB
+        if (outXfer_->status != LIBUSB_TRANSFER_COMPLETED) {
+            std::cerr << "out transfer status: " << outXfer_->status << std::endl;
+        }
         boost::unique_lock<boost::mutex> lock(lock_);
-        outPack_->destroy();
-        outPack_ = 0;
-        start_out_inner();
+        if (outXfer_->status == 1 && !outRetrying_) {
+            //re-try
+            outRetrying_ = true;
+            start_out_xfer();
+        }
+        else {
+            outRetrying_ = false;
+            outPack_->destroy();
+            outPack_ = 0;
+            start_out_inner();
+        }
         #endif
     }
 
@@ -122,7 +155,7 @@ private:
 
     void in_complete() {
         if (inXfer_->status != LIBUSB_TRANSFER_COMPLETED) {
-            std::cerr << "transfer status: " << inXfer_->status << std::endl;
+            std::cerr << "in transfer status: " << inXfer_->status << std::endl;
         }
         boost::unique_lock<boost::mutex> lock(lock_);
         inPack_->set_size(inXfer_->actual_length);
@@ -145,14 +178,16 @@ private:
     Packet *volatile outPack_;
     std::deque<Packet *> outQueue_;
     libusb_transfer *outXfer_;
+    size_t outQueueDepth_;
+    bool outRetrying_;
 };
 
 
 boost::shared_ptr<Module> USBLink::open(boost::shared_ptr<Settings> const &set) {
     std::string vid("f000");
     std::string pid("0002");
+    std::string ep_output("1");
     std::string ep_input("82");
-    std::string ep_output("3");
     auto v = set->get_value("vid");
     if (!!v) {
         vid = v->get_string();
@@ -208,7 +243,7 @@ void USBLink::thread_fn() {
     sched_param parm = { .sched_priority = 20 };
     if (pthread_setschedparam(pthread_self(), SCHED_RR, &parm) < 0) {
         std::string err(strerror(errno));
-        std::cerr << "Camera::process(): pthread_setschedparam(): " << err << std::endl;
+        std::cerr << "USBLink::thread_fn(): pthread_setschedparam(): " << err << std::endl;
     }
 
     while (!thread_->interruption_requested()) {
@@ -309,7 +344,7 @@ USBLink::USBLink(std::string const &vid, std::string const &pid, std::string con
 }
 
 void USBLink::raw_send(void const *data, unsigned char sz) {
-    if (sz > 64) {
+    if (sz > 128) {
         throw std::runtime_error("Too large buffer in raw_send()");
     }
     xfer_->out_write(data, sz);
@@ -328,4 +363,9 @@ void USBLink::end_receive(size_t size) {
         sendBufBegin_ = sendBufEnd_ = 0;
     }
 }
+
+size_t USBLink::queue_depth() {
+    return xfer_->out_queue_depth();
+}
+
 

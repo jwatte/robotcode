@@ -12,6 +12,11 @@ struct servo_cmd {
     unsigned short value;
 };
 
+struct cmd_pose {
+    unsigned char id;
+    unsigned short pose;
+};
+
 enum ServoReg {
     //  EEPROM
     REG_MODEL_NUMBER = 0,
@@ -114,19 +119,31 @@ public:
     Servo &add_servo(unsigned char id, unsigned short neutral = 2048);
     Servo &id(unsigned char id);
     void step();
+    void set_torque(unsigned short thousandths);
     unsigned int queue_depth();
+    //  byte 0 is the number of detected droped byte events.
+    //  byte 1 .. n is status byte for servo 0 .. n-1.
+    //  return value is OR of servo status bytes.
+    unsigned char get_status(unsigned char *bytes, unsigned char cnt);
+    //  set many poses over some future amount of time
+    void lerp_pose(unsigned short ms, cmd_pose const *pose, unsigned char npose);
 
 private:
     friend class Servo;
     std::vector<boost::shared_ptr<Servo>> servos_;
     std::vector<servo_cmd> cmds_;
+    std::vector<unsigned char> status_;
     boost::shared_ptr<Module> usbModule_;
     USBLink *usb_;
     size_t pollIx_;
+    bool readyForRead_;
+    unsigned char readDenied_;
     unsigned char lastServoId_;
+    unsigned short torqueLimit_;
 
     void add_cmd(servo_cmd const &cmd);
     unsigned char do_read_complete(unsigned char const *pack, unsigned char sz);
+    unsigned char do_status_complete(unsigned char const *pack, unsigned char sz);
 };
 
 #endif  //  ServoSet_h

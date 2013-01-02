@@ -1,36 +1,135 @@
 
 #include "ServoSet.h"
+#include "IK.h"
+#include <iostream>
+#include <time.h>
+#include <string.h>
 
-struct {
-    unsigned char id;
-    unsigned short normal;
+
+double read_clock() {
+    struct timespec ts;
+    memset(&ts, 0, sizeof(ts));
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
 }
-table[] = {
+
+legparams lparam;
+
+struct initinfo {
+    unsigned short id;
+    unsigned short center;
+};
+static const initinfo init[] = {
     { 1, 2048+512 },
     { 2, 2048+512 },
     { 3, 2048+512 },
-
     { 4, 2048-512 },
     { 5, 2048-512 },
     { 6, 2048-512 },
-
     { 7, 2048-512 },
     { 8, 2048+512 },
     { 9, 2048+512 },
-
     { 10, 2048+512 },
     { 11, 2048-512 },
     { 12, 2048-512 },
 };
 
 int main() {
+    get_leg_params(lparam);
     ServoSet ss;
-    for (size_t i = 0; i < sizeof(table)/sizeof(table[0]); ++i) {
-        ss.add_servo(table[i].id, table[i].normal);
+    for (size_t i = 0; i < sizeof(init)/sizeof(init[0]); ++i) {
+        ss.add_servo(init[i].id, init[i].center);
     }
+
+    bool prevsolved = true;
+    double thetime = 0, prevtime = 0;
+    float step = 0;
     while (true) {
+        thetime = read_clock();
+        if (thetime - prevtime >= 0.02) {
+            if (prevtime != 0) {
+                step += (thetime - prevtime) * 100;
+                prevtime += 0.02;
+            }
+            else {
+                prevtime = thetime;
+            }
+            //  running speed -- one full cycle per 2000 ms
+            while (step >= 100) {
+                step -= 100;
+            }
+            //cmd_pose cp[12] = { { 0 } };
+            for (int leg = 0; leg < 4; ++leg) {
+                double xpos = lparam.center_x + lparam.first_length + lparam.second_length;
+                if (leg & 1) {
+                    xpos = -xpos;
+                }
+                double ypos = lparam.center_y + lparam.first_length;
+                if (leg & 2) {
+                    ypos = -ypos;
+                }
+                double zpos = -80;
+                //  actual walk parameter
+                if (step >= leg * 25 && step < (leg + 1) * 25) {
+                    zpos += 50;
+                    ypos -= (step - leg * 25) * 8 - 100;
+                }
+                else {
+                    float phase = 0;
+                    if (step < leg * 25) {
+                        phase = (step - leg * 25) / 37.5 + 1;
+                    }
+                    else {
+                        phase = (step - (leg + 1) * 25) / 37.5 - 1;
+                    }
+                    if (phase < -1) {
+                        phase += 2;
+                    }
+                    if (phase > 1) {
+                        phase -= 2;
+                    }
+                    ypos += phase * 100;
+                }
+                legpose oot;
+                bool solved = solve_leg(legs[leg], xpos, ypos, zpos, oot);
+                if (solved != prevsolved) {
+                    if (!solved) {
+                        std::cerr << "not solved: " << solve_error << std::endl;
+                    }
+                    else {
+                        std::cerr << "solved" << std::endl;
+                    }
+                    prevsolved = solved;
+                }
+                ss.id(leg*3+1).set_goal_position(oot.a);
+                ss.id(leg*3+2).set_goal_position(oot.b);
+                ss.id(leg*3+3).set_goal_position(oot.c);
+                /*
+                cp[3*leg+0].id = 3*leg+1;
+                cp[3*leg+0].pose = oot.a;
+                cp[3*leg+1].id = 3*leg+2;
+                cp[3*leg+1].pose = oot.b;
+                cp[3*leg+2].id = 3*leg+3;
+                cp[3*leg+2].pose = oot.c;
+                */
+            }
+            //ss.lerp_pose(10, cp, 12);
+        }
         ss.step();
-        usleep(1000);
+        if (ss.queue_depth() > 30) {
+            std::cerr << "queue_depth: " << ss.queue_depth() << std::endl;
+            while (ss.queue_depth() > 0) {
+                ss.step();
+            }
+        }
+        unsigned char status[33];
+        unsigned char st = ss.get_status(status, 33);
+        static unsigned char nst = 0;
+        if (st != nst) {
+            std::cerr << "status: 0x" << std::hex << (int)st << std::dec << std::endl;
+            nst = st;
+        }
+        usleep(500);
     }
 }
 

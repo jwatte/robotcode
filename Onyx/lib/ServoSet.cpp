@@ -8,11 +8,16 @@
 
 #define SET_REG1 0x13
 #define SET_REG2 0x14
+#define GET_STATUS 0x20
 #define GET_REGS 0x23
 #define DELAY 0x31
 #define NOP 0xf0
+#define LERP 0xf3
 
 #define READ_COMPLETE 0x41
+#define STATUS_COMPLETE  0x51
+
+#define DEFAULT_TORQUE_LIMIT 768    //  3/4 of max power
 
 static const unsigned char read_regs[] = {
     REG_MODEL_NUMBER,
@@ -77,7 +82,7 @@ Servo::Servo(unsigned char id, unsigned short neutral, ServoSet &ss) :
     id_(id),
     ss_(ss),
     lastSlowRd_(0),
-    updateTorque_(20) {
+    updateTorque_(10) {
     memset(registers_, 0, sizeof(registers_));
     set_goal_position(neutral);
 }
@@ -191,7 +196,9 @@ ServoSet::ServoSet() {
     usbModule_ = USBLink::open(st);
     usb_ = usbModule_->cast_as<USBLink>();
     pollIx_ = 0;
+    readyForRead_ = true;
     lastServoId_ = 0;
+    torqueLimit_ = DEFAULT_TORQUE_LIMIT; //  some fraction of max power
     //  Compensate for a bug: first packet doesn't register unless 
     //  the receiver board is freshly reset.
     unsigned char nop = NOP;
@@ -227,8 +234,9 @@ Servo &ServoSet::add_servo(unsigned char id, unsigned short neutral) {
         SET_REG1, id, REG_HIGHEST_LIMIT_VOLTAGE, 169,
         SET_REG1, id, REG_LOWEST_LIMIT_VOLTAGE, 128,
         SET_REG1, id, REG_LOCK, 1,
-        SET_REG2, id, REG_TORQUE_LIMIT, 103, 0,    //  10% of full torque to start out
+        SET_REG2, id, REG_TORQUE_LIMIT, 103, 0,     //  10% of full torque to start out
         SET_REG2, id, REG_GOAL_POSITION, (unsigned char)(neutral & 0xff), (unsigned char)((neutral >> 8) & 0xff),
+        SET_REG2, id, REG_MOVING_SPEED, 0, 0,       //  set speed at max
         SET_REG1, id, REG_TORQUE_ENABLE, 1,
     };
     usb_->raw_send(set_regs_pack, sizeof(set_regs_pack));
@@ -248,57 +256,67 @@ Servo &ServoSet::id(unsigned char id) {
 void ServoSet::step() {
 
     //  pack up as many commands as can fit in a single USB packet
-    unsigned char buf[48];
+    unsigned char buf[128-16];
     unsigned char bufptr = 0;
 
+    //  keep track of size of reply
+    bool delayread = false;
+
     //  select next servo
-    if (servos_.size()) {
+    if (servos_.size() && readyForRead_) {
         while (true) {
             ++lastServoId_;
             if (lastServoId_ >= servos_.size()) {
-                lastServoId_ = 0;
+                lastServoId_ = -1;  //  so that next iteration becomes 0
+                //  read the status for all servos
+                buf[bufptr++] = GET_STATUS;
+                delayread = true;
+                break;
             }
             if (!!servos_[lastServoId_]) {
                 break;
             }
         }
 
-        //  read stuff from the selected servo
-        //  all "fast read" values
-        unsigned char const *rdcmd = frequent_read_regs;
-        unsigned char const *rdend = &frequent_read_regs[sizeof(frequent_read_regs)];
-        while (rdcmd < rdend) {
-            buf[bufptr++] = GET_REGS;
-            buf[bufptr++] = lastServoId_;
-            buf[bufptr++] = rdcmd[0];
-            buf[bufptr++] = rdcmd[1];
-            rdcmd += 2;
-        }
-        //  some "slow read" values
-        Servo &s = *servos_[lastServoId_];
-        if (s.lastSlowRd_ >= sizeof(read_regs)) {
-            s.lastSlowRd_ = 0;
-            if (s.updateTorque_) {
-                s.updateTorque_--;
-                if (!s.updateTorque_) {
-                    s.set_reg2(REG_TORQUE_LIMIT, 1023);
-                    std::cerr << "full torque for servo " << (int)lastServoId_ << std::endl;
+        if (!delayread) {
+            //  read stuff from the selected servo
+            //  all "fast read" values
+            unsigned char const *rdcmd = frequent_read_regs;
+            unsigned char const *rdend = &frequent_read_regs[sizeof(frequent_read_regs)];
+            while (rdcmd < rdend) {
+                buf[bufptr++] = GET_REGS;
+                buf[bufptr++] = lastServoId_;
+                buf[bufptr++] = rdcmd[0];
+                buf[bufptr++] = rdcmd[1];
+                rdcmd += 2;
+            }
+            //  some "slow read" values, if there's space
+            Servo &s = *servos_[lastServoId_];
+            if (s.lastSlowRd_ >= sizeof(read_regs)) {
+                s.lastSlowRd_ = 0;
+                if (s.updateTorque_) {
+                    s.updateTorque_--;
+                    if (!s.updateTorque_) {
+                        s.set_reg2(REG_TORQUE_LIMIT, torqueLimit_);
+                        std::cerr << "torque for servo " << (int)lastServoId_ << " is " << torqueLimit_ << std::endl;
+                    }
                 }
             }
-        }
-        buf[bufptr++] = GET_REGS;
-        buf[bufptr++] = lastServoId_;
-        buf[bufptr++] = read_regs[s.lastSlowRd_];
-        buf[bufptr++] = 1;
-        s.lastSlowRd_++;
-        //  coalesce contiguous registers, up to a buffer size of 8
-        while (s.lastSlowRd_ < sizeof(read_regs) && buf[bufptr-1] < 8) {
-            if (read_regs[s.lastSlowRd_] != buf[bufptr-2] + buf[bufptr-1]) {
-                break;
-            }
-            buf[bufptr - 1]++;
+            buf[bufptr++] = GET_REGS;
+            buf[bufptr++] = lastServoId_;
+            buf[bufptr++] = read_regs[s.lastSlowRd_];
+            buf[bufptr++] = 1;
             s.lastSlowRd_++;
+            //  coalesce contiguous registers, up to a buffer size of 8
+            while (s.lastSlowRd_ < sizeof(read_regs) && buf[bufptr-1] < 8) {
+                if (read_regs[s.lastSlowRd_] != buf[bufptr-2] + buf[bufptr-1]) {
+                    break;
+                }
+                buf[bufptr - 1]++;
+                s.lastSlowRd_++;
+            }
         }
+        readyForRead_ = false;
     }
 
     //  drain the command queue
@@ -334,14 +352,24 @@ void ServoSet::step() {
         size_t sz = 0, szs = 0;
         unsigned char const *d = usb_->begin_receive(sz);
         if (sz == 0) {
+            if (!readyForRead_) {
+                ++readDenied_;
+                if (!(readDenied_ & 3)) {
+                    readyForRead_ = true;
+                }
+            }
             return;
         }
+        readyForRead_ = true;
         szs = sz;
         while (sz > 0) {
             unsigned char cnt = 1;
             switch (*d) {
             case READ_COMPLETE:
                 cnt = do_read_complete(d, sz);
+                break;
+            case STATUS_COMPLETE:
+                cnt = do_status_complete(d, sz);
                 break;
             default:
                 std::cerr << hexnum(*d) << " ";
@@ -351,6 +379,19 @@ void ServoSet::step() {
             sz -= cnt;
         }
         usb_->end_receive(szs);
+    }
+}
+
+void ServoSet::set_torque(unsigned short thousandths) {
+    if (thousandths >= 1024) {
+        throw std::runtime_error("Bad argument to ServoSet::set_torque().");
+    }
+    torqueLimit_ = thousandths;
+    for (auto ptr(servos_.begin()), end(servos_.end()); ptr != end; ++ptr) {
+        if (!!*ptr && !(*ptr)->updateTorque_) {
+            //  catch this guy up the next time I see him
+            (*ptr)->updateTorque_ = 1;
+        }
     }
 }
 
@@ -377,34 +418,83 @@ static int nincomplete = 0;
 
 unsigned char ServoSet::do_read_complete(unsigned char const *pack, unsigned char sz) {
     
-    if (*pack == 0x41) {    //  READ_COMPLETE
-        if (sz < 5 || sz < pack[3] + 4) {
-            if (nincomplete < 10) {
-                std::cerr << "short read complete packet; got " << (int)sz << " wanted " << 
-                    ((sz < 5) ? "min 5" : boost::lexical_cast<std::string>((pack[3] + 4))) << " bytes." << std::endl;
-                nincomplete++;
-            }
-            return sz;
+    if (sz < 5 || sz < pack[3] + 4) {
+        if (nincomplete < 10) {
+            std::cerr << "short read complete packet; got " << (int)sz << " wanted " << 
+                ((sz < 5) ? "min 5" : boost::lexical_cast<std::string>(pack[3] + 4)) << " bytes." << std::endl;
+            nincomplete++;
         }
-        if (pack[1] >= servos_.size() || !servos_[pack[1]]) {
-            std::cerr << "read complete for non-existent servo " << (int)pack[1] << std::endl;
-            return 4 + pack[3];
-        }
-        if (pack[2] >= NUM_SERVO_REGS || pack[3] > NUM_SERVO_REGS - pack[2]) {
-            std::cerr << "read complete with bad offset " << (int)pack[2] << " size " << (int)pack[3] << std::endl;
-            return 4 + pack[3];
-        }
-        Servo &s = id(pack[1]);
-        memcpy(&s.registers_[pack[2]], &pack[4], pack[3]);
-
-        if (nincomplete > 0) {
-            --nincomplete;
-        }
+        return sz;
+    }
+    if (pack[1] >= servos_.size() || !servos_[pack[1]]) {
+        std::cerr << "read complete for non-existent servo " << (int)pack[1] << std::endl;
         return 4 + pack[3];
     }
-    else {
-        std::cerr << "unknown complete byte: " << hexnum(*pack) << std::endl;
-        return 1;
+    if (pack[2] >= NUM_SERVO_REGS || pack[3] > NUM_SERVO_REGS - pack[2]) {
+        std::cerr << "read complete with bad offset " << (int)pack[2] << " size " << (int)pack[3] << std::endl;
+        return 4 + pack[3];
     }
+    Servo &s = id(pack[1]);
+    memcpy(&s.registers_[pack[2]], &pack[4], pack[3]);
+
+    if (nincomplete > 0) {
+        --nincomplete;
+    }
+    return 4 + pack[3];
+}
+
+unsigned char ServoSet::do_status_complete(unsigned char const *pack, unsigned char sz) {
+    if (sz < 2 || sz < 2 + pack[1]) {
+        if (nincomplete < 10) {
+            std::cerr << "short read status packet; got " << (int)sz << "wanted " <<
+                ((sz < 2) ? "min 2" : boost::lexical_cast<std::string>(pack[1] + 2)) << " bytes." << std::endl;
+            nincomplete++;
+        }
+        return sz;
+    }
+    status_.resize(pack[1]);
+    if (pack[1]) {
+        memcpy(&status_[0], &pack[2], pack[1]);
+    }
+    if (nincomplete > 0) {
+        --nincomplete;
+    }
+    return 2 + pack[1];
+}
+
+unsigned char ServoSet::get_status(unsigned char *buf, unsigned char n) {
+    if (status_.size()) {
+        if (n > status_.size()) {
+            n = status_.size();
+        }
+        memcpy(buf, &status_[0], n);
+        return status_.size();
+    }
+    return 0;
+}
+
+void ServoSet::lerp_pose(unsigned short ms, cmd_pose const *pose, unsigned char npose) {
+    if (npose > 32) {
+        throw std::runtime_error("attempt to lerp_pose() with too many servos");
+    }
+    unsigned char cmd[128];
+    cmd[0] = LERP;
+    cmd[1] = ms & 0xff;
+    cmd[2] = (ms >> 8) & 0xff;
+    cmd[3] = npose;
+    unsigned char ptr = 4;
+    for (unsigned char i = 0; i != npose; ++i) {
+        if (pose[i].id >= servos_.size() || !servos_[pose[i].id]) {
+            throw std::runtime_error("invalid servo ID in lerp_pose()");
+        }
+        cmd[ptr++] = pose[i].id;
+        if (pose[i].pose > 4095) {
+            throw std::runtime_error("invalid servo pose in lerp_pose()");
+        }
+        cmd[ptr++] = pose[i].pose & 0xff;
+        cmd[ptr++] = (pose[i].pose >> 8) & 0xff;
+    }
+    //  immediately send the command
+    usb_->raw_send(cmd, ptr);
 }
 

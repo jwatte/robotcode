@@ -11,7 +11,6 @@ static volatile unsigned char rptr;
 static volatile unsigned char nmissed;
 
 ISR(USART1_RX_vect) {
-    PORTB |= 0x1;
     while ((UCSR1A & (1 << RXC1)) != 0) {
         unsigned char d = UDR1;
         if (rptr < sizeof(rbuf)) {
@@ -20,7 +19,7 @@ ISR(USART1_RX_vect) {
         }
         else {
             ++nmissed;
-            PORTB |= 0x8;
+            PORTB |= BLUE_LED;
         }
     }
 }
@@ -63,8 +62,7 @@ void setup_uart(unsigned char rate) {
 void send_sync(unsigned char const *data, unsigned char size) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         //  enable transmitter
-        UCSR1B = (1 << RXEN1) | (1 << TXEN1);
-        PORTB |= 0x2;
+        UCSR1B = (1 << TXEN1);
         //  send data
         while (size > 0) {
             while ((UCSR1A & (1 << UDRE1)) == 0) {
@@ -74,22 +72,13 @@ void send_sync(unsigned char const *data, unsigned char size) {
             UCSR1A |= (1 << TXC1);
             ++data;
             --size;
-            if ((UCSR1A & (1 << RXC1)) != 0) {
-                rptr = UDR1;
-            }
         }
         //  wait for last byte to be pushed out
         while ((UCSR1A & (1 << TXC1)) == 0) {
             //  wait for transmit to complete
         }
-        UCSR1A |= (1 << DOR1);  //  clear data overrun
-        //  flush available input data
-        while ((UCSR1A & (1 << RXC1)) != 0) {
-            rptr = UDR1;
-        }
         rptr = 0;
         //  disable transmitter, enable interrupt
-        PORTB &= ~0x2;
         UCSR1B = (1 << RXCIE1) | (1 << RXEN1);
     }
 }
@@ -106,7 +95,6 @@ void recv_eat(unsigned char cnt) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         if (cnt >= rptr) {
             rptr = 0;
-            PORTB &= ~0x1;
         }
         else {
             unsigned char left = rptr - cnt;
@@ -129,6 +117,14 @@ volatile unsigned short timer = 0;
 
 ISR(TIMER0_COMPB_vect) {
     timer += 1;
+}
+
+unsigned short getms(void) {
+    unsigned short ret;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        ret = timer;
+    }
+    return ret;
 }
 
 void delayms(unsigned short ms) {
@@ -190,13 +186,26 @@ void setup_delay(void) {
     TCCR0B = (1 << CS01) | (1 << CS00); //  Clock / 64 == 250000 pulses per second
 }
 
+extern unsigned char sbuf[];
+extern unsigned char sbuflen;
+
 void show_error(unsigned char errkind, unsigned char errdata) {
-    unsigned char buf[4] = { 0xee, 0xee, errkind, errdata };
-    PORTB |= 0x8;
-    delayus(300);
-    send_sync(buf, 4);
-    delayus(100);
-    send_sync(buf, 4);
-    delayus(100);
+
+    cli();
+    while (1) {
+        PORTB |= BLUE_LED;
+        delayms(50);
+        PORTB &= ~0xf;
+        delayms(50);
+        PORTB = (PORTB & 0xf0) | (errkind & 0xf);
+        delayms(200);
+        PORTB &= ~0xf;
+        delayms(20);
+        unsigned char buf[5] = {
+            0xee, 0xee, errkind, errdata, sbuflen
+        };
+        send_sync(buf, 5);
+        send_sync(sbuf, sbuflen);
+    }
 }
 

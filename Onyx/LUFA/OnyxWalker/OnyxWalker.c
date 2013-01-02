@@ -10,18 +10,27 @@
 //  param is baud rate
 #define CMD_RAW_DATA 0x00
 //  all data is data
+#define CMD_SET_LEDS 0x11
+//  data is byte of LED state
 #define CMD_SET_REG1 0x13
 //  param is id, reg, data
 #define CMD_SET_REG2 0x14
 //  param is id, reg, datal, datah
+#define CMD_GET_STATUS 0x20
+//  no param -- just return status!
 #define CMD_GET_REGS 0x23
 //  param is id, reg, count
 #define CMD_NOP 0xf0
 //  no param
 #define CMD_DELAY 0x31
 //  param is milliseconds
+#define CMD_LERP_POS 0xf3
+//  params are actually more than header indicates
+//  timel/h, nids, (id,posl/h)*nids
+//  This sets the goal velocity field as well as the goal pos field.
 
 #define READ_COMPLETE 0x41
+#define STATUS_COMPLETE 0x51
 
 #define DXL_PING 1
 #define DXL_REG_READ 2
@@ -31,18 +40,43 @@
 #define DXL_RESET 6
 #define DXL_MULTIWRITE 0x83
 
-#define BLINK_CNT 2550
+#define DXL_REG_GOAL_POSITION 0x1E
+#define DXL_REG_MOVING_SPEED 0x20
+
+#define BLINK_CNT 2
+#define RECV_TIMEOUT_TICKS 50
 
 void Reconfig(void);
+void clear_poses(void);
 
 int main(void) {
-	SetupHardware();
-	sei();
+    SetupHardware();
+    clear_poses();
+    MCUSR |= (1 << WDRF);
+    wdt_enable(WDTO_8S);
 
-	while (true) {
-		USB_USBTask();
-		OnyxWalker_Task();
-	}
+    sei();
+
+    while (true) {
+        wdt_reset();
+        USB_USBTask();
+        OnyxWalker_Task();
+    }
+}
+
+
+static unsigned char servo_stati[32];
+static unsigned short target_pose[32];
+static unsigned short target_prev_pose[32];
+
+unsigned short clearcnt = 0;
+
+
+void clear_poses(void) {
+    for (unsigned char id = 0; id != sizeof(target_pose)/sizeof(target_pose[0]); ++id) {
+        target_pose[id] = 2048;
+        target_prev_pose[id] = 2048;
+    }
 }
 
 //  Broadcast to turn off torque for all servos on the bus.
@@ -50,17 +84,19 @@ static const unsigned char notorque_packet[] = {
     0xff, 0xff, 0xfe, 0x4, 0x3, 0x18, 0, (unsigned char)~(0xfe + 0x4 + 0x3 + 0x18 + 0),
 };
 
-static unsigned char xbuf[64];
+static unsigned char xbuf[DATA_RX_EPSIZE];
 unsigned char xbufptr = 0;
 
 void clear_xbuf(void) {
     xbufptr = 0;
 }
 
+unsigned char last_cmd = 0;
+
 void add_xbuf(unsigned char const *ptr, unsigned char len) {
     if (sizeof(xbuf) - xbufptr < len) {
         //  dropped packet
-        show_error(7, len);
+        show_error(7, xbufptr);
         return;
     }
     memcpy(&xbuf[xbufptr], ptr, len);
@@ -68,8 +104,8 @@ void add_xbuf(unsigned char const *ptr, unsigned char len) {
 }
 
 void SetupHardware(void) {
-	MCUSR &= ~(1 << WDRF);
-	wdt_disable();
+    MCUSR &= ~(1 << WDRF);
+    wdt_disable();
 
     //  weapons fire off
     PORTB &= ~((1 << PB4) | (1 << PB5));
@@ -79,32 +115,32 @@ void SetupHardware(void) {
     DDRB |= 0xf;
     PORTB |= 0xf;
 
-	clock_prescale_set(clock_div_1);
+    clock_prescale_set(clock_div_1);
     setup_delay();
-    delayms(50);   //  show off a little bit
-    PORTB &= ~0x8;
+    delayms(150);   //  show off a little bit
+    PORTB &= ~BLUE_LED;
 
     setup_uart(0);
-    delayms(50);
-    PORTB &= ~0x4;
+    delayms(150);
+    PORTB &= ~GREEN_LED;
 
     send_sync(notorque_packet, sizeof(notorque_packet));    //  turn off torque on all servos
-    delayms(50);
-    PORTB &= ~0x2;
+    delayms(150);
+    PORTB &= ~YELLOW_LED;
 
-    //  ... reserved for future expansion :-)
-    delayms(50);
-    PORTB &= ~0x1;
+    clear_xbuf();
+    delayms(150);
+    PORTB &= ~RED_LED;
 
-	USB_Init();
+    USB_Init();
 }
 
 void EVENT_USB_Device_Connect(void) {
-    PORTB |= 0x4;
+    PORTB |= GREEN_LED;
 }
 
 void EVENT_USB_Device_Disconnect(void) {
-    PORTB &= ~0x4;
+    PORTB &= ~GREEN_LED;
 }
 
 void EVENT_USB_Device_ConfigurationChanged(void) {
@@ -112,16 +148,13 @@ void EVENT_USB_Device_ConfigurationChanged(void) {
 }
 
 void Reconfig() {
-	bool ConfigSuccess = true;
+    bool ConfigSuccess = true;
 
-    ConfigSuccess &= Endpoint_ConfigureEndpoint(INFO_EPNUM,
-        EP_TYPE_BULK, ENDPOINT_DIR_IN, INFO_EPSIZE,
-        ENDPOINT_BANK_SINGLE);
     ConfigSuccess &= Endpoint_ConfigureEndpoint(DATA_TX_EPNUM,
-        EP_TYPE_BULK, ENDPOINT_DIR_IN, DATA_EPSIZE,
-        ENDPOINT_BANK_SINGLE);
+        EP_TYPE_BULK, ENDPOINT_DIR_OUT, DATA_TX_EPSIZE,
+        ENDPOINT_BANK_DOUBLE);
     ConfigSuccess &= Endpoint_ConfigureEndpoint(DATA_RX_EPNUM,
-        EP_TYPE_BULK, ENDPOINT_DIR_OUT, DATA_EPSIZE,
+        EP_TYPE_BULK, ENDPOINT_DIR_IN, DATA_RX_EPSIZE,
         ENDPOINT_BANK_SINGLE);
 
     if (!ConfigSuccess) {
@@ -132,6 +165,7 @@ void Reconfig() {
             delayms(100);
         }
     }
+    clear_poses();
 }
 
 unsigned char pbuf[16];
@@ -146,10 +180,18 @@ unsigned char cksum(unsigned char const *ptr, unsigned char n) {
     return ~ck;
 }
 
-void reg_write(unsigned char id, unsigned char reg, unsigned char const *buf, unsigned char cnt) {
+void reg_write(unsigned char id, unsigned char reg, unsigned char const *buf, unsigned char cnt, unsigned char lookaside) {
     if (cnt > 9) {
         show_error(5, cnt);
         cnt = 9;
+    }
+    if (lookaside) {
+        if ((reg <= DXL_REG_GOAL_POSITION) && (reg+cnt >= DXL_REG_GOAL_POSITION + 2) &&
+            (id < sizeof(target_pose)/sizeof(target_pose[0]))) {
+            //  half updates of goal register are not look-aside snooped...
+            unsigned char offs = DXL_REG_GOAL_POSITION - reg;
+            target_pose[id] = ((buf[offs] + ((unsigned short)buf[offs + 1] << 8)) & 4095);
+        }
     }
     pbuf[0] = 0xff;
     pbuf[1] = 0xff;
@@ -159,21 +201,23 @@ void reg_write(unsigned char id, unsigned char reg, unsigned char const *buf, un
     pbuf[5] = reg;
     memcpy(&pbuf[6], buf, cnt);
     pbuf[6 + cnt] = cksum(&pbuf[2], cnt + 4);
+    PORTB |= YELLOW_LED;
     send_sync(pbuf, cnt + 7);
     //  assume servos do not ack writes
 }
 
 unsigned char recv_packet(unsigned char *dst, unsigned char maxsz) {
-    PORTB |= 0x1;
     unsigned char cnt = 0;
+    PORTB |= RED_LED;
+    clearcnt = getms() + BLINK_CNT;
     UCSR1B = (1 << RXEN1);
     unsigned char tc = TCNT0;
     unsigned char ntc = tc;
     while (cnt < maxsz) {
         while (!(UCSR1A & (1 << RXC1))) {
-            //  don't spend more than 100 microseconds waiting for something that won't come
+            //  don't spend more than X microseconds waiting for something that won't come
             ntc = TCNT0;
-            if (ntc - tc > 200) {
+            if (ntc - tc > RECV_TIMEOUT_TICKS) {
                 show_error(8, cnt);
                 break;
             }
@@ -183,7 +227,6 @@ unsigned char recv_packet(unsigned char *dst, unsigned char maxsz) {
         ++cnt;
     }
     UCSR1B = (1 << RXEN1) | (1 << RXCIE1);
-    PORTB &= ~0x1;
     return cnt;
 }
 
@@ -203,6 +246,9 @@ void reg_read(unsigned char id, unsigned char reg, unsigned char cnt) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         send_sync(pbuf, 8);
         cnt = recv_packet(pbuf, 6 + cnt);
+        if (pbuf[2] < sizeof(servo_stati)) {
+            servo_stati[pbuf[2]] = pbuf[4];
+        }
         pbuf[1] = READ_COMPLETE;
         pbuf[2] = id;
         pbuf[3] = reg;
@@ -215,10 +261,11 @@ void reg_read(unsigned char id, unsigned char reg, unsigned char cnt) {
 
 
 bool rawmode = false;
-unsigned char sbuf[DATA_EPSIZE];
+unsigned char sbuf[DATA_TX_EPSIZE];
+unsigned char sbuflen;
 
-void wait_for_idle() {
-    PORTB |= 0x2;
+void wait_for_idle(void) {
+    PORTB &= ~GREEN_LED;
     while (true) {
         unsigned char av = recv_avail();
         unsigned char ts = TCNT0;
@@ -231,12 +278,76 @@ void wait_for_idle() {
             break;
         }
     }
-    PORTB &= ~0x2;
+    PORTB |= GREEN_LED;
+}
+
+unsigned char lerp_pos(unsigned char const *data, unsigned char sz) {
+    if (sz < 3) {
+        //  bad command
+        PORTB |= BLUE_LED;
+        return sz;
+    }
+    unsigned short dt = data[0] + ((unsigned short)data[1] << 8);
+    if (dt < 5) {
+        show_error(3, 3);
+        //  don't allow lerping faster than at 200 Hz
+        dt = 5;
+    }
+    unsigned char nid = data[2];
+    if (nid > 32 || sz < nid * 3 + 3) {
+        //  bad command
+        PORTB |= BLUE_LED;
+        return sz;
+    }
+    unsigned char ptr = 3;
+    while (nid > 0) {
+        unsigned char id = data[ptr];
+        if (id >= sizeof(target_pose)/sizeof(target_pose[0])) {
+            //  bad parameter
+            show_error(3, 5);
+        }
+        else {
+            unsigned short pos = data[ptr+1] + ((unsigned short)data[ptr+2] << 8);
+            target_prev_pose[id] = target_pose[id];
+            target_pose[id] = pos;
+            //  calculate velocity
+            short distance = target_prev_pose[id] - target_pose[id];
+            if (distance < 0) {
+                distance = -distance;
+            }
+            distance = distance << 4;   //  max range for short
+            unsigned short ticks_per_ms_16 = distance / dt;
+            //  The value is scaled by 16.
+            //  A value of 1023 means 117 rpm, which we'll round to 120, which 
+            //  in turn is 8192 ticks per second.
+            //  That's about 8 ticks per millisecond.
+            //  Multiply by 16, and you get 128 as the max value after the division.
+            //  This means I need to scale by another 8.
+            unsigned short spdval = ticks_per_ms_16 << 3;
+            //  kick some off to avoid oscillation (introduces mush instead)
+            spdval -= (spdval >> 3);    //  gets us 7/8th of the calculated value
+            spdval = spdval > 1023 ? 1023 : spdval;
+            unsigned char bf[4] = { pos & 0xff, (pos >> 8) & 0xff, spdval & 0xff, (spdval >> 8) & 0xff };
+            //  write both goal position and speed, which is right after
+            reg_write(id, DXL_REG_GOAL_POSITION, bf, 4, 0);
+        }
+        ptr += 3;
+        --nid;
+    }
+    return ptr;
+}
+
+void do_get_status(void) {
+    unsigned char cmd[3] = { STATUS_COMPLETE, 1 + sizeof(servo_stati), get_nmissed() };
+    add_xbuf(cmd, 3);
+    add_xbuf(servo_stati, sizeof(servo_stati));
 }
 
 void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end) {
     while (offset < end) {
+        last_cmd = sbuf[offset];
         if (rawmode && sbuf[offset] == CMD_RAW_DATA) {
+            PORTB |= YELLOW_LED;
             wait_for_idle();
             send_sync(&sbuf[offset+1], end - offset - 1);
             break;
@@ -245,8 +356,6 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
         if ((end - offset) < cmdSize) {
             //  missing data!
             show_error(1, cmdSize);
-            show_error(3, offset);
-            show_error(3, end);
             break;
         }
         switch (sbuf[offset]) {
@@ -254,25 +363,35 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
                 rawmode = true;
                 setup_uart(sbuf[offset+1]);
                 break;
+            case CMD_SET_LEDS:
+                PORTB = (PORTB & 0xf0) | (sbuf[offset+1] & 0xf);
+                break;
             case CMD_SET_REG1:
                 rawmode = false;
-                reg_write(sbuf[offset+1], sbuf[offset+2], &sbuf[offset+3], 1); break;
+                reg_write(sbuf[offset+1], sbuf[offset+2], &sbuf[offset+3], 1, 1);
+                break;
             case CMD_SET_REG2:
                 rawmode = false;
-                reg_write(sbuf[offset+1], sbuf[offset+2], &sbuf[offset+3], 2);
+                reg_write(sbuf[offset+1], sbuf[offset+2], &sbuf[offset+3], 2, 1);
                 break;
             case CMD_GET_REGS:
                 rawmode = false;
                 reg_read(sbuf[offset+1], sbuf[offset+2], sbuf[offset+3]);
                 break;
+            case CMD_GET_STATUS:
+                do_get_status();
+                break;
             case CMD_DELAY:
                 rawmode = false;
-                PORTB |= 0x2;
+                PORTB |= YELLOW_LED;
                 delayms(sbuf[offset+1]);
                 wait_for_idle();
-                PORTB &= ~0x2;
+                PORTB &= ~YELLOW_LED;
                 break;
             case CMD_NOP:
+                break;
+            case CMD_LERP_POS:
+                cmdSize = lerp_pos(sbuf+offset+1, end-offset-1) + 1;
                 break;
             default:
                 rawmode = false;
@@ -280,84 +399,90 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
                 show_error(2, sbuf[offset]);
                 return;
         }
+        if (cmdSize == 0) {
+            show_error(4, sbuf[offset]);
+        }
         offset += cmdSize;
     }
 }
 
-unsigned short clearcnt = 0;
-
 void OnyxWalker_Task(void) {
-	if (USB_DeviceState != DEVICE_STATE_Configured) {
-	  return;
-    }
-
-    if (true) {
-        Endpoint_SelectEndpoint(DATA_TX_EPNUM);
-        Endpoint_SetEndpointDirection(ENDPOINT_DIR_IN);
-        if (Endpoint_IsConfigured() && Endpoint_IsINReady() && Endpoint_IsReadWriteAllowed()) {
-            unsigned char gg = xbufptr;
-            if (gg) {
-                for (unsigned char q = 0; q < gg; ++q) {
-                    Endpoint_Write_8(xbuf[q]);
-                }
-                clear_xbuf();
-            }
-            unsigned char m = recv_avail();
-            if (m) {
-                unsigned char nm = m;
-                PORTB &= ~0x4;
-                if (rawmode) {
-                    clearcnt = BLINK_CNT;
-                    if (m + gg > DATA_EPSIZE) {
-                        m = DATA_EPSIZE - gg;
-                    }
-                    nm = m;
-                    unsigned char const *ptr = recv_buf();
-                    while (m > 0) {
-                        Endpoint_Write_8(*ptr);
-                        ++ptr;
-                        --m;
-                    }
-                }
-                recv_eat(nm);
-            }
-            Endpoint_ClearIN();
-        }
+    if (USB_DeviceState != DEVICE_STATE_Configured) {
+        return;
     }
 
     Endpoint_SelectEndpoint(DATA_RX_EPNUM);
-    Endpoint_SetEndpointDirection(ENDPOINT_DIR_OUT);
-    if (Endpoint_IsConfigured() && Endpoint_IsOUTReceived() && Endpoint_IsReadWriteAllowed()) {
-        uint8_t n = Endpoint_BytesInEndpoint();
-        if (n) {
-            PORTB &= ~0x4;
-            clearcnt = BLINK_CNT;
-            for (unsigned char c = 0; c < n; ++c) {
-                sbuf[c] = Endpoint_Read_8();
+    Endpoint_SetEndpointDirection(ENDPOINT_DIR_IN);
+    if (Endpoint_IsConfigured() && Endpoint_IsINReady() && Endpoint_IsReadWriteAllowed()) {
+        unsigned char gg = xbufptr;
+        if (gg) {
+            for (unsigned char q = 0; q < gg; ++q) {
+                Endpoint_Write_8(xbuf[q]);
             }
+            clear_xbuf();
         }
-        Endpoint_ClearOUT();
-        if (n) {
-            dispatch(sbuf, 0, n);
+        unsigned char m = recv_avail();
+        if (m) {
+            unsigned char nm = m;
+            if (rawmode) {
+                PORTB |= RED_LED;
+                clearcnt = getms() + BLINK_CNT;
+                if ((unsigned short)m + gg > DATA_RX_EPSIZE) {
+                    m = DATA_RX_EPSIZE - gg;
+                }
+                nm = m;
+                unsigned char const *ptr = recv_buf();
+                while (m > 0) {
+                    Endpoint_Write_8(*ptr);
+                    ++ptr;
+                    --m;
+                }
+            }
+            recv_eat(nm);
         }
+        Endpoint_ClearIN();
     }
 
-    if (true) {
-        Endpoint_SelectEndpoint(INFO_EPNUM);
-        Endpoint_SetEndpointDirection(ENDPOINT_DIR_IN);
-        if (Endpoint_IsConfigured() && Endpoint_IsINReady() && Endpoint_IsReadWriteAllowed()) {
-            unsigned char nm = get_nmissed();
-            if (nm > 0) {
-                Endpoint_Write_8(nm);
-                Endpoint_ClearIN();
+    if (!xbufptr) {
+        PORTB &= ~BLUE_LED;
+        Endpoint_SelectEndpoint(DATA_TX_EPNUM);
+        Endpoint_SetEndpointDirection(ENDPOINT_DIR_OUT);
+        if (Endpoint_IsConfigured() && Endpoint_IsOUTReceived() && Endpoint_IsReadWriteAllowed()) {
+            uint8_t n = Endpoint_BytesInEndpoint();
+            if (n > sizeof(sbuf)) {
+                n = sizeof(sbuf);
+            }
+            if (n) {
+                PORTB &= ~GREEN_LED;
+                for (unsigned char c = 0; c < n; ++c) {
+                    sbuf[c] = Endpoint_Read_8();
+                }
+            }
+            Endpoint_ClearOUT();
+            if (n) {
+                sbuflen = n;
+                dispatch(sbuf, 0, n);
+                PORTB |= GREEN_LED;
             }
         }
     }
-    if (clearcnt == 0) {
-        PORTB |= 0x4;
-    }
     else {
-        --clearcnt;
+        PORTB |= BLUE_LED;
+    }
+
+    unsigned short ms = getms();
+    static unsigned short prevms;
+    static unsigned char taskctr;
+    if (ms != prevms) {
+        ++taskctr;
+        prevms = ms;
+    }
+    if ((short)(ms - clearcnt) >= 0) {
+        PORTB &= ~RED_LED;
+        clearcnt = ms;
+    }
+    if ((taskctr & 31) == 0) {
+        PORTB &= ~YELLOW_LED;
     }
 }
 

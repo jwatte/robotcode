@@ -13,7 +13,7 @@ const USB_Descriptor_Device_t PROGMEM DeviceDescriptor =
 	.Endpoint0Size          = ENDPOINT_CONTROLEP_DEFAULT_SIZE,
 	.VendorID               = 0xf000,
 	.ProductID              = 0x0002,
-	.ReleaseNumber          = VERSION_BCD(01.00),
+	.ReleaseNumber          = VERSION_BCD(01.01),
 	.ManufacturerStrIndex   = 0x01,
 	.ProductStrIndex        = 0x02,
 	.SerialNumStrIndex      = USE_INTERNAL_SERIAL,
@@ -41,43 +41,32 @@ const USB_Descriptor_Configuration_t PROGMEM ConfigurationDescriptor =
             },
 			.InterfaceNumber        = 0,
 			.AlternateSetting       = 0,
-			.TotalEndpoints         = 3,
+			.TotalEndpoints         = 2,
 			.Class                  = USB_CSCP_VendorSpecificClass,
 			.SubClass               = USB_CSCP_NoDeviceSubclass,
 			.Protocol               = USB_CSCP_NoDeviceProtocol,
 			.InterfaceStrIndex      = NO_DESCRIPTOR
 		},
 
-    .DATA_DataInEndpoint = {
-        .Header                 = {
-            .Size = sizeof(USB_Descriptor_Endpoint_t),
-            .Type = DTYPE_Endpoint
-        },
-        .EndpointAddress        = (ENDPOINT_DIR_IN | DATA_TX_EPNUM),
-        .Attributes             = (EP_TYPE_BULK | ENDPOINT_ATTR_NO_SYNC | ENDPOINT_USAGE_DATA),
-        .EndpointSize           = DATA_EPSIZE,
-        .PollingIntervalMS      = 0x0
-    },
-
     .DATA_DataOutEndpoint = {
         .Header                 = {
             .Size = sizeof(USB_Descriptor_Endpoint_t),
             .Type = DTYPE_Endpoint
         },
-        .EndpointAddress        = (ENDPOINT_DIR_OUT | DATA_RX_EPNUM),
+        .EndpointAddress        = (ENDPOINT_DIR_OUT | DATA_TX_EPNUM),
         .Attributes             = (EP_TYPE_BULK | ENDPOINT_ATTR_NO_SYNC | ENDPOINT_USAGE_DATA),
-        .EndpointSize           = DATA_EPSIZE,
+        .EndpointSize           = DATA_TX_EPSIZE,
         .PollingIntervalMS      = 0x0
     },
 
-    .DATA_InfoEndpoint = {
+    .DATA_DataInEndpoint = {
         .Header                 = {
             .Size = sizeof(USB_Descriptor_Endpoint_t),
             .Type = DTYPE_Endpoint
         },
-        .EndpointAddress        = (ENDPOINT_DIR_IN | INFO_EPNUM),
+        .EndpointAddress        = (ENDPOINT_DIR_IN | DATA_RX_EPNUM),
         .Attributes             = (EP_TYPE_BULK | ENDPOINT_ATTR_NO_SYNC | ENDPOINT_USAGE_DATA),
-        .EndpointSize           = INFO_EPSIZE,
+        .EndpointSize           = DATA_RX_EPSIZE,
         .PollingIntervalMS      = 0x0
     },
 

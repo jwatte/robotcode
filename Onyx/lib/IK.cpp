@@ -1,4 +1,4 @@
-
+#include "IK.h"
 #include "ServoSet.h"
 #include <math.h>
 #include <boost/lexical_cast.hpp>
@@ -12,20 +12,6 @@
 #define THIRD_LENGTH_A 45
 #define THIRD_LENGTH_B 164
 
-struct leginfo {
-    double cx;          //  center x in body space
-    double cy;          //  center y in body space
-    double cz;          //  center z in body space
-    double x0;          //  what x extent at center for 1st joint
-    double direction0;  //  positive (counterclockwise) or negative
-    double x1;          //  x extent at center for 2nd joint
-    double direction1;  //  positive (counterclockwise) or negative
-    double x2;          //  x extent at center for 3rd joint
-    double z2;          //  z extent at center for 3rd joint
-    double l2;          //  length of x2/z2
-    double direction2;  //  positive (counterclockwise) or negative
-};
-
 leginfo legs[] = {
     { CENTER_X, CENTER_Y, CENTER_Z,   FIRST_LENGTH, 1,  SECOND_LENGTH, 1,  THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
     { -CENTER_X, CENTER_Y, CENTER_Z,  FIRST_LENGTH, -1, SECOND_LENGTH, -1, THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, 1 },
@@ -33,11 +19,16 @@ leginfo legs[] = {
     { -CENTER_X, -CENTER_Y, CENTER_Z, FIRST_LENGTH, 1,  SECOND_LENGTH, -1, THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, 1 },
 };
 
-struct legpose {
-    unsigned short a;
-    unsigned short b;
-    unsigned short c;
-};
+void get_leg_params(legparams &op) {
+    op.center_x = CENTER_X;
+    op.center_y = CENTER_Y;
+    op.center_z = CENTER_Z;
+    op.first_length = FIRST_LENGTH;
+    op.second_length = SECOND_LENGTH;
+    op.third_length = THIRD_LENGTH;
+    op.third_length_x = THIRD_LENGTH_A;
+    op.third_length_z = THIRD_LENGTH_B;
+}
 
 std::string solve_error;
 
@@ -45,10 +36,10 @@ std::string solve_error;
 //  If there is no acceptable solution, false is returned, 
 //  and some pose approximating the general direction intended 
 //  is returned as the "solution."
-bool solve_leg(leginfo const &leg, double x, double y, double z, legpose &op) {
-    double dx = x - leg.cx;
-    double dy = y - leg.cy;
-    double dz = z - leg.cz;
+bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
+    float dx = x - leg.cx;
+    float dy = y - leg.cy;
+    float dz = z - leg.cz;
     bool ret = true;
     if (leg.cx < 0) {
         dx *= -1;
@@ -68,12 +59,12 @@ bool solve_leg(leginfo const &leg, double x, double y, double z, legpose &op) {
         ret = false;
         solve_error = "negative dx";
     }
-    double angle0 = atan2(dy, dx);
+    float angle0 = atan2f(dy, dx);
     //  now position joint 1+2 in the given plane
-    double sn = sin(angle0);
-    double cs = cos(angle0);
-    double ndx = dx * cs + dy * sn;
-    double ndy = -dx * sn + dy * cs;
+    float sn = sinf(angle0);
+    float cs = cosf(angle0);
+    float ndx = dx * cs + dy * sn;
+    float ndy = -dx * sn + dy * cs;
     //  this should have projected to the y=0 plane
     assert(fabs(ndy) < 1e-3);
     ndx -= leg.x0;
@@ -95,8 +86,8 @@ bool solve_leg(leginfo const &leg, double x, double y, double z, legpose &op) {
         solve_error = "z movement above diagonal half-plane";
     }
     //  check minimum reach
-    double d = sqrt(ndx*ndx + dz*dz);
-    double md = fabs(leg.l2 - leg.x1);
+    float d = sqrtf(ndx*ndx + dz*dz);
+    float md = fabsf(leg.l2 - leg.x1);
     /*
     if (d < md) {
         solve_error = "too close to joint; ";
@@ -109,7 +100,7 @@ bool solve_leg(leginfo const &leg, double x, double y, double z, legpose &op) {
             ndx = md;
         }
         else {
-            double r = md / d;
+            float r = md / d;
             ndx = ndx * r;
             dz = dz * r;
         }
@@ -120,7 +111,7 @@ bool solve_leg(leginfo const &leg, double x, double y, double z, legpose &op) {
     md = leg.l2 + leg.x1;
     if (d > md) {
         //  cannot reach the destination
-        double r = md / d;
+        float r = md / d;
         ndx = ndx * r;
         dz = dz * r;
         ret = false;
@@ -149,29 +140,29 @@ bool solve_leg(leginfo const &leg, double x, double y, double z, legpose &op) {
     //  4. (A*A+1) jz1*jz1 + 2AB jz1 + B*B - x1*x1 == 0
     //  This, we can solve with a simple quadratic formula, picking the positive root.
 
-    double A = 2*dz/(-1*ndx);
-    double B = (leg.l2*leg.l2 - leg.x1*leg.x1 - ndx*ndx - dz*dz)/(-2*ndx);
-    double a = (A*A+1);
-    double b = 2 * A * B;
-    double c = B*B - leg.x1*leg.x1;
-    double inner = b*b - 4*a*c;
-    double root = 0;
+    float A = 2*dz/(-1*ndx);
+    float B = (leg.l2*leg.l2 - leg.x1*leg.x1 - ndx*ndx - dz*dz)/(-2*ndx);
+    float a = (A*A+1);
+    float b = 2 * A * B;
+    float c = B*B - leg.x1*leg.x1;
+    float inner = b*b - 4*a*c;
+    float root = 0;
     if (inner < 0) {
         ret = false;
         solve_error = "root of negative";
         root = leg.x1;  //  straight up
     }
     else {
-        root = (-b + sqrt(b*b - 4*a*c))/(2 * a);
+        root = (-b + sqrtf(b*b - 4*a*c))/(2 * a);
     }
-    double out = sqrt(leg.x1*leg.x1-root*root);
-    double angle1 = atan2(root, out);
+    float out = sqrtf(leg.x1*leg.x1-root*root);
+    float angle1 = atan2f(root, out);
     ndx -= out;
     dz -= root;
-    double hpi = M_PI * 0.5;
-    double qpi = M_PI * 0.25;
-    double pi = M_PI;
-    double angle2 = atan2(dz, ndx) + hpi - atan2(leg.x2, leg.z2) - angle1;
+    float hpi = M_PI * 0.5;
+    float qpi = M_PI * 0.25;
+    float pi = M_PI;
+    float angle2 = atan2f(dz, ndx) + hpi - atan2f(leg.x2, leg.z2) - angle1;
     
     //  limit to "safe" movement angles
     if (angle0 < -qpi) {
@@ -213,81 +204,4 @@ bool solve_leg(leginfo const &leg, double x, double y, double z, legpose &op) {
 }
 
 
-struct initinfo {
-    unsigned short id;
-    unsigned short center;
-};
-static const initinfo init[] = {
-    { 1, 2048+512 },
-    { 2, 2048+512 },
-    { 3, 2048+512 },
-    { 4, 2048-512 },
-    { 5, 2048-512 },
-    { 6, 2048-512 },
-    { 7, 2048-512 },
-    { 8, 2048+512 },
-    { 9, 2048+512 },
-    { 10, 2048+512 },
-    { 11, 2048-512 },
-    { 12, 2048-512 },
-};
-
-int main() {
-    ServoSet ss;
-    for (size_t i = 0; i < sizeof(init)/sizeof(init[0]); ++i) {
-        ss.add_servo(init[i].id, init[i].center);
-    }
-
-    int step = 0;
-
-    bool prevsolved = true;
-    while (true) {
-        for (int leg = 0; leg < 4; ++leg) {
-            double xpos = CENTER_X + FIRST_LENGTH + SECOND_LENGTH;
-            if (leg & 1) {
-                xpos = -xpos;
-            }
-            double ypos = CENTER_Y + FIRST_LENGTH;
-            if (leg & 2) {
-                ypos = -ypos;
-            }
-            double zpos = -80;
-            ypos += 100 * sin(step / 500.0);
-            legpose oot;
-            bool solved = solve_leg(legs[leg], xpos, ypos, zpos, oot);
-            if (solved != prevsolved) {
-                if (!solved) {
-                    std::cerr << "not solved: " << solve_error << std::endl;
-                }
-                else {
-                    std::cerr << "solved" << std::endl;
-                }
-                prevsolved = solved;
-            }
-            ss.id(1 + 3*leg).set_goal_position(oot.a);
-            ss.id(2 + 3*leg).set_goal_position(oot.b);
-            ss.id(3 + 3*leg).set_goal_position(oot.c);
-        }
-
-        ss.step();
-        if (ss.queue_depth() > 30) {
-            std::cerr << "queue_depth: " << ss.queue_depth() << std::endl;
-            while (ss.queue_depth() > 0) {
-                ss.step();
-            }
-        }
-        unsigned char status[33];
-        unsigned char st = ss.get_status(status, 33);
-        static unsigned char nst = 0;
-        if (st != nst) {
-            std::cerr << "status: 0x" << std::hex << st << std::dec << std::endl;
-            nst = st;
-        }
-        usleep(1000);
-        step += 3;
-        if (step >= 6283) {
-            step -= 6283;
-        }
-    }
-}
 

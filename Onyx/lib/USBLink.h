@@ -67,6 +67,7 @@ private:
     semaphore return_;
     boost::mutex queueLock_;
     std::deque<Packet *> queue_;
+    std::deque<Packet *> recvQ_;
     boost::shared_ptr<boost::thread> thread_;
     size_t inPackets_;
     size_t outPackets_;

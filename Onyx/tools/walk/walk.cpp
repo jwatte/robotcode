@@ -1,17 +1,11 @@
 
 #include "ServoSet.h"
 #include "IK.h"
+#include "util.h"
 #include <iostream>
 #include <time.h>
 #include <string.h>
 
-
-double read_clock() {
-    struct timespec ts;
-    memset(&ts, 0, sizeof(ts));
-    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-    return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
-}
 
 legparams lparam;
 
@@ -40,23 +34,32 @@ int main() {
     for (size_t i = 0; i < sizeof(init)/sizeof(init[0]); ++i) {
         ss.add_servo(init[i].id, init[i].center);
     }
+    ss.set_torque(900); //  not quite top torque
 
     bool prevsolved = true;
     double thetime = 0, prevtime = 0;
     float step = 0;
+    float speed = 1;
     while (true) {
         thetime = read_clock();
-        if (thetime - prevtime >= 0.02) {
+        float use_speed = speed;
+        if (ss.torque_pending()) {
+            use_speed = 0;
+        }
+        if (thetime - prevtime >= 0.01) {
             if (prevtime != 0) {
-                step += (thetime - prevtime) * 100;
-                prevtime += 0.02;
+                step += (thetime - prevtime) * 100 * use_speed;
+                prevtime += 0.01;
             }
             else {
                 prevtime = thetime;
             }
-            //  running speed -- one full cycle per 2000 ms
+            //  running speed -- one full cycle per 1000 ms
             while (step >= 100) {
                 step -= 100;
+            }
+            if (step < 0) {
+                step += 100;
             }
             //cmd_pose cp[12] = { { 0 } };
             for (int leg = 0; leg < 4; ++leg) {
@@ -70,17 +73,22 @@ int main() {
                 }
                 double zpos = -80;
                 //  actual walk parameter
-                if (step >= leg * 25 && step < (leg + 1) * 25) {
-                    zpos += 50;
-                    ypos -= (step - leg * 25) * 8 - 100;
+                int gait = leg;
+                switch (leg) {
+                    case 1: gait = 2; break;
+                    case 2: gait = 1; break;
+                }
+                if (step >= gait * 25 && step < (gait + 1) * 25) {
+                    zpos += 20;
+                    ypos += (step - gait * 25) * 8 - 100;
                 }
                 else {
                     float phase = 0;
-                    if (step < leg * 25) {
-                        phase = (step - leg * 25) / 37.5 + 1;
+                    if (step < gait * 25) {
+                        phase = (step - gait * 25) / 37.5 + 1;
                     }
                     else {
-                        phase = (step - (leg + 1) * 25) / 37.5 - 1;
+                        phase = (step - (gait + 1) * 25) / 37.5 - 1;
                     }
                     if (phase < -1) {
                         phase += 2;
@@ -88,7 +96,7 @@ int main() {
                     if (phase > 1) {
                         phase -= 2;
                     }
-                    ypos += phase * 100;
+                    ypos -= phase * 100;
                 }
                 legpose oot;
                 bool solved = solve_leg(legs[leg], xpos, ypos, zpos, oot);

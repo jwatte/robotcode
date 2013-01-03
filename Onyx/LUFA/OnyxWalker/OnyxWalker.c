@@ -70,6 +70,7 @@ static unsigned short target_pose[32];
 static unsigned short target_prev_pose[32];
 
 unsigned short clearcnt = 0;
+unsigned char last_seq = 0;
 
 
 void clear_poses(void) {
@@ -150,11 +151,11 @@ void EVENT_USB_Device_ConfigurationChanged(void) {
 void Reconfig() {
     bool ConfigSuccess = true;
 
-    ConfigSuccess &= Endpoint_ConfigureEndpoint(DATA_TX_EPNUM,
-        EP_TYPE_BULK, ENDPOINT_DIR_OUT, DATA_TX_EPSIZE,
-        ENDPOINT_BANK_DOUBLE);
     ConfigSuccess &= Endpoint_ConfigureEndpoint(DATA_RX_EPNUM,
         EP_TYPE_BULK, ENDPOINT_DIR_IN, DATA_RX_EPSIZE,
+        ENDPOINT_BANK_DOUBLE);
+    ConfigSuccess &= Endpoint_ConfigureEndpoint(DATA_TX_EPNUM,
+        EP_TYPE_BULK, ENDPOINT_DIR_OUT, DATA_TX_EPSIZE,
         ENDPOINT_BANK_SINGLE);
 
     if (!ConfigSuccess) {
@@ -345,7 +346,6 @@ void do_get_status(void) {
 
 void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end) {
     while (offset < end) {
-        last_cmd = sbuf[offset];
         if (rawmode && sbuf[offset] == CMD_RAW_DATA) {
             PORTB |= YELLOW_LED;
             wait_for_idle();
@@ -414,6 +414,7 @@ void OnyxWalker_Task(void) {
     Endpoint_SelectEndpoint(DATA_RX_EPNUM);
     Endpoint_SetEndpointDirection(ENDPOINT_DIR_IN);
     if (Endpoint_IsConfigured() && Endpoint_IsINReady() && Endpoint_IsReadWriteAllowed()) {
+        Endpoint_Write_8(last_seq);
         unsigned char gg = xbufptr;
         if (gg) {
             for (unsigned char q = 0; q < gg; ++q) {
@@ -421,6 +422,7 @@ void OnyxWalker_Task(void) {
             }
             clear_xbuf();
         }
+        ++gg;   //  for the seq
         unsigned char m = recv_avail();
         if (m) {
             unsigned char nm = m;
@@ -443,31 +445,27 @@ void OnyxWalker_Task(void) {
         Endpoint_ClearIN();
     }
 
-    if (!xbufptr) {
-        PORTB &= ~BLUE_LED;
-        Endpoint_SelectEndpoint(DATA_TX_EPNUM);
-        Endpoint_SetEndpointDirection(ENDPOINT_DIR_OUT);
-        if (Endpoint_IsConfigured() && Endpoint_IsOUTReceived() && Endpoint_IsReadWriteAllowed()) {
-            uint8_t n = Endpoint_BytesInEndpoint();
-            if (n > sizeof(sbuf)) {
-                n = sizeof(sbuf);
-            }
-            if (n) {
-                PORTB &= ~GREEN_LED;
-                for (unsigned char c = 0; c < n; ++c) {
-                    sbuf[c] = Endpoint_Read_8();
-                }
-            }
-            Endpoint_ClearOUT();
-            if (n) {
-                sbuflen = n;
-                dispatch(sbuf, 0, n);
-                PORTB |= GREEN_LED;
+    Endpoint_SelectEndpoint(DATA_TX_EPNUM);
+    Endpoint_SetEndpointDirection(ENDPOINT_DIR_OUT);
+    if (Endpoint_IsConfigured() && Endpoint_IsOUTReceived() && Endpoint_IsReadWriteAllowed()) {
+        uint8_t n = Endpoint_BytesInEndpoint();
+        if (n > sizeof(sbuf)) {
+            n = sizeof(sbuf);
+        }
+        if (n) {
+            last_seq = Endpoint_Read_8();
+            --n;
+            PORTB &= ~GREEN_LED;
+            for (unsigned char c = 0; c < n; ++c) {
+                sbuf[c] = Endpoint_Read_8();
             }
         }
-    }
-    else {
-        PORTB |= BLUE_LED;
+        Endpoint_ClearOUT();
+        if (n) {
+            sbuflen = n;
+            dispatch(sbuf, 0, n);
+            PORTB |= GREEN_LED;
+        }
     }
 
     unsigned short ms = getms();

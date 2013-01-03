@@ -4,8 +4,8 @@ OBJS_lib:=$(patsubst %.cpp,bld/%.o,$(SRCS_lib))
 TOOLS:=$(patsubst tools/%,%,$(wildcard tools/*))
 TOOL_BINS:=$(patsubst %,bld/obj/%,$(TOOLS))
 
-CFLAGS:=-O1 -g -std=gnu++11 -march=native -Wall -Werror -Ilib -I/usr/include/libusb-1.0
-LFLAGS:=-lusb-1.0 -Lbld/obj -lonyx -lboost_system -lboost_thread -lfltk
+CFLAGS:=-O0 -gdwarf-4 -fdebug-types-section -fvar-tracking-assignments -std=gnu++11 -march=native -Wall -Werror -Ilib -I/usr/include/libusb-1.0
+LFLAGS:=-gdwarf-3 -lusb-1.0 -Lbld/obj -lonyx -lboost_system -lboost_thread -lfltk
 
 all:	bld/obj/libonyx.a $(TOOL_BINS)
 

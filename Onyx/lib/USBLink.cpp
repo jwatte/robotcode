@@ -26,7 +26,8 @@ public:
         outPack_(0),
         outXfer_(libusb_alloc_transfer(0)),
         outQueueDepth_(0),
-        outRetrying_(false) {
+        outRetrying_(false),
+        complained_(false) {
 
         boost::unique_lock<boost::mutex> lock(lock_);
         start_in_inner();
@@ -59,15 +60,20 @@ public:
         p->set_size(sz);
         memcpy(p->buffer(), data, sz);
         boost::unique_lock<boost::mutex> lock(lock_);
-        if (outQueueDepth_ > 50) {
-            if (!(outQueueDepth_ & 63)) {
+        if (outQueueDepth_ > 16) {
+            if (!(outQueueDepth_ & 15)) {
                 std::cerr << "outQueueDepth_: " << outQueueDepth_ << std::endl;
             }
-            if (outQueueDepth_ >= 500) {
+            if (outQueueDepth_ >= 100) {
                 //  drop the packet
+                if (!complained_) {
+                    std::cerr << "dropping packet (out queue depth " << outQueueDepth_ << ")" << std::endl;
+                    complained_ = false;
+                }
                 return;
             }
         }
+        complained_ = false;
         outQueue_.push_back(p);
         outQueueDepth_ = outQueue_.size();
         start_out_inner();
@@ -103,6 +109,14 @@ private:
             outPack_ = 0;
             throw std::runtime_error("Failed writing to board.");
         }
+    #if DUMP_WRITE_DATA
+        std::cout << std::hex;
+        unsigned char *ptr = (unsigned char *)outPack_->buffer();
+        for (size_t i = 0, n = outPack_->size(); i != n; ++i) {
+            std::cout << " 0x" << (int)ptr[i];
+        }
+        std::cout << std::dec << std::endl;
+    #endif
     }
 
     static void out_callback(libusb_transfer *cbArg) {
@@ -180,14 +194,15 @@ private:
     libusb_transfer *outXfer_;
     size_t outQueueDepth_;
     bool outRetrying_;
+    bool complained_;
 };
 
 
 boost::shared_ptr<Module> USBLink::open(boost::shared_ptr<Settings> const &set) {
     std::string vid("f000");
     std::string pid("0002");
-    std::string ep_output("1");
-    std::string ep_input("82");
+    std::string ep_output("2");
+    std::string ep_input("81");
     auto v = set->get_value("vid");
     if (!!v) {
         vid = v->get_string();
@@ -213,25 +228,10 @@ void USBLink::step() {
         ++inPackets_;
         size_t size = pack->size();
         if (size > 0) {
-            bool drop = false;
-            if (sendBufEnd_ + size > sizeof(sendBuf_)) {
-                if (sendBufEnd_ + size - sendBufBegin_ > sizeof(sendBuf_)) {
-                    ++dropPackets_;
-                    //  drop it
-                    drop = true;
-                }
-                else {
-                    memmove(sendBuf_, &sendBuf_[sendBufBegin_], sendBufEnd_-sendBufBegin_);
-                    sendBufEnd_ -= sendBufBegin_;
-                    sendBufBegin_ = 0;
-                }
-            }
-            if (!drop) {
-                unsigned char const *pp = (unsigned char const *)pack->buffer();
-                memcpy(&sendBuf_[sendBufEnd_], pp, size);
-                sendBufEnd_ += size;
-                assert(sendBufEnd_ <= sizeof(sendBuf_));
-            }
+            recvQ_.push_back(pack);
+        }
+        else {
+            pack->destroy();
         }
     }
     inPacketsProperty_->set<long>(inPackets_);
@@ -305,8 +305,6 @@ USBLink::USBLink(std::string const &vid, std::string const &pid, std::string con
     inPacketsProperty_(new PropertyImpl<long>(str_in_packets)),
     outPacketsProperty_(new PropertyImpl<long>(str_out_packets)),
     dropPacketsProperty_(new PropertyImpl<long>(str_drop_packets)),
-    sendBufBegin_(0),
-    sendBufEnd_(0),
     name_(vid + ":" + pid) {
 
     if (libusb_init(&ctx_) < 0) {
@@ -344,7 +342,7 @@ USBLink::USBLink(std::string const &vid, std::string const &pid, std::string con
 }
 
 void USBLink::raw_send(void const *data, unsigned char sz) {
-    if (sz > 128) {
+    if (sz > 64) {
         throw std::runtime_error("Too large buffer in raw_send()");
     }
     xfer_->out_write(data, sz);
@@ -352,15 +350,20 @@ void USBLink::raw_send(void const *data, unsigned char sz) {
 }
 
 unsigned char const *USBLink::begin_receive(size_t &oSize) {
-    oSize = sendBufEnd_ - sendBufBegin_;
-    return &sendBuf_[sendBufBegin_];
+    if (recvQ_.empty()) {
+        oSize = 0;
+        return 0;
+    }
+    Packet *p = recvQ_.front();
+    oSize = p->size();
+    return p->buffer();
 }
 
 void USBLink::end_receive(size_t size) {
-    assert(size <= sendBufEnd_ - sendBufBegin_);
-    sendBufBegin_ += size;
-    if (sendBufBegin_ == sendBufEnd_) {
-        sendBufBegin_ = sendBufEnd_ = 0;
+    if (!recvQ_.empty()) {
+        Packet *p = recvQ_.front();
+        recvQ_.pop_front();
+        p->destroy();
     }
 }
 

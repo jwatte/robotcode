@@ -101,7 +101,9 @@ public:
     unsigned char get_reg1(unsigned char reg) const;
     unsigned short get_reg2(unsigned char reg) const;
     unsigned int queue_depth() const;
+
 private:
+
     friend class ServoSet;
     unsigned short neutral_;
     unsigned char id_;
@@ -118,6 +120,7 @@ public:
 
     Servo &add_servo(unsigned char id, unsigned short neutral = 2048);
     Servo &id(unsigned char id);
+    bool torque_pending();
     void step();
     void set_torque(unsigned short thousandths);
     unsigned int queue_depth();
@@ -136,10 +139,11 @@ private:
     boost::shared_ptr<Module> usbModule_;
     USBLink *usb_;
     size_t pollIx_;
-    bool readyForRead_;
-    unsigned char readDenied_;
-    unsigned char lastServoId_;
     unsigned short torqueLimit_;
+    unsigned char lastServoId_;
+    unsigned char lastSeq_;
+    unsigned char nextSeq_;
+    double lastStep_;
 
     void add_cmd(servo_cmd const &cmd);
     unsigned char do_read_complete(unsigned char const *pack, unsigned char sz);

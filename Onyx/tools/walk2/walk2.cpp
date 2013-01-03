@@ -35,6 +35,51 @@ static const initinfo init[] = {
 };
 
 
+#define TROT_UP_BUTTON 0
+#define TROT_DOWN_BUTTON 1
+
+#define SPEED_AXIS 1
+#define TURN_AXIS 0
+#define AIM_X_AXIS 2
+#define AIM_Y_AXIS 3
+#define MAXJOY 28000.0f
+
+float joyspeed = 0;
+float joyturn = 0;
+int joytrotix = 15;
+
+float const trotvals[22] = {
+    0.1f,       //  0
+    0.15f,
+    0.2f,
+    0.25f,
+    0.3f,
+    0.375f,     //  5
+    0.45f,
+    0.525f,
+    0.6f,
+    0.7f,
+    0.8f,       //  10
+    0.9f,
+    1.0f,
+    1.15f,
+    1.3f,
+    1.5f,       //  15
+    1.75f,
+    2.0f,
+    2.25f,
+    2.5f,
+    2.75f,
+    3.0f        //  20
+};
+
+
+float cap(float f) {
+    return (f > 1) ? 1 : (f < -1) ? -1 : f;
+}
+
+
+#define SPEED_SLEW 2.0f
 
 const float stride = 200;
 const float lift = 40;
@@ -52,8 +97,8 @@ void poseleg(ServoSet &ss, int leg, float step, float speed) {
         dx = 0;
         dy = (step * 4 - 300) * speed;
         dz = sinf((step - 50) * M_PI / 50) * lift;
-        if (speed < 0.1) {
-            dz = dz * 10 * speed;
+        if (fabsf(speed) < 0.1) {
+            dz = dz * 10 * fabsf(speed);
         }
     }
     float xpos = lparam.center_x + lparam.first_length + lparam.second_length;
@@ -70,23 +115,25 @@ void poseleg(ServoSet &ss, int leg, float step, float speed) {
     zpos += dz;
     legpose lp;
     if (!solve_leg(legs[leg], xpos, ypos, zpos, lp)) {
-        std::cerr << "Could not solve leg: " << leg << " step " << step << std::endl;
-        exit(1);
+        std::cerr << "Could not solve leg: " << leg << " step " << step
+            << " speed " << speed << " xpos " << xpos << " ypos " << ypos
+            << " zpos " << zpos << std::endl;
+        abort();
     }
     ss.id(leg * 3 + 1).set_goal_position(lp.a);
     ss.id(leg * 3 + 2).set_goal_position(lp.b);
     ss.id(leg * 3 + 3).set_goal_position(lp.c);
 }
 
-void poselegs(ServoSet &ss, float step, float speed) {
+void poselegs(ServoSet &ss, float step, float speed, float turn) {
     float step50 = step + 50;
     if (step50 >= 100) {
         step50 -= 100;
     }
-    poseleg(ss, 0, step, speed);
-    poseleg(ss, 1, step50, speed);
-    poseleg(ss, 2, step50, speed);
-    poseleg(ss, 3, step, speed);
+    poseleg(ss, 0, step, cap(speed + turn));
+    poseleg(ss, 1, step50, cap(speed - turn));
+    poseleg(ss, 2, step50, cap(speed + turn));
+    poseleg(ss, 3, step, cap(speed - turn));
 }
 
 int joyfd = -1;
@@ -111,6 +158,60 @@ bool joyopen() {
     return true;
 }
 
+void joystep() {
+    if (joyfd < 0) {
+        return;
+    }
+    struct js_event js;
+    for (int i = 0; i < 20; ++i) {
+        if (read(joyfd, &js, sizeof(js)) < 0) {
+            break;
+        }
+        else if (js.type & JS_EVENT_INIT) {
+            continue;
+        }
+        else if (js.type & JS_EVENT_AXIS) {
+            if (js.number == SPEED_AXIS) {
+                joyspeed = cap(js.value / - MAXJOY);
+            }
+            else if (js.number == TURN_AXIS) {
+                joyturn = cap(js.value / MAXJOY);
+            }
+            else if (js.number == AIM_X_AXIS) {
+            }
+            else if (js.number == AIM_Y_AXIS) {
+            }
+            else {
+                std::cerr << "axis " << (int)js.number << " value " << js.value << std::endl;;
+            }
+        }
+        else if (js.type & JS_EVENT_BUTTON) {
+            bool on = js.value != 0;
+            if (js.number == TROT_UP_BUTTON) {
+                if (on) {
+                    joytrotix++;
+                    if ((size_t)joytrotix >= sizeof(trotvals)/sizeof(trotvals[0])) {
+                        joytrotix = (int)sizeof(trotvals)/sizeof(trotvals[0])-1;
+                        std::cout << "trot " << trotvals[joytrotix] << std::endl;
+                    }
+                }
+            }
+            else if (js.number == TROT_DOWN_BUTTON) {
+                if (on) {
+                    if (joytrotix > 0) {
+                        joytrotix--;
+                        std::cout << "trot " << trotvals[joytrotix] << std::endl;
+                    }
+                }
+            }
+            else {
+                std::cerr << "button " << (int)js.number << " value " << js.value << std::endl;
+            }
+        }
+    }
+}
+
+
 int main() {
     joyopen();
     get_leg_params(lparam);
@@ -122,33 +223,45 @@ int main() {
 
     double thetime = 0, prevtime = 0;
     float step = 0;
-    float speed = 0.1;
-    float trot = 1.5;
+    float prevspeed = 0;
     while (true) {
+        joystep();
         thetime = read_clock();
-        float use_trot = trot;
-        float use_speed = speed;
+        float use_trot = trotvals[joytrotix];
+        float use_speed = joyspeed;
+        float use_turn = joyturn;
         if (ss.torque_pending()) {
             use_speed = 0;
             use_trot = 0;
+            use_turn = 0;
         }
-        if (thetime - prevtime >= 0.01) {
-            if (prevtime != 0) {
-                step += (thetime - prevtime) * 100 * use_trot;
+        float dt = thetime - prevtime;
+        if (dt >= 0.01) {
+            //  don't fall more than 0.1 seconds behind, else catch up in one swell foop
+            if (dt < 0.1f) {
+                step += dt * 100 * use_trot;
                 prevtime += 0.01;
             }
             else {
+                //  and don't update step!
                 prevtime = thetime;
             }
-            //  running speed -- one full cycle per 1000 ms
+            //  "step" is a measure of the cycle in percent
             while (step >= 100) {
                 step -= 100;
             }
             while (step < 0) {
                 step += 100;
             }
+            if (use_speed > prevspeed) {
+                use_speed = std::min(prevspeed + dt * SPEED_SLEW, use_speed);
+            }
+            else if (use_speed < prevspeed) {
+                use_speed = std::max(prevspeed - dt * SPEED_SLEW, use_speed);
+            }
+            prevspeed = use_speed;
+            poselegs(ss, step, use_speed, use_turn);
         }
-        poselegs(ss, step, use_speed);
         ss.step();
         if (ss.queue_depth() > 30) {
             std::cerr << "queue_depth: " << ss.queue_depth() << std::endl;

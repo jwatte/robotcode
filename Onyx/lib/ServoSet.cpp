@@ -196,16 +196,17 @@ ServoSet::ServoSet() {
     usbModule_ = USBLink::open(st);
     usb_ = usbModule_->cast_as<USBLink>();
     pollIx_ = 0;
-    readyForRead_ = true;
-    lastServoId_ = 0;
     torqueLimit_ = DEFAULT_TORQUE_LIMIT; //  some fraction of max power
+    lastServoId_ = 0;
+    lastSeq_ = nextSeq_ = 0;
+    lastStep_ = 0;
     //  Compensate for a bug: first packet doesn't register unless 
     //  the receiver board is freshly reset.
-    unsigned char nop = NOP;
-    usb_->raw_send(&nop, 1);
+    unsigned char nop[] = { 0, NOP };
+    usb_->raw_send(&nop, 2);
     //  broadcast turn off torque
     unsigned char disable_torque_pack[] = {
-        SET_REG1, 0xfe, REG_TORQUE_ENABLE, 0,
+        0, SET_REG1, 0xfe, REG_TORQUE_ENABLE, 0,
     };
     usb_->raw_send(disable_torque_pack, sizeof(disable_torque_pack));
 }
@@ -227,6 +228,7 @@ Servo &ServoSet::add_servo(unsigned char id, unsigned short neutral) {
     }
     servos_[id] = boost::shared_ptr<Servo>(new Servo(id, neutral, *this));
     unsigned char set_regs_pack[] = {
+        nextSeq_,
         SET_REG1, id, REG_STATUS_RETURN_LEVEL, 1,           //  set reg
         DELAY, 0,
         SET_REG1, id, REG_RETURN_DELAY_TIME, 5,
@@ -239,6 +241,7 @@ Servo &ServoSet::add_servo(unsigned char id, unsigned short neutral) {
         SET_REG2, id, REG_MOVING_SPEED, 0, 0,       //  set speed at max
         SET_REG1, id, REG_TORQUE_ENABLE, 1,
     };
+    ++nextSeq_;
     usb_->raw_send(set_regs_pack, sizeof(set_regs_pack));
     return *servos_[id];
 }
@@ -256,14 +259,22 @@ Servo &ServoSet::id(unsigned char id) {
 void ServoSet::step() {
 
     //  pack up as many commands as can fit in a single USB packet
-    unsigned char buf[128-16];
+    unsigned char buf[56];
     unsigned char bufptr = 0;
 
     //  keep track of size of reply
     bool delayread = false;
+    bool timeready = false;
+    double now = read_clock();
+    if (now - lastStep_ >= 0.001) {
+        lastStep_ = floor(now * 1000) * 0.001;
+        timeready = true;
+    }
 
     //  select next servo
-    if (servos_.size() && readyForRead_) {
+    if (timeready && servos_.size() && ((unsigned char)(nextSeq_ - lastSeq_) < 2)) {
+        buf[bufptr++] = nextSeq_;
+        ++nextSeq_;
         while (true) {
             ++lastServoId_;
             if (lastServoId_ >= servos_.size()) {
@@ -277,7 +288,6 @@ void ServoSet::step() {
                 break;
             }
         }
-
         if (!delayread) {
             //  read stuff from the selected servo
             //  all "fast read" values
@@ -316,33 +326,32 @@ void ServoSet::step() {
                 s.lastSlowRd_++;
             }
         }
-        readyForRead_ = false;
-    }
 
-    //  drain the command queue
-    std::vector<servo_cmd>::iterator ptr(cmds_.begin()), end(cmds_.end());
-    while (ptr != end) {
-        if (bufptr >= sizeof(buf)-4) {
-            break;
+        //  drain the command queue
+        std::vector<servo_cmd>::iterator ptr(cmds_.begin()), end(cmds_.end());
+        while (ptr != end) {
+            if (bufptr >= sizeof(buf)-4) {
+                break;
+            }
+            if ((*ptr).reg & 0x80) {
+                buf[bufptr++] = SET_REG2;
+                buf[bufptr++] = (*ptr).id;
+                buf[bufptr++] = (*ptr).reg & ~0x80;
+                buf[bufptr++] = (*ptr).value & 0xff;
+                buf[bufptr++] = ((*ptr).value >> 8) & 0xff;
+            }
+            else {
+                buf[bufptr++] = SET_REG1;
+                buf[bufptr++] = (*ptr).id;
+                buf[bufptr++] = (*ptr).reg;
+                buf[bufptr++] = (*ptr).value & 0xff;
+            }
+            ++ptr;
         }
-        if ((*ptr).reg & 0x80) {
-            buf[bufptr++] = SET_REG2;
-            buf[bufptr++] = (*ptr).id;
-            buf[bufptr++] = (*ptr).reg & ~0x80;
-            buf[bufptr++] = (*ptr).value & 0xff;
-            buf[bufptr++] = ((*ptr).value >> 8) & 0xff;
+        if (bufptr != 0) {
+            usb_->raw_send(buf, bufptr);
+            cmds_.erase(cmds_.begin(), ptr);
         }
-        else {
-            buf[bufptr++] = SET_REG1;
-            buf[bufptr++] = (*ptr).id;
-            buf[bufptr++] = (*ptr).reg;
-            buf[bufptr++] = (*ptr).value & 0xff;
-        }
-        ++ptr;
-    }
-    if (bufptr != 0) {
-        cmds_.erase(cmds_.begin(), ptr);
-        usb_->raw_send(buf, bufptr);
     }
 
     usb_->step();
@@ -352,15 +361,12 @@ void ServoSet::step() {
         size_t sz = 0, szs = 0;
         unsigned char const *d = usb_->begin_receive(sz);
         if (sz == 0) {
-            if (!readyForRead_) {
-                ++readDenied_;
-                if (!(readDenied_ & 3)) {
-                    readyForRead_ = true;
-                }
-            }
-            return;
+            usb_->end_receive(0);
+            break;
         }
-        readyForRead_ = true;
+        lastSeq_ = *d;
+        d++;
+        sz--;
         szs = sz;
         while (sz > 0) {
             unsigned char cnt = 1;
@@ -474,15 +480,17 @@ unsigned char ServoSet::get_status(unsigned char *buf, unsigned char n) {
 }
 
 void ServoSet::lerp_pose(unsigned short ms, cmd_pose const *pose, unsigned char npose) {
-    if (npose > 32) {
+    if (npose > 19) {
         throw std::runtime_error("attempt to lerp_pose() with too many servos");
     }
-    unsigned char cmd[128];
-    cmd[0] = LERP;
-    cmd[1] = ms & 0xff;
-    cmd[2] = (ms >> 8) & 0xff;
-    cmd[3] = npose;
-    unsigned char ptr = 4;
+    unsigned char cmd[64];
+    cmd[0] = nextSeq_;
+    ++nextSeq_;
+    cmd[1] = LERP;
+    cmd[2] = ms & 0xff;
+    cmd[3] = (ms >> 8) & 0xff;
+    cmd[4] = npose;
+    unsigned char ptr = 5;
     for (unsigned char i = 0; i != npose; ++i) {
         if (pose[i].id >= servos_.size() || !servos_[pose[i].id]) {
             throw std::runtime_error("invalid servo ID in lerp_pose()");
@@ -498,3 +506,12 @@ void ServoSet::lerp_pose(unsigned short ms, cmd_pose const *pose, unsigned char 
     usb_->raw_send(cmd, ptr);
 }
 
+bool ServoSet::torque_pending() {
+    //  torque pending on at least one leg?
+    for (auto ptr(servos_.begin()), end(servos_.end()); ptr != end; ++ptr) {
+        if (!!*ptr && (*ptr)->updateTorque_) {
+            return true;
+        }
+    }
+    return false;
+}

@@ -3,10 +3,20 @@
 #define util_h
 
 #include <string>
+#include <string.h>
 
-std::string hexnum(unsigned char ch);
+std::string hexnum(unsigned char const &ch);
+std::string hexnum(unsigned short const &ch);
+std::string hexnum(int ch);
 unsigned char cksum(unsigned char const *a, size_t l);
 double read_clock();
+unsigned int fnv2_hash(void const *src, size_t sz);
+
+template<size_t Sz>
+void safecpy(char (&dst)[Sz], char const *src) {
+    strncpy(dst, src, Sz);
+    dst[Sz-1] = 0;
+}
 
 
 

@@ -8,7 +8,7 @@
 #include <sstream>
 #include <assert.h>
 
-#include "protocol.h"
+//#include "protocol.h"
 
 
 #define WRITE_USB 1

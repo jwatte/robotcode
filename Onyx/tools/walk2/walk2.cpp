@@ -192,15 +192,15 @@ void joystep() {
                     joytrotix++;
                     if ((size_t)joytrotix >= sizeof(trotvals)/sizeof(trotvals[0])) {
                         joytrotix = (int)sizeof(trotvals)/sizeof(trotvals[0])-1;
-                        std::cout << "trot " << trotvals[joytrotix] << std::endl;
                     }
+                    std::cerr << "trot " << trotvals[joytrotix] << std::endl;
                 }
             }
             else if (js.number == TROT_DOWN_BUTTON) {
                 if (on) {
                     if (joytrotix > 0) {
                         joytrotix--;
-                        std::cout << "trot " << trotvals[joytrotix] << std::endl;
+                        std::cerr << "trot " << trotvals[joytrotix] << std::endl;
                     }
                 }
             }

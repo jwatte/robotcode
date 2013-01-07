@@ -126,6 +126,9 @@ static void handle_connect(P_Connect const &pc) {
 
 static void handle_setinput(P_SetInput const &psi) {
     //  TODO: implement set input
+    ctl_trot = psi.trot;
+    ctl_speed = psi.speed;
+    ctl_turn = psi.turn;
 }
 
 static void handle_requestvideo(P_RequestVideo const &prv) {

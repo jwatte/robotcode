@@ -74,10 +74,6 @@ float const trotvals[22] = {
 };
 
 
-float cap(float f) {
-    return (f > 1) ? 1 : (f < -1) ? -1 : f;
-}
-
 
 #define SPEED_SLEW 2.0f
 

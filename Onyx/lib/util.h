@@ -18,6 +18,10 @@ void safecpy(char (&dst)[Sz], char const *src) {
     dst[Sz-1] = 0;
 }
 
+inline float cap(float f) {
+    return (f < -1) ? -1 : (f > 1) ? 1 : f;
+}
+
 
 
 #endif  //  util_h

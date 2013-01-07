@@ -6,6 +6,13 @@
 #include "util.h"
 #include <assert.h>
 
+#include "ServoSet.h"
+#include "IK.h"
+#include "util.h"
+#include <iostream>
+#include <time.h>
+#include <string.h>
+
 
 static double const LOCK_ADDRESS_TIME = 5.0;
 
@@ -18,6 +25,89 @@ static IStatus *istatus;
 static ISockets *isocks;
 static INetwork *inet;
 static IPacketizer *ipackets;
+
+legparams lparam;
+
+struct initinfo {
+    unsigned short id;
+    unsigned short center;
+};
+static const initinfo init[] = {
+    { 1, 2048+512 },
+    { 2, 2048+512 },
+    { 3, 2048+512 },
+    { 4, 2048-512 },
+    { 5, 2048-512 },
+    { 6, 2048-512 },
+    { 7, 2048-512 },
+    { 8, 2048+512 },
+    { 9, 2048+512 },
+    { 10, 2048+512 },
+    { 11, 2048-512 },
+    { 12, 2048-512 },
+};
+
+static unsigned char nst = 0;
+
+#define SPEED_SLEW 2.0f
+
+const float stride = 200;
+const float lift = 40;
+const float height_above_ground = 80;
+
+float ctl_trot = 1.5f;
+float ctl_speed = 0;
+float ctl_turn = 0;
+
+void poseleg(ServoSet &ss, int leg, float step, float speed) {
+    float dx = 0, dy = 0, dz = 0;
+    if (step < 50) {    //  front-to-back
+        dx = 0;
+        dy = (100 - 4 * step) * speed;
+        dz = 0;
+    }
+    else {  //  lifted, back-to-front
+        dx = 0;
+        dy = (step * 4 - 300) * speed;
+        dz = sinf((step - 50) * M_PI / 50) * lift;
+        if (fabsf(speed) < 0.1) {
+            dz = dz * 10 * fabsf(speed);
+        }
+    }
+    float xpos = lparam.center_x + lparam.first_length + lparam.second_length;
+    float ypos = lparam.center_y + lparam.first_length;
+    float zpos = -height_above_ground;
+    if (leg & 1) {
+        xpos = -xpos;
+    }
+    if (leg & 2) {
+        ypos = -ypos;
+    }
+    xpos += dx;
+    ypos += dy;
+    zpos += dz;
+    legpose lp;
+    if (!solve_leg(legs[leg], xpos, ypos, zpos, lp)) {
+        std::cerr << "Could not solve leg: " << leg << " step " << step
+            << " speed " << speed << " xpos " << xpos << " ypos " << ypos
+            << " zpos " << zpos << std::endl;
+        abort();
+    }
+    ss.id(leg * 3 + 1).set_goal_position(lp.a);
+    ss.id(leg * 3 + 2).set_goal_position(lp.b);
+    ss.id(leg * 3 + 3).set_goal_position(lp.c);
+}
+
+void poselegs(ServoSet &ss, float step, float speed, float turn) {
+    float step50 = step + 50;
+    if (step50 >= 100) {
+        step50 -= 100;
+    }
+    poseleg(ss, 0, step, cap(speed + turn));
+    poseleg(ss, 1, step50, cap(speed - turn));
+    poseleg(ss, 2, step50, cap(speed + turn));
+    poseleg(ss, 3, step, cap(speed - turn));
+}
 
 
 static void handle_discover(P_Discover const &pd) {
@@ -92,7 +182,7 @@ static void handle_packets() {
         struct P_Status ps;
         memset(&ps, 0, sizeof(ps));
         ps.hits = 0;
-        ps.status = 0;
+        ps.status = nst;
         std::string msg;
         bool got_message = false;
         //  If too many messages, drain some, but keep the latest error 
@@ -123,16 +213,72 @@ int main(int argc, char const *argv[]) {
     isocks = mksocks(port, istatus);
     inet = listen(isocks, itime, istatus);
     ipackets = packetize(inet, istatus);
-    double then = itime->now();
+
+    get_leg_params(lparam);
+    ServoSet ss;
+    for (size_t i = 0; i < sizeof(init)/sizeof(init[0]); ++i) {
+        ss.add_servo(init[i].id, init[i].center);
+    }
+    ss.set_torque(900); //  not quite top torque
+
+    double thetime = 0, prevtime = 0;
+    float step = 0;
+    float prevspeed = 0;
     while (true) {
         ipackets->step();
         handle_packets();
-        double now = itime->now();
-        assert(now > then);
-        if (now - then < 0.15) {
-            itime->sleep(0.15 - (now - then));
+        thetime = read_clock();
+        float use_trot = ctl_trot;
+        float use_speed = ctl_speed;
+        float use_turn = ctl_turn;
+        if (ss.torque_pending()) {
+            use_speed = 0;
+            use_trot = 0;
+            use_turn = 0;
         }
-        then = now;
+        float dt = thetime - prevtime;
+        if (dt >= 0.01) {
+            //  don't fall more than 0.1 seconds behind, else catch up in one swell foop
+            if (dt < 0.1f) {
+                step += dt * 100 * use_trot;
+                prevtime += 0.01;
+            }
+            else {
+                //  and don't update step!
+                prevtime = thetime;
+            }
+            //  "step" is a measure of the cycle in percent
+            while (step >= 100) {
+                step -= 100;
+            }
+            while (step < 0) {
+                step += 100;
+            }
+            if (use_speed > prevspeed) {
+                use_speed = std::min(prevspeed + dt * SPEED_SLEW, use_speed);
+            }
+            else if (use_speed < prevspeed) {
+                use_speed = std::max(prevspeed - dt * SPEED_SLEW, use_speed);
+            }
+            prevspeed = use_speed;
+            poselegs(ss, step, use_speed, use_turn);
+        }
+        ss.step();
+        if (ss.queue_depth() > 30) {
+            istatus->error("Servo queue overflow -- flushing.");
+            int n = 100;
+            while (ss.queue_depth() > 0 && n > 0) {
+                --n;
+                ss.step();
+            }
+        }
+        unsigned char status[33];
+        unsigned char st = ss.get_status(status, 33);
+        if (st != nst) {
+            std::cerr << "status: 0x" << std::hex << (int)st << std::dec << std::endl;
+            nst = st;
+        }
+        usleep(500);
     }
     return 0;
 }

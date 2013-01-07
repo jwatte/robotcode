@@ -16,9 +16,9 @@ struct P_Connect {
 };
 
 struct P_SetInput {
-    unsigned char trot;
-    unsigned char speed;
-    unsigned char turn;
+    float trot;
+    float speed;
+    float turn;
 };
 
 struct P_RequestVideo {

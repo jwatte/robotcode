@@ -192,6 +192,7 @@ void Network::step() {
             if ((size_t)s != f.usedSize_ - f.offset_) {
                 error = true;
                 //  no use sending more to this guy
+                si.fragments_.clear();
                 break;
             }
             si.fragments_.pop_front();
@@ -199,7 +200,6 @@ void Network::step() {
         if (error) {
             status_->error("send error to " + ipaddr(si.addr_));
         }
-        si.fragments_.clear();
     }
 
     //  Drain the socket receive queue, but don't spin forever.
@@ -216,7 +216,7 @@ void Network::step() {
         if (r > 0) {
             frag->usedSize_ = r;
             incoming_fragment(sin, frag, now);
-            //  frag is now potentiall gone!
+            //  frag is now potentially gone!
         }
     }
 

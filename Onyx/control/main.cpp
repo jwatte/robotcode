@@ -79,8 +79,9 @@ bool joyopen() {
     ioctl(joyfd, JSIOCGAXES, &joy_num_axes);
     ioctl(joyfd, JSIOCGBUTTONS, &joy_num_buttons);
     ioctl(joyfd, JSIOCGNAME(80), joy_name);
-    std::cerr << "joystick " << joy_name << " " << joy_num_axes << " axes "
-        << joy_num_buttons << " buttons." << std::endl;
+    istatus->message(std::string("Joystick ") + joy_name + " "
+        + boost::lexical_cast<std::string>(joy_num_axes) + " axes "
+        + boost::lexical_cast<std::string>(joy_num_buttons) + " buttons.");
     return true;
 }
 
@@ -211,10 +212,12 @@ int main(int argc, char const *argv[]) {
     while (true) {
         double now = itime->now();
         double dt = now - then;
-        if (dt < 0.015) {
-            itime->sleep(0.015 - dt);
+        if (dt < 0.1) {
+            itime->sleep(0.1 - dt);
             now = itime->now();
+            dt = now - then;
         }
+        then = now;
         joystep();
         if (has_robot && now > last_status_time + 5) {
             istatus->error("Lost connection to robot.");

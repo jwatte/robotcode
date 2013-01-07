@@ -92,12 +92,6 @@ public:
             sin.sin_port = htons(port_);
         }
         int s = ::sendto(fd_, buf, sz, 0, (sockaddr const *)&sin, sizeof(sin));
-        if (s < 0) {
-            int r = errno;
-            std::stringstream ss;
-            ss << "sendto() error " << r << ": " << strerror(r);
-            status_->error(ss.str());
-        }
         return s;
     }
 

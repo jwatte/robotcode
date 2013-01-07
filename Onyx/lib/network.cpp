@@ -100,7 +100,7 @@ struct deliver_fragment : public fragment {
 std::string ipaddr(sockaddr_in const &sin) {
     unsigned char const * sa = (unsigned char const *)&sin.sin_addr;
     std::stringstream ss;
-    ss << (int)sa[0] << "." << (int)sa[1] << "," << (int)sa[2] << "." << (int)sa[3];
+    ss << (int)sa[0] << "." << (int)sa[1] << "." << (int)sa[2] << "." << (int)sa[3];
     return ss.str();
 }
 
@@ -481,6 +481,7 @@ void Network::enqueue(sockaddr_in const &dest, size_t count, iovec const *vecs) 
         ptr = outqueue_.end();
         --ptr;
     }
+    (*ptr).lastTime_ = time_->now();
     size_t size = 0;
     for (size_t iv = 0; iv != count; ++iv) {
         size += vecs[iv].iov_len;

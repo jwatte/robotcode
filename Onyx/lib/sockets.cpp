@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sstream>
 
 
 class Sockets : public ISockets {
@@ -86,7 +87,18 @@ public:
     }
 
     virtual int sendto(void const *buf, size_t sz, sockaddr_in const &addr) {
-        return ::sendto(fd_, buf, sz, 0, (sockaddr const *)&addr, sizeof(addr));
+        sockaddr_in sin(addr);
+        if (sin.sin_port == 0) {
+            sin.sin_port = htons(port_);
+        }
+        int s = ::sendto(fd_, buf, sz, 0, (sockaddr const *)&sin, sizeof(sin));
+        if (s < 0) {
+            int r = errno;
+            std::stringstream ss;
+            ss << "sendto() error " << r << ": " << strerror(r);
+            status_->error(ss.str());
+        }
+        return s;
     }
 
 };

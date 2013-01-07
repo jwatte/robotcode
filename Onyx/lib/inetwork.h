@@ -12,14 +12,15 @@ public:
     //  from. If address is locked, only messages from the locked address 
     //  are paid attention to.
     virtual bool receive(size_t &size, void const *&packet) = 0;
-    //  send() sends to the locked address. If not locked, will broadcast, 
+    //  broadcast() sends to the locked address. If not locked, will broadcast, 
     //  if the network was created with "scan()" rather than "listen()." It is 
-    //  an error to send() without a locked address if network was created 
+    //  an error to broadcast() without a locked address if network was created 
     //  with "listen()."
-    virtual void send(size_t size, void const *packet) = 0;
+    virtual void broadcast(size_t size, void const *packet) = 0;
     //  respond() responds to the packet last retrieved from receive().
     virtual void respond(size_t size, void const *packet) = 0;
-    //  vsend() is more efficient if constructing a large packet
+    //  vsend() is more efficient if constructing a packet of many pieces.
+    //  'response' is false if you want to broadcast.
     virtual void vsend(bool response, size_t cnt, iovec const *vecs) = 0;
     //  lock_address locks the send address to the peer that sent the packet 
     //  last returned by receive(), and filters out messages from others.
@@ -45,7 +46,8 @@ class IPacketizer {
 public:
     virtual void step() = 0;
     virtual bool receive(unsigned char &code, size_t &size, void const *&data) = 0;
-    virtual void send(unsigned char code, size_t size, void const *data) = 0;
+    virtual void broadcast(unsigned char code, size_t size, void const *data) = 0;
+    virtual void respond(unsigned char code, size_t size, void const *data) = 0;
 };
 
 IPacketizer *packetize(INetwork *net, IStatus *status);

@@ -17,7 +17,7 @@ public:
     Fakenet();
     virtual void step();
     virtual bool receive(size_t &size, void const *&packet);
-    virtual void send(size_t size, void const *packet);
+    virtual void broadcast(size_t size, void const *packet);
     virtual void respond(size_t size, void const *packet);
     virtual void vsend(bool response, size_t cnt, iovec const *vecs);
     virtual void lock_address(double timeout);

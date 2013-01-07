@@ -13,9 +13,11 @@ public:
     Packetizer(INetwork *network, IStatus *status);
     virtual void step();
     virtual bool receive(unsigned char &code, size_t &size, void const *&data);
-    virtual void send(unsigned char code, size_t size, void const *data);
+    virtual void broadcast(unsigned char code, size_t size, void const *data);
+    virtual void respond(unsigned char code, size_t size, void const *data);
     
-    void flush_buf();
+    void flush_bbuf();
+    void flush_rbuf();
     size_t read_sz();
     size_t write_sz(size_t size, unsigned char *buf);
 
@@ -23,8 +25,10 @@ public:
     IStatus *istatus_;
     unsigned char const *inPtr_;
     unsigned char const *inEnd_;
-    unsigned char buffer_[MAX_PACKET_BUFFER];
-    unsigned char *outPtr_;
+    unsigned char b_buffer_[MAX_PACKET_BUFFER];
+    unsigned char *b_outPtr_;
+    unsigned char r_buffer_[MAX_PACKET_BUFFER];
+    unsigned char *r_outPtr_;
 };
 
 
@@ -33,19 +37,29 @@ Packetizer::Packetizer(INetwork *network, IStatus *status) :
     istatus_(status),
     inPtr_(0),
     inEnd_(0),
-    outPtr_(buffer_) {
-    memset(buffer_, 0xfc, sizeof(buffer_));
+    b_outPtr_(b_buffer_),
+    r_outPtr_(r_buffer_) {
+    memset(b_buffer_, 0xfc, sizeof(b_buffer_));
+    memset(r_buffer_, 0xfc, sizeof(r_buffer_));
 }
 
 void Packetizer::step() {
-    flush_buf();
+    flush_bbuf();
+    flush_rbuf();
     inet_->step();
 }
 
-void Packetizer::flush_buf() {
-    if (outPtr_ != buffer_) {
-        inet_->send(outPtr_ - buffer_, buffer_);
-        outPtr_ = buffer_;
+void Packetizer::flush_bbuf() {
+    if (b_outPtr_ != b_buffer_) {
+        inet_->broadcast(b_outPtr_ - b_buffer_, b_buffer_);
+        b_outPtr_ = b_buffer_;
+    }
+}
+
+void Packetizer::flush_rbuf() {
+    if (r_outPtr_ != r_buffer_) {
+        inet_->respond(r_outPtr_ - r_buffer_, r_buffer_);
+        r_outPtr_ = r_buffer_;
     }
 }
 
@@ -111,15 +125,15 @@ size_t Packetizer::write_sz(size_t size, unsigned char *buf) {
 }
 
 
-void Packetizer::send(unsigned char code, size_t size, void const *data) {
+void Packetizer::broadcast(unsigned char code, size_t size, void const *data) {
     unsigned char hdr[10];
     hdr[0] = code;
     size_t hsz = 1 + write_sz(size, &hdr[1]);
-    if (hsz + size > (size_t)(sizeof(buffer_) - (outPtr_ - buffer_))) {
+    if (hsz + size > (size_t)(sizeof(b_buffer_) - (b_outPtr_ - b_buffer_))) {
         //  If I can't fit it into available space, flush whatever I've sent so far.
-        flush_buf();
+        flush_bbuf();
     }
-    if (hsz + size > (size_t)(sizeof(buffer_) - (outPtr_ - buffer_))) {
+    if (hsz + size > (size_t)(sizeof(b_buffer_) - (b_outPtr_ - b_buffer_))) {
         //  If I still cannot fit it into the buffer, send it as its own packet.
         iovec iov[2];
         iov[0].iov_base = hdr;
@@ -130,9 +144,34 @@ void Packetizer::send(unsigned char code, size_t size, void const *data) {
     }
     else {
         //  accumulate data into the outgoing buffer.
-        memcpy(outPtr_, hdr, hsz);
-        memcpy(outPtr_ + hsz, data, size);
-        outPtr_ += hsz + size;
+        memcpy(b_outPtr_, hdr, hsz);
+        memcpy(b_outPtr_ + hsz, data, size);
+        b_outPtr_ += hsz + size;
+    }
+}
+
+void Packetizer::respond(unsigned char code, size_t size, void const *data) {
+    unsigned char hdr[10];
+    hdr[0] = code;
+    size_t hsz = 1 + write_sz(size, &hdr[1]);
+    if (hsz + size > (size_t)(sizeof(r_buffer_) - (r_outPtr_ - r_buffer_))) {
+        //  If I can't fit it into available space, flush whatever I've sent so far.
+        flush_rbuf();
+    }
+    if (hsz + size > (size_t)(sizeof(r_buffer_) - (r_outPtr_ - r_buffer_))) {
+        //  If I still cannot fit it into the buffer, send it as its own packet.
+        iovec iov[2];
+        iov[0].iov_base = hdr;
+        iov[0].iov_len = hsz;
+        iov[1].iov_base = const_cast<void *>(data);
+        iov[1].iov_len = size;
+        inet_->vsend(true, 2, iov);
+    }
+    else {
+        //  accumulate data into the outgoing buffer.
+        memcpy(r_outPtr_, hdr, hsz);
+        memcpy(r_outPtr_ + hsz, data, size);
+        r_outPtr_ += hsz + size;
     }
 }
 

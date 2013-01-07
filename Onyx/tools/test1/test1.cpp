@@ -35,8 +35,8 @@ void test_packet_send() {
     Fakenet f;
     Fakestatus s;
     IPacketizer *ip = packetize(&f, &s);
-    ip->send(1, 10, "0123456789");
-    ip->send(2, 0, "");
+    ip->broadcast(1, 10, "0123456789");
+    ip->broadcast(2, 0, "");
     assert(f.wereSent_.empty());
     ip->step();
     assert(f.wereSent_.size() == 1);

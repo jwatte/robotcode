@@ -25,7 +25,7 @@ bool Fakenet::receive(size_t &size, void const *&packet) {
     return true;
 }
 
-void Fakenet::send(size_t size, void const *packet) {
+void Fakenet::broadcast(size_t size, void const *packet) {
     iovec iov[1];
     iov[0].iov_base = const_cast<void *>(packet);
     iov[0].iov_len = size;

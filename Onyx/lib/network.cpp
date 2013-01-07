@@ -125,7 +125,7 @@ class Network : public INetwork {
 public:
     virtual void step();
     virtual bool receive(size_t &size, void const *&packet);
-    virtual void send(size_t size, void const *packet);
+    virtual void broadcast(size_t size, void const *packet);
     virtual void respond(size_t size, void const *packet);
     virtual void vsend(bool response, size_t count, iovec const *vecs);
     virtual void lock_address(double timeout);
@@ -420,19 +420,11 @@ bool Network::receive(size_t &size, void const *&packet) {
     return true;
 }
 
-void Network::send(size_t size, void const *packet) {
-    sockaddr_in dest = remoteAddr_;
-    if (!locked_) {
-        if (!broadcastOk_) {
-            throw std::runtime_error("Cannot broadcast when not locked and not scanning.");
-        }
-        memset(&dest.sin_addr, 0xff, sizeof(dest.sin_addr));
-        dest.sin_port = 0;
-    }
+void Network::broadcast(size_t size, void const *packet) {
     iovec iov[1];
     iov[0].iov_base = const_cast<void *>(packet);
     iov[0].iov_len = size;
-    enqueue(dest, 1, iov);
+    vsend(false, 1, iov);
 }
 
 void Network::vsend(bool response, size_t count, iovec const *vecs) {

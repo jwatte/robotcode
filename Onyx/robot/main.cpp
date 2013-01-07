@@ -25,7 +25,7 @@ static void handle_discover(P_Discover const &pd) {
     memset(&ifo, 0, sizeof(ifo));
     safecpy(ifo.name, my_name);
     safecpy(ifo.pilot, pilot_name);
-    ipackets->send(R2C_Info, sizeof(ifo), &ifo);
+    ipackets->respond(R2C_Info, sizeof(ifo), &ifo);
 }
 
 static void handle_connect(P_Connect const &pc) {
@@ -113,7 +113,7 @@ static void handle_packets() {
         if (got_message) {
             safecpy(ps.message, msg.c_str());
         }
-        ipackets->send(R2C_Status, sizeof(ps), &ps);
+        ipackets->respond(R2C_Status, sizeof(ps), &ps);
     }
 }
 

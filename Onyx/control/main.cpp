@@ -21,7 +21,7 @@ void dispatch(unsigned char type, size_t size, void const *data) {
 
 void scan_for_robots() {
     P_Discover pd;
-    ipacketizer->send(C2R_Discover, sizeof(pd), &pd);
+    ipacketizer->broadcast(C2R_Discover, sizeof(pd), &pd);
 }
 
 int main(int argc, char const *argv[]) {

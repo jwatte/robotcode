@@ -231,6 +231,7 @@ int main(int argc, char const *argv[]) {
         ipackets->step();
         handle_packets();
         thetime = read_clock();
+        float dt = thetime - prevtime;
         float use_trot = ctl_trot;
         float use_speed = ctl_speed;
         float use_turn = ctl_turn;
@@ -239,7 +240,6 @@ int main(int argc, char const *argv[]) {
             use_trot = 0;
             use_turn = 0;
         }
-        float dt = thetime - prevtime;
         if (dt >= 0.01) {
             //  don't fall more than 0.1 seconds behind, else catch up in one swell foop
             if (dt < 0.1f) {
@@ -249,6 +249,7 @@ int main(int argc, char const *argv[]) {
             else {
                 //  and don't update step!
                 prevtime = thetime;
+                dt = 0;
             }
             //  "step" is a measure of the cycle in percent
             while (step >= 100) {

@@ -360,7 +360,7 @@ unsigned char const *USBLink::begin_receive(size_t &oSize) {
 }
 
 void USBLink::end_receive(size_t size) {
-    if (!recvQ_.empty()) {
+    if (!recvQ_.empty() && (size || (recvQ_.front()->size() == 0))) {
         Packet *p = recvQ_.front();
         recvQ_.pop_front();
         p->destroy();

@@ -370,15 +370,15 @@ void ServoSet::step() {
     while (true) {
         size_t sz = 0, szs = 0;
         unsigned char const *d = usb_->begin_receive(sz);
-        if (sz == 0) {
+        if (!d) {
             usb_->end_receive(0);
             break;
         }
+        szs = sz;
         lastSeq_ = *d;
         std::cerr << "lastSeq_ " << (int)lastSeq_ << " " << sz << std::endl;
         d++;
         sz--;
-        szs = sz;
         while (sz > 0) {
             unsigned char cnt = 1;
             switch (*d) {

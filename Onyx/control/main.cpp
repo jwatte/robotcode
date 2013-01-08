@@ -13,6 +13,9 @@
 #include <linux/joystick.h>
 
 
+//  never run faster than 40 Hz?
+#define MIN_LOOP_TIME 0.025
+
 unsigned short port = 6969;
 
 ITime *itime;
@@ -212,8 +215,8 @@ int main(int argc, char const *argv[]) {
     while (true) {
         double now = itime->now();
         double dt = now - then;
-        if (dt < 0.1) {
-            itime->sleep(0.1 - dt);
+        if (dt < MIN_LOOP_TIME) {
+            itime->sleep(MIN_LOOP_TIME - dt);
             now = itime->now();
             dt = now - then;
         }

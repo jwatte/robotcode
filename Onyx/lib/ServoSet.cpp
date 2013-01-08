@@ -281,10 +281,9 @@ void ServoSet::step() {
     }
 
     //  select next servo
-    if (timeready && servos_.size() && ((unsigned char)(nextSeq_ - lastSeq_) < 2)) {
+    if (timeready && servos_.size() && ((unsigned char)(nextSeq_ - lastSeq_) < 3)) {
         buf[bufptr++] = nextSeq_;
         ++nextSeq_;
-        std::cout << "nextSeq_ " << (int)nextSeq_ << std::endl;
         while (true) {
             ++lastServoId_;
             if (lastServoId_ >= servos_.size()) {
@@ -376,7 +375,6 @@ void ServoSet::step() {
         }
         szs = sz;
         lastSeq_ = *d;
-        std::cerr << "lastSeq_ " << (int)lastSeq_ << " " << sz << std::endl;
         d++;
         sz--;
         while (sz > 0) {

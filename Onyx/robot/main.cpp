@@ -279,7 +279,7 @@ int main(int argc, char const *argv[]) {
         unsigned char status[33];
         unsigned char st = ss.get_status(status, 33);
         if (st != nst) {
-            std::cerr << "status: 0x" << std::hex << (int)st << std::dec << std::endl;
+            std::cerr << "status: " << hexnum(st) << std::endl;
             nst = st;
         }
         usleep(500);

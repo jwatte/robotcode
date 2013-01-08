@@ -5,6 +5,8 @@
 
 #include "my32u4.h"
 
+#define EMPTY_IN_TIMEOUT 500
+
 
 #define CMD_RAW_MODE 0x01
 //  param is baud rate
@@ -69,6 +71,7 @@ static unsigned char servo_stati[32];
 static unsigned short target_pose[32];
 static unsigned short target_prev_pose[32];
 
+unsigned short last_in = 0;
 unsigned short clearcnt = 0;
 unsigned char last_seq = 0;
 
@@ -411,12 +414,14 @@ void OnyxWalker_Task(void) {
         return;
     }
 
+    unsigned short now = getms();
     Endpoint_SelectEndpoint(DATA_RX_EPNUM);
     Endpoint_SetEndpointDirection(ENDPOINT_DIR_IN);
     if (Endpoint_IsConfigured() && Endpoint_IsINReady() && Endpoint_IsReadWriteAllowed()) {
         unsigned char gg = xbufptr;
         unsigned char m = recv_avail();
-        if (gg || m) {
+        if (gg || m || (now - last_in > EMPTY_IN_TIMEOUT)) {
+            last_in = now;
             Endpoint_Write_8(last_seq);
             if (gg) {
                 for (unsigned char q = 0; q < gg; ++q) {

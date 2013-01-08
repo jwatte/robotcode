@@ -414,35 +414,37 @@ void OnyxWalker_Task(void) {
     Endpoint_SelectEndpoint(DATA_RX_EPNUM);
     Endpoint_SetEndpointDirection(ENDPOINT_DIR_IN);
     if (Endpoint_IsConfigured() && Endpoint_IsINReady() && Endpoint_IsReadWriteAllowed()) {
-        Endpoint_Write_8(last_seq);
         unsigned char gg = xbufptr;
-        if (gg) {
-            for (unsigned char q = 0; q < gg; ++q) {
-                Endpoint_Write_8(xbuf[q]);
-            }
-            clear_xbuf();
-        }
-        ++gg;   //  for the seq
         unsigned char m = recv_avail();
-        if (m) {
-            unsigned char nm = m;
-            if (rawmode) {
-                PORTB |= RED_LED;
-                clearcnt = getms() + BLINK_CNT;
-                if ((unsigned short)m + gg > DATA_RX_EPSIZE) {
-                    m = DATA_RX_EPSIZE - gg;
+        if (gg || m) {
+            Endpoint_Write_8(last_seq);
+            if (gg) {
+                for (unsigned char q = 0; q < gg; ++q) {
+                    Endpoint_Write_8(xbuf[q]);
                 }
-                nm = m;
-                unsigned char const *ptr = recv_buf();
-                while (m > 0) {
-                    Endpoint_Write_8(*ptr);
-                    ++ptr;
-                    --m;
-                }
+                clear_xbuf();
             }
-            recv_eat(nm);
+            ++gg;   //  for the seq
+            if (m) {
+                unsigned char nm = m;
+                if (rawmode) {
+                    PORTB |= RED_LED;
+                    clearcnt = getms() + BLINK_CNT;
+                    if ((unsigned short)m + gg > DATA_RX_EPSIZE) {
+                        m = DATA_RX_EPSIZE - gg;
+                    }
+                    nm = m;
+                    unsigned char const *ptr = recv_buf();
+                    while (m > 0) {
+                        Endpoint_Write_8(*ptr);
+                        ++ptr;
+                        --m;
+                    }
+                }
+                recv_eat(nm);
+            }
+            Endpoint_ClearIN();
         }
-        Endpoint_ClearIN();
     }
 
     Endpoint_SelectEndpoint(DATA_TX_EPNUM);

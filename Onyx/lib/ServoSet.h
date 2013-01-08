@@ -144,6 +144,7 @@ private:
     unsigned char lastSeq_;
     unsigned char nextSeq_;
     double lastStep_;
+    double lastSend_;
 
     void add_cmd(servo_cmd const &cmd);
     unsigned char do_read_complete(unsigned char const *pack, unsigned char sz);

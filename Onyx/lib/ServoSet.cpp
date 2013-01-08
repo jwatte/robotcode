@@ -200,6 +200,7 @@ ServoSet::ServoSet() {
     lastServoId_ = 0;
     lastSeq_ = nextSeq_ = 0;
     lastStep_ = 0;
+    lastSend_ = 0;
     //  Compensate for a bug: first packet doesn't register unless 
     //  the receiver board is freshly reset.
     unsigned char nop[] = { 0, NOP };
@@ -269,12 +270,21 @@ void ServoSet::step() {
     if (now - lastStep_ >= 0.001) {
         lastStep_ = floor(now * 1000) * 0.001;
         timeready = true;
+        if (nextSeq_ - lastSeq_ > 1) {
+            //  force out at least one packet per 100 ms
+            if (now - lastSend_ > 0.2) {
+                //std::cerr << "forcing a packet" << std::endl;
+                lastSend_ = now;
+                //lastSeq_ = nextSeq_;
+            }
+        }
     }
 
     //  select next servo
     if (timeready && servos_.size() && ((unsigned char)(nextSeq_ - lastSeq_) < 2)) {
         buf[bufptr++] = nextSeq_;
         ++nextSeq_;
+        std::cout << "nextSeq_ " << (int)nextSeq_ << std::endl;
         while (true) {
             ++lastServoId_;
             if (lastServoId_ >= servos_.size()) {
@@ -365,6 +375,7 @@ void ServoSet::step() {
             break;
         }
         lastSeq_ = *d;
+        std::cerr << "lastSeq_ " << (int)lastSeq_ << " " << sz << std::endl;
         d++;
         sz--;
         szs = sz;
@@ -384,7 +395,7 @@ void ServoSet::step() {
             d += cnt;
             sz -= cnt;
         }
-        usb_->end_receive(szs);
+        usb_->end_receive(szs + 1);
     }
 }
 

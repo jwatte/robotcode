@@ -76,11 +76,19 @@ public:
         complained_ = false;
         outQueue_.push_back(p);
         outQueueDepth_ = outQueue_.size();
-        start_out_inner();
+        //  I think LibUSB is not re-entrant
+        // start_out_inner();
     }
 
     size_t out_queue_depth() {
         return outQueueDepth_;
+    }
+
+    void poke() {
+        if (!outPack_) {
+            boost::unique_lock<boost::mutex> lock(lock_);
+            start_out_inner();
+        }
     }
 
 private:
@@ -247,8 +255,9 @@ void USBLink::thread_fn() {
     }
 
     while (!thread_->interruption_requested()) {
-        struct timeval tv = { 0, 10000 };
+        struct timeval tv = { 0, 5000 };
         libusb_handle_events_timeout_completed(ctx_, &tv, 0);
+        xfer_->poke();
     }
     std::cerr << "USBLink::thread_fn() returning" << std::endl;
 }

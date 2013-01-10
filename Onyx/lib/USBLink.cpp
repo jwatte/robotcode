@@ -289,6 +289,9 @@ static std::string str_in_packets("in_packets");
 static std::string str_out_packets("out_packets");
 static std::string str_drop_packets("drop_packets");
 
+//  for debugging
+USBLink *lastUsbLink_;
+
 USBLink::USBLink(std::string const &vid, std::string const &pid, std::string const &ep_input, std::string const &ep_output) :
     vid_(vid),
     pid_(pid),
@@ -306,6 +309,8 @@ USBLink::USBLink(std::string const &vid, std::string const &pid, std::string con
     outPacketsProperty_(new PropertyImpl<long>(str_out_packets)),
     dropPacketsProperty_(new PropertyImpl<long>(str_drop_packets)),
     name_(vid + ":" + pid) {
+
+    lastUsbLink_ = this;
 
     if (libusb_init(&ctx_) < 0) {
         throw std::runtime_error("Error opening libusb for " + name_);

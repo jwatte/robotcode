@@ -7,6 +7,10 @@
 class Status : public IStatus {
 public:
     virtual void message(std::string const &str) {
+        if (str == lastmsg_) {
+            return;
+        }
+        lastmsg_ = str;
         std::cerr << "[msg] " << str << std::endl;
         messages_.push_back(std::pair<bool, std::string>(false, str));
     }
@@ -31,6 +35,7 @@ public:
     }
 
     std::list<std::pair<bool, std::string>> messages_;
+    std::string lastmsg_;
 };
 
 IStatus *mkstatus() {

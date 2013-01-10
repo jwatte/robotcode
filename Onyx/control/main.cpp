@@ -203,7 +203,7 @@ void scan_for_robots() {
 int main(int argc, char const *argv[]) {
 
     itime = newclock();
-    istatus = mkstatus();
+    istatus = mkstatus(itime, true);
     isocks = mksocks(port, istatus);
     inet = scan(isocks, itime, istatus);
     ipacketizer = packetize(inet, istatus);

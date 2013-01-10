@@ -186,25 +186,23 @@ static void handle_packets() {
         memset(&ps, 0, sizeof(ps));
         ps.hits = 0;
         ps.status = nst;
-        std::string msg;
+        Message msg;
         bool got_message = false;
         //  If too many messages, drain some, but keep the latest error 
         //  I've seen, if any.
         while (istatus->n_messages() > 10) {
-            std::string msg2;
-            bool is_error = false;
-            istatus->get_message(is_error, msg2);
-            if (is_error) {
+            Message msg2;
+            istatus->get_message(msg2);
+            if (msg2.isError) {
                 msg = msg2;
                 got_message = true;
             }
         }
         if (!got_message) {
-            bool is_error = false;
-            got_message = istatus->get_message(is_error, msg);
+            got_message = istatus->get_message(msg);
         }
         if (got_message) {
-            safecpy(ps.message, msg.c_str());
+            safecpy(ps.message, msg.message.c_str());
         }
         ipackets->respond(R2C_Status, sizeof(ps), &ps);
     }
@@ -212,7 +210,7 @@ static void handle_packets() {
 
 int main(int argc, char const *argv[]) {
     itime = newclock();
-    istatus = mkstatus();
+    istatus = mkstatus(itime, true);
     isocks = mksocks(port, istatus);
     inet = listen(isocks, itime, istatus);
     ipackets = packetize(inet, istatus);

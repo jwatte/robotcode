@@ -67,18 +67,18 @@ bool Fakenet::is_locked() {
 
 
 void Fakestatus::message(std::string const &str) {
-    messages_.push_back(std::pair<bool, std::string>(false, str));
+    messages_.push_back(Message(1, false, str));
 }
 
 void Fakestatus::error(std::string const &str) {
-    messages_.push_back(std::pair<bool, std::string>(true, str));
+    messages_.push_back(Message(1, true, str));
 }
 
 size_t Fakestatus::n_messages() {
     return 0;
 }
 
-bool Fakestatus::get_message(bool &isError, std::string &oMessage) {
+bool Fakestatus::get_message(Message &om) {
     return false;
 }
 

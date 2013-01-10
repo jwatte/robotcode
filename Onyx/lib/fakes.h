@@ -38,9 +38,9 @@ public:
     virtual void message(std::string const &str);
     virtual void error(std::string const &str);
     virtual size_t n_messages();
-    virtual bool get_message(bool &isError, std::string &oMessage);
+    virtual bool get_message(Message &om);
 
-    std::list<std::pair<bool, std::string>> messages_;
+    std::list<Message> messages_;
 };
 
 class Fakesockets : public ISockets {

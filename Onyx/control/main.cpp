@@ -102,7 +102,6 @@ void joystep() {
     }
     struct js_event js;
     for (int i = 0; i < 20; ++i) {
-        joyturn = 0;
         if (read(joyfd, &js, sizeof(js)) < 0) {
             break;
         }
@@ -120,7 +119,7 @@ void joystep() {
                 joyheading = cap(js.value / MAXJOY);
             }
             else if (js.number == AIM_Y_AXIS) {
-                joyturn = cap(js.value / MAXJOY);
+                joyelevate = cap(js.value / MAXJOY);
             }
             else {
                 std::cerr << "axis " << (int)js.number << " value " << js.value << std::endl;;
@@ -146,18 +145,18 @@ void joystep() {
                 }
             }
             else if (js.number == TURN_RIGHT_BUTTON) {
-                joyturn = 1;
+                joyturn = on ? 1 : 0;
             }
             else if (js.number == TURN_LEFT_BUTTON) {
-                joyturn = -1;
+                joyturn = on ? -1 : 0;
             }
             else if (js.number == POSE_UP_BUTTON) {
-                if (joypose < 2) {
+                if (joypose < 2 && on) {
                     ++joypose;
                 }
             }
             else if (js.number == POSE_DOWN_BUTTON) {
-                if (joypose > 0) {
+                if (joypose > 0 && on) {
                     --joypose;
                 }
             }

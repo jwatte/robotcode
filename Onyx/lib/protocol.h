@@ -32,6 +32,8 @@ struct P_SetInput {
     float aimHeading;
     float aimElevation;
     unsigned char pose;
+    //  buttons should increment a counter each time they're pushed,
+    //  to detect button presses even when packets are lost.
 };
 
 struct P_RequestVideo {

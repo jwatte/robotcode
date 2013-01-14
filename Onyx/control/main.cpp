@@ -27,17 +27,24 @@ IPacketizer *ipacketizer;
 bool has_robot = false;
 double last_status_time = 0;
 
-#define TROT_UP_BUTTON 0
-#define TROT_DOWN_BUTTON 1
+#define POSE_UP_BUTTON 0    //  dpad up
+#define POSE_DOWN_BUTTON 1  //  dpad down
+#define TROT_UP_BUTTON 3    //  dpad right
+#define TROT_DOWN_BUTTON 2  //  dpad left
+#define TURN_LEFT_BUTTON 8  //  left shoulder
+#define TURN_RIGHT_BUTTON 9 //  right shoulder
 
-#define SPEED_AXIS 1
-#define TURN_AXIS 0
-#define AIM_X_AXIS 2
-#define AIM_Y_AXIS 3
+#define SPEED_AXIS 1    //  left Y
+#define STRAFE_AXIS 0   //  left X
+#define AIM_X_AXIS 2    //  right X
+#define AIM_Y_AXIS 3    //  right Y
 #define MAXJOY 28000.0f
 
 float joyspeed = 0;
 float joyturn = 0;
+float joystrafe = 0;
+float joyelevate = 0;
+float joyheading = 0;
 int joytrotix = 15;
 
 float const trotvals[22] = {
@@ -94,6 +101,7 @@ void joystep() {
     }
     struct js_event js;
     for (int i = 0; i < 20; ++i) {
+        joyturn = 0;
         if (read(joyfd, &js, sizeof(js)) < 0) {
             break;
         }
@@ -104,12 +112,14 @@ void joystep() {
             if (js.number == SPEED_AXIS) {
                 joyspeed = cap(js.value / - MAXJOY);
             }
-            else if (js.number == TURN_AXIS) {
-                joyturn = cap(js.value / MAXJOY);
+            else if (js.number == STRAFE_AXIS) {
+                joystrafe = cap(js.value / MAXJOY);
             }
             else if (js.number == AIM_X_AXIS) {
+                joyheading = cap(js.value / MAXJOY);
             }
             else if (js.number == AIM_Y_AXIS) {
+                joyturn = cap(js.value / MAXJOY);
             }
             else {
                 std::cerr << "axis " << (int)js.number << " value " << js.value << std::endl;;
@@ -133,6 +143,12 @@ void joystep() {
                         std::cerr << "trot " << trotvals[joytrotix] << std::endl;
                     }
                 }
+            }
+            else if (js.number == TURN_RIGHT_BUTTON) {
+                joyturn = 1;
+            }
+            else if (js.number == TURN_LEFT_BUTTON) {
+                joyturn = -1;
             }
             else {
                 std::cerr << "button " << (int)js.number << " value " << js.value << std::endl;
@@ -233,6 +249,9 @@ int main(int argc, char const *argv[]) {
             seti.trot = trotvals[joytrotix];
             seti.speed = joyspeed;
             seti.turn = joyturn;
+            seti.strafe = joystrafe;
+            seti.aimElevation = joyelevate;
+            seti.aimHeading = joyheading;
             ipacketizer->respond(C2R_SetInput, sizeof(seti), &seti);
         }
         if (!has_robot && now > bc) {

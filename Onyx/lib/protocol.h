@@ -15,10 +15,23 @@ struct P_Connect {
     char pilot[32];
 };
 
+enum {
+    BtnFireA = 0x1,
+    BtnFireB = 0x2,
+};
+enum {
+    PoseCrouch = 0,
+    PoseNormal = 1,
+    PoseTall = 2
+};
 struct P_SetInput {
     float trot;
     float speed;
     float turn;
+    float strafe;
+    float aimHeading;
+    float aimElevation;
+    unsigned char pose;
 };
 
 struct P_RequestVideo {

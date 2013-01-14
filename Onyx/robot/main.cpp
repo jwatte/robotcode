@@ -58,25 +58,29 @@ const float height_above_ground = 80;
 float ctl_trot = 1.5f;
 float ctl_speed = 0;
 float ctl_turn = 0;
+float ctl_strafe = 0;
+float ctl_heading = 0;
+float ctl_elevation = 0;
+unsigned char ctl_pose = 1;
 
-void poseleg(ServoSet &ss, int leg, float step, float speed) {
+void poseleg(ServoSet &ss, int leg, float step, float speed, float strafe, float deltaPose) {
     float dx = 0, dy = 0, dz = 0;
     if (step < 50) {    //  front-to-back
-        dx = 0;
+        dx = (100 - 4 * step) * strafe;
         dy = (100 - 4 * step) * speed;
         dz = 0;
     }
     else {  //  lifted, back-to-front
-        dx = 0;
+        dx = (step * 4 - 300) * strafe;
         dy = (step * 4 - 300) * speed;
         dz = sinf((step - 50) * M_PI / 50) * lift;
-        if (fabsf(speed) < 0.1) {
+        if (std::max(fabsf(speed), fabsf(strafe)) < 0.1) {
             dz = dz * 10 * fabsf(speed);
         }
     }
     float xpos = lparam.center_x + lparam.first_length + lparam.second_length;
     float ypos = lparam.center_y + lparam.first_length;
-    float zpos = -height_above_ground;
+    float zpos = -height_above_ground - deltaPose;
     if (leg & 1) {
         xpos = -xpos;
     }
@@ -98,15 +102,15 @@ void poseleg(ServoSet &ss, int leg, float step, float speed) {
     ss.id(leg * 3 + 3).set_goal_position(lp.c);
 }
 
-void poselegs(ServoSet &ss, float step, float speed, float turn) {
+void poselegs(ServoSet &ss, float step, float speed, float turn, float strafe, float deltaPose) {
     float step50 = step + 50;
     if (step50 >= 100) {
         step50 -= 100;
     }
-    poseleg(ss, 0, step, cap(speed + turn));
-    poseleg(ss, 1, step50, cap(speed - turn));
-    poseleg(ss, 2, step50, cap(speed + turn));
-    poseleg(ss, 3, step, cap(speed - turn));
+    poseleg(ss, 0, step, cap(speed + turn), strafe, deltaPose);
+    poseleg(ss, 1, step50, cap(speed - turn), strafe, deltaPose);
+    poseleg(ss, 2, step50, cap(speed + turn), strafe, deltaPose);
+    poseleg(ss, 3, step, cap(speed - turn), strafe, deltaPose);
 }
 
 
@@ -129,6 +133,10 @@ static void handle_setinput(P_SetInput const &psi) {
     ctl_trot = psi.trot;
     ctl_speed = psi.speed;
     ctl_turn = psi.turn;
+    ctl_strafe = psi.strafe;
+    ctl_heading = psi.aimHeading;
+    ctl_elevation = psi.aimElevation;
+    ctl_pose = psi.pose;
 }
 
 static void handle_requestvideo(P_RequestVideo const &prv) {
@@ -225,6 +233,7 @@ int main(int argc, char const *argv[]) {
     double thetime = 0, prevtime = 0;
     float step = 0;
     float prevspeed = 0;
+    float prevstrafe = 0;
     while (true) {
         ipackets->step();
         handle_packets();
@@ -232,11 +241,13 @@ int main(int argc, char const *argv[]) {
         float dt = thetime - prevtime;
         float use_trot = ctl_trot;
         float use_speed = ctl_speed;
-        float use_turn = ctl_turn;
+        float use_turn = cap(ctl_turn + ctl_heading);
+        float use_strafe = ctl_strafe;
         if (ss.torque_pending()) {
             use_speed = 0;
             use_trot = 0;
             use_turn = 0;
+            use_strafe = 0;
         }
         if (dt >= 0.01) {
             //  don't fall more than 0.1 seconds behind, else catch up in one swell foop
@@ -262,8 +273,15 @@ int main(int argc, char const *argv[]) {
             else if (use_speed < prevspeed) {
                 use_speed = std::max(prevspeed - dt * SPEED_SLEW, use_speed);
             }
+            if (use_strafe > prevstrafe) {
+                use_strafe = std::min(prevstrafe + dt * SPEED_SLEW, use_strafe);
+            }
+            else if (use_strafe < prevstrafe) {
+                use_strafe = std::max(prevstrafe - dt * SPEED_SLEW, use_strafe);
+            }
             prevspeed = use_speed;
-            poselegs(ss, step, use_speed, -use_turn);
+            prevstrafe = use_strafe;
+            poselegs(ss, step, use_speed, -use_turn, use_strafe, ctl_pose * 30 - 30);
         }
         ss.step();
         if (ss.queue_depth() > 30) {

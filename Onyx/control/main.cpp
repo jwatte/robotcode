@@ -45,6 +45,7 @@ float joyturn = 0;
 float joystrafe = 0;
 float joyelevate = 0;
 float joyheading = 0;
+int joypose = 1;
 int joytrotix = 15;
 
 float const trotvals[22] = {
@@ -150,6 +151,16 @@ void joystep() {
             else if (js.number == TURN_LEFT_BUTTON) {
                 joyturn = -1;
             }
+            else if (js.number == POSE_UP_BUTTON) {
+                if (joypose < 2) {
+                    ++joypose;
+                }
+            }
+            else if (js.number == POSE_DOWN_BUTTON) {
+                if (joypose > 0) {
+                    --joypose;
+                }
+            }
             else {
                 std::cerr << "button " << (int)js.number << " value " << js.value << std::endl;
             }
@@ -252,6 +263,7 @@ int main(int argc, char const *argv[]) {
             seti.strafe = joystrafe;
             seti.aimElevation = joyelevate;
             seti.aimHeading = joyheading;
+            seti.pose = joypose;
             ipacketizer->respond(C2R_SetInput, sizeof(seti), &seti);
         }
         if (!has_robot && now > bc) {

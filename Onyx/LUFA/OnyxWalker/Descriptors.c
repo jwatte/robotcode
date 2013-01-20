@@ -1,3 +1,4 @@
+#include "Config.h"
 #include "Descriptors.h"
 
 const USB_Descriptor_Device_t PROGMEM DeviceDescriptor =
@@ -10,10 +11,10 @@ const USB_Descriptor_Device_t PROGMEM DeviceDescriptor =
 	.Class                  = USB_CSCP_VendorSpecificClass,
 	.SubClass               = USB_CSCP_NoDeviceSubclass,
 	.Protocol               = USB_CSCP_NoDeviceProtocol,
-	.Endpoint0Size          = ENDPOINT_CONTROLEP_DEFAULT_SIZE,
+	.Endpoint0Size          = FIXED_CONTROL_ENDPOINT_SIZE,
 	.VendorID               = 0xf000,
 	.ProductID              = 0x0002,
-	.ReleaseNumber          = VERSION_BCD(01.01),
+	.ReleaseNumber          = VERSION_BCD(01.02),
 	.ManufacturerStrIndex   = 0x01,
 	.ProductStrIndex        = 0x02,
 	.SerialNumStrIndex      = USE_INTERNAL_SERIAL,

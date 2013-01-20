@@ -110,7 +110,7 @@ void Camera::step() {
     boost::system_time nuTime = boost::get_system_time();
     boost::posix_time::time_duration delta = nuTime - lastStepTime_;
     lastStepTime_ = nuTime;
-    fpsStep_ = fpsStep_ * 0.75 + 0.25 * 1000000.0 / std::max(delta.total_microseconds(), 1L);
+    fpsStep_ = fpsStep_ * 0.75 + 0.25 * 1000000.0 / std::max((long long)delta.total_microseconds(), 1LL);
     if (imageGrabbed_.nonblocking_available()) {
         imageGrabbed_.acquire();
         imageProperty_->set(forGrabbing_[nextImgToDisplay_]);
@@ -174,7 +174,7 @@ void Camera::process() {
             boost::system_time nuTime = boost::get_system_time();
             boost::posix_time::time_duration delta = nuTime - lastTime_;
             lastTime_ = nuTime;
-            double instant = 1000000.0 / std::max(delta.total_microseconds(), 1L);
+            double instant = 1000000.0 / std::max((long long)delta.total_microseconds(), 1LL);
             //  quick hack to make the FPS update smoother at high rates and 
             //  less laggy at lower rates. I don't feel like working out the 
             //  exp math to make it constant sleew rate over time.

@@ -36,7 +36,7 @@ int main(int argc, char const *argv[]) {
     pm.find_areas_of_color(Area(0, 0, pm.width, pm.height), the_color, 
         tolerance, normalization, pm.width*pm.height/10000 + 2, areas);
     Color complement(the_color.complement());
-    fprintf(stderr, "%ld orange clusters\n", areas.size());
+    fprintf(stderr, "%ld orange clusters\n", (long)areas.size());
     for (size_t i = 0, n = areas.size(); i != n; ++i) {
         Area a(areas[i].area);
         if (a.left > 0) {
@@ -61,7 +61,7 @@ int main(int argc, char const *argv[]) {
     pm.find_areas_of_color(Area(0, 0, pm.width, pm.height), the_color2, 
         tolerance, normalization, pm.width*pm.height/10000 + 2, areas);
     complement = the_color2.complement();
-    fprintf(stderr, "%ld yellow clusters\n", areas.size());
+    fprintf(stderr, "%ld yellow clusters\n", (long)areas.size());
     for (size_t i = 0, n = areas.size(); i != n; ++i) {
         Area a(areas[i].area);
         if (a.left > 0) {

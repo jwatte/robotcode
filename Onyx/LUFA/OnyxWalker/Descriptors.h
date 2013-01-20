@@ -3,6 +3,8 @@
 
 #include <avr/pgmspace.h>
 #include <LUFA/Drivers/USB/USB.h>
+#include "AppConfig.h"
+#include "LUFAConfig.h"
 
 //  IN direction
 #define DATA_RX_EPNUM        1
@@ -18,11 +20,13 @@ typedef struct {
     USB_Descriptor_Endpoint_t                DATA_DataOutEndpoint;
 } USB_Descriptor_Configuration_t;
 
+/*
 uint16_t CALLBACK_USB_GetDescriptor(
         const uint16_t wValue,
         const uint8_t wIndex,
         const void** const DescriptorAddress)
     ATTR_WARN_UNUSED_RESULT ATTR_NON_NULL_PTR_ARG(3);
+ */
 
 #endif
 

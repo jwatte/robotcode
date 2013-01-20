@@ -1,9 +1,9 @@
 
+#include "Config.h"
+#include <LUFA/Drivers/USB/USB.h>
 #include "OnyxWalker.h"
 #include <avr/io.h>
 #include <util/atomic.h>
-
-#include "my32u4.h"
 
 #define EMPTY_IN_TIMEOUT 500
 
@@ -151,15 +151,23 @@ void EVENT_USB_Device_ConfigurationChanged(void) {
     Reconfig();
 }
 
+void EVENT_USB_Device_Reset(void) {
+    Reconfig();
+}
+
 void Reconfig() {
     bool ConfigSuccess = true;
 
-    ConfigSuccess &= Endpoint_ConfigureEndpoint(DATA_RX_EPNUM,
-        EP_TYPE_BULK, ENDPOINT_DIR_IN, DATA_RX_EPSIZE,
-        ENDPOINT_BANK_DOUBLE);
-    ConfigSuccess &= Endpoint_ConfigureEndpoint(DATA_TX_EPNUM,
-        EP_TYPE_BULK, ENDPOINT_DIR_OUT, DATA_TX_EPSIZE,
-        ENDPOINT_BANK_SINGLE);
+    ConfigSuccess &= Endpoint_ConfigureEndpoint(
+	DATA_RX_EPNUM,
+        EP_TYPE_BULK, 
+	DATA_RX_EPSIZE,
+        2);
+    ConfigSuccess &= Endpoint_ConfigureEndpoint(
+	DATA_TX_EPNUM,
+        EP_TYPE_BULK, 
+	DATA_TX_EPSIZE,
+        1);
 
     if (!ConfigSuccess) {
         while (true) {

@@ -1,6 +1,9 @@
 #if !defined(my32u4_h)
 #define my32u4_h
 
+#include "AppConfig.h"
+#include "LUFAConfig.h"
+
 #define BRATE_9600 3    //  really, 1/2 Mbps
 #define BRATE_57600 2   //  really, 2/3 Mbps
 #define BRATE_1000000 1

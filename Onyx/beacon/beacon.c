@@ -6,10 +6,20 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 
 unsigned short port = 10169;
 
+volatile int alarmed = 0;
+
+void on_alarm(int sig) {
+	alarmed = 1;
+}
+
 int main() {
+
+rebind:
+	signal(SIGALRM, &on_alarm);
 	int sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0) {
 		perror("socket");
@@ -29,11 +39,19 @@ int main() {
 		perror("bind");
 		exit(1);
 	}
+	memset(&sin.sin_addr, 0xff, sizeof(sin.sin_addr));
+	int r = sendto(sock, "hereami", 7, 0, 
+		(struct sockaddr *)&sin, sizeof(sin));
+	if (r < 0) {
+		perror("sendto");
+		exit(1);
+	}
 
 	while (1) {
 		struct sockaddr from;
 		char buf[1024];
 		socklen_t slen = sizeof(from);
+		alarm(400);
 		int r = recvfrom(sock, buf, 1024, 0, &from, &slen);
 		if (r == 8 && !strncmp(buf, "discover", 8)) {
 			r = sendto(sock, "here", 4, 0, &from, slen);
@@ -42,8 +60,15 @@ int main() {
 			}
 		}
 		else if (r < 0) {
-			perror("recvfrom");
-			exit(1);
+			if (!alarmed) {
+				perror("recvfrom");
+				exit(1);
+			}
+			//	rebind, in case a new interface came up
+			alarmed = 0;
+			close(sock);
+			sock = -1;
+			goto rebind;
 		}
 	}
 

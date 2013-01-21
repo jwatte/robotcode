@@ -25,6 +25,8 @@ static void alarm_handler(int sig) {
 }
 
 int main() {
+
+again:
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0) {
 		perror("socket");
@@ -39,6 +41,7 @@ int main() {
 	struct sockaddr_in sin = { 0 };
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons(port);
+    memset(&sin.sin_addr, 0xff, sizeof(sin.sin_addr));
 	int w = sendto(sock, "discover", 8, 0, (struct sockaddr *)&sin, sizeof(sin));
 	if (w != 8) {
 		perror("sendto");
@@ -53,6 +56,10 @@ int main() {
 		fprintf(stdout, "%s\n", ipaddr(&sin));
 	}
 	else if (r < 0) {
+        int rn = errno;
+        if (rn == 9) {  //  no such socket -- alarm
+            goto again;
+        }
 		perror("recvfrom");
 		exit(2);
 	}

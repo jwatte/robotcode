@@ -10,6 +10,13 @@
 
 unsigned short port = 10169;
 
+static char const *ipaddr(struct sockaddr_in const *sin) {
+	static char ret[32];
+	unsigned char const *addr = (unsigned char const *)&sin->sin_addr;
+	sprintf(ret, "%d.%d.%d.%d", addr[0], addr[1], addr[2], addr[3]);
+	return ret;
+}
+
 volatile int alarmed = 0;
 
 void on_alarm(int sig) {
@@ -70,6 +77,14 @@ rebind:
 			sock = -1;
 			goto rebind;
 		}
+        else {
+            if (r > 30) {
+                r = 30;
+            }
+            buf[r] = 0;
+            fprintf(stderr, "unknown msg: %s from %s\n", buf, ipaddr(
+                (struct sockaddr_in const *)&from));
+        }
 	}
 
 	return 0;

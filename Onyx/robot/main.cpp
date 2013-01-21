@@ -230,14 +230,21 @@ int main(int argc, char const *argv[]) {
     }
     ss.set_torque(900); //  not quite top torque
 
-    double thetime = 0, prevtime = 0;
+    double thetime = 0, prevtime = 0, intime = read_clock();
     float step = 0;
     float prevspeed = 0;
     float prevstrafe = 0;
+    double frames = 0;
     while (true) {
         ipackets->step();
         handle_packets();
         thetime = read_clock();
+        frames = frames + 1;
+        if (thetime - intime > 20) {
+            fprintf(stderr, "fps: %.1f\n", frames / (thetime - intime));
+            frames = 0;
+            intime = thetime;
+        }
         float dt = thetime - prevtime;
         float use_trot = ctl_trot;
         float use_speed = ctl_speed;

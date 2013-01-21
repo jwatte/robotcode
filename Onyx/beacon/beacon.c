@@ -65,7 +65,9 @@ rebind:
 			if (r < 0) {
 				perror("sendto");
 			}
-		}
+            fprintf(stderr, "response to %s\n", ipaddr(
+                (struct sockaddr_in const *)&from));
+   		}
 		else if (r < 0) {
 			if (!alarmed) {
 				perror("recvfrom");

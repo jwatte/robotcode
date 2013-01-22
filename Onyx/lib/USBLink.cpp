@@ -2,6 +2,7 @@
 #include "USBLink.h"
 #include "Settings.h"
 #include "PropertyImpl.h"
+#include "util.h"
 #include <libusb.h>
 #include <boost/bind.hpp>
 #include <stdexcept>
@@ -34,6 +35,13 @@ public:
         outQueueDepth_(0),
         outRetrying_(false),
         complained_(false) {
+
+        memset(dd_out, 0, sizeof(dd_out));
+        dn_out = 0;
+        dm_out = 0;
+        memset(dd_in, 0, sizeof(dd_in));
+        dn_in = 0;
+        dm_in = 0;
 
         boost::unique_lock<boost::mutex> lock(lock_);
         start_in_inner();
@@ -97,6 +105,13 @@ public:
         }
     }
 
+    double dd_out[16];
+    int dn_out;
+    int dm_out;
+    double dd_in[16];
+    int dn_in;
+    int dm_in;
+
 private:
     //  must be called with lock held
     void start_out_inner() {
@@ -111,6 +126,8 @@ private:
     }
 
     void start_out_xfer() {
+        dd_out[dn_out++ & 0xf] = read_clock();
+
         memset(outXfer_, 0, sizeof(*outXfer_));
         outXfer_->dev_handle = dh_;
         libusb_fill_bulk_transfer(outXfer_, dh_, oep_, outPack_->buffer(), outPack_->size(),
@@ -144,6 +161,12 @@ private:
 
     void out_complete() {
         #if WRITE_USB
+        double t = read_clock();
+        t -= dd_out[dm_out++ & 0xf];
+        if (t > 0.1) {
+            fprintf(stderr, "out %.4f\n", t);
+        }
+
         if (outXfer_->status != LIBUSB_TRANSFER_COMPLETED) {
             std::cerr << "out transfer status: " << outXfer_->status << std::endl;
         }
@@ -165,6 +188,7 @@ private:
     //  must be called with lock held
     void start_in_inner() {
         if (!inPack_) {
+            dd_in[dn_in++ & 0xf] = read_clock();
             inPack_ = Packet::create();
             memset(inXfer_, 0, sizeof(*inXfer_));
             inXfer_->dev_handle = dh_;
@@ -188,6 +212,12 @@ private:
     }
 
     void in_complete() {
+        double t = read_clock();
+        t -= dd_in[dm_in++ & 0xf];
+        if (t > 0.1) {
+            fprintf(stderr, "in %.4f\n", t);
+        }
+
         if (inXfer_->status != LIBUSB_TRANSFER_COMPLETED) {
             std::cerr << "in transfer status: " << inXfer_->status << std::endl;
         }

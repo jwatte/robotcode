@@ -5,7 +5,7 @@
 #include <avr/io.h>
 #include <util/atomic.h>
 
-#define EMPTY_IN_TIMEOUT 500
+#define EMPTY_IN_TIMEOUT 16
 
 
 #define CMD_RAW_MODE 0x01

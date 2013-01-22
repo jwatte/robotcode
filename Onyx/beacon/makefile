@@ -1,11 +1,12 @@
 
+CFLAGS:=-std=gnu11 -ggdb -Wall -Werror
+CC:=gcc
+LFLAGS:=-lm -ggdb
+
 all:	../bld/obj/beacon ../bld/obj/probe
 
-../bld/obj/beacon:	beacon.c
-	gcc -o ../bld/obj/beacon beacon.c -ggdb -Wall -Werror
+../bld/obj/%:	%.c
+	$(CC) -o $@ $(CFLAGS) $(LFLAGS) $<
 
-../bld/obj/probe:	probe.c
-	gcc -o ../bld/obj/probe probe.c -ggdb -Wall -Werror
-
-../bld/obj/clean:
+clean:
 	rm ../bld/obj/beacon ../bld/obj/probe

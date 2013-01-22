@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <signal.h>
+#include <sys/select.h>
 
 unsigned short port = 10169;
 
@@ -19,10 +20,6 @@ static char const *ipaddr(struct sockaddr_in const *sin) {
 }
 
 int sock = -1;
-
-static void alarm_handler(int sig) {
-	close(sock);
-}
 
 int main() {
 
@@ -38,35 +35,39 @@ again:
 		perror("sockopt broadcast");
 		exit(1);
 	}
-	struct sockaddr_in sin = { 0 };
-	sin.sin_family = AF_INET;
-	sin.sin_port = htons(port);
-    memset(&sin.sin_addr, 0xff, sizeof(sin.sin_addr));
-	int w = sendto(sock, "discover", 8, 0, (struct sockaddr *)&sin, sizeof(sin));
-	if (w != 8) {
-		perror("sendto");
-		exit(2);
-	}
-	char buf[1024];
-	socklen_t slen = sizeof(sin);
-	signal(SIGALRM, &alarm_handler);
-	alarm(1);
-	int r = recvfrom(sock, buf, 1024, 0, (struct sockaddr *)&sin, &slen);
-	if (r == 4 && !strncmp(buf, "here", 4)) {
-		fprintf(stdout, "%s\n", ipaddr(&sin));
-	}
-	else if (r < 0) {
-        int rn = errno;
-        if (rn == 9) {  //  no such socket -- alarm
-            goto again;
+    for (int i = 0; i < 10; ++i) {
+        struct sockaddr_in sin = { 0 };
+        sin.sin_family = AF_INET;
+        sin.sin_port = htons(port);
+        memset(&sin.sin_addr, 0xff, sizeof(sin.sin_addr));
+        int w = sendto(sock, "discover", 8, 0, (struct sockaddr *)&sin, sizeof(sin));
+        if (w != 8) {
+            perror("sendto");
+            exit(2);
         }
-		perror("recvfrom");
-		exit(2);
-	}
-	else {
-		fprintf(stderr, "unknown response from %s\n", ipaddr(&sin));
-		exit(2);
-	}
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(sock, &fds);
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 100000;
+        while (select(sock+1, &fds, 0, 0, &tv) > 0) {
+            char buf[1024];
+            socklen_t slen = sizeof(sin);
+            int r = recvfrom(sock, buf, 1024, 0, (struct sockaddr *)&sin, &slen);
+            if (r == 4 && !strncmp(buf, "here", 4)) {
+                fprintf(stdout, "%s\n", ipaddr(&sin));
+            }
+            else if (r < 0) {
+                perror("recvfrom");
+                exit(2);
+            }
+            else {
+                fprintf(stderr, "unknown response from %s\n", ipaddr(&sin));
+            }
+        }
+    }
+    goto again;
 	return 0;
 }
 

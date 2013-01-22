@@ -45,7 +45,7 @@ float joyturn = 0;
 float joystrafe = 0;
 float joyelevate = 0;
 float joyheading = 0;
-int joypose = 1;
+int joypose = 3;    //  0 .. 6
 int joytrotix = 15;
 
 float const trotvals[22] = {
@@ -151,7 +151,7 @@ void joystep() {
                 joyturn = on ? -1 : 0;
             }
             else if (js.number == POSE_UP_BUTTON) {
-                if (joypose < 2 && on) {
+                if (joypose < 6 && on) {
                     ++joypose;
                 }
             }

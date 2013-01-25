@@ -11,6 +11,9 @@
 #include "ServoSet.h"
 #include "IK.h"
 #include "util.h"
+#include "Camera.h"
+#include "Settings.h"
+#include "Image.h"
 #include <iostream>
 #include <sstream>
 #include <time.h>
@@ -52,7 +55,8 @@ static const initinfo init[] = {
 
 static unsigned char nst = 0;
 
-#define SPEED_SLEW 2.0f
+#define SPEED_SLEW 1.0f
+#define HEIGHT_SLEW 100.0f
 
 const float stride = 200;
 const float lift = 40;
@@ -64,7 +68,7 @@ float ctl_turn = 0;
 float ctl_strafe = 0;
 float ctl_heading = 0;
 float ctl_elevation = 0;
-unsigned char ctl_pose = 1;
+unsigned char ctl_pose = 3;
 
 void poseleg(ServoSet &ss, int leg, float step, float speed, float strafe, float deltaPose) {
     float dx = 0, dy = 0, dz = 0;
@@ -222,6 +226,27 @@ static void handle_packets() {
     }
 }
 
+class ImageListener : public Listener {
+public:
+    ImageListener(boost::shared_ptr<Property> const &prop) :
+        prop_(prop),
+        dirty_(true)
+    {
+    }
+    void on_change() {
+        image_ = prop_->get<boost::shared_ptr<Image>>();
+        dirty_ = true;
+    }
+    bool check_and_clear() {
+        bool ret = dirty_;
+        dirty_ = false;
+        return ret;
+    }
+    boost::shared_ptr<Property> prop_;
+    boost::shared_ptr<Image> image_;
+    bool dirty_;
+};
+
 int main(int argc, char const *argv[]) {
     itime = newclock();
     istatus = mkstatus(itime, true);
@@ -236,12 +261,24 @@ int main(int argc, char const *argv[]) {
     }
     ss.set_torque(900); //  not quite top torque
 
+    boost::shared_ptr<Settings> settings(Settings::load("onyx.json"));
+    boost::shared_ptr<Module> camera(Camera::open(settings->get_value("camera")));
+    boost::shared_ptr<Property> image(camera->get_property_named("image"));
+    boost::shared_ptr<ImageListener> image_listener(new ImageListener(image));
+    image->add_listener(image_listener);
+
     double thetime = 0, prevtime = 0, intime = read_clock();
     float step = 0;
     SlewRateInterpolator<float> i_speed(0, SPEED_SLEW, 1, intime);
     SlewRateInterpolator<float> i_strafe(0, SPEED_SLEW, 1, intime);
+    SlewRateInterpolator<float> i_turn(0, SPEED_SLEW, 1, intime);
+    SlewRateInterpolator<float> i_height(0, HEIGHT_SLEW, 1, intime);
     double frames = 0;
     while (true) {
+        camera->step();
+        if (image_listener->check_and_clear()) {
+            //  todo: send an image, if requested!
+        }
         ipackets->step();
         handle_packets();
         thetime = read_clock();
@@ -252,19 +289,28 @@ int main(int argc, char const *argv[]) {
             intime = thetime;
         }
         float dt = thetime - prevtime;
-        i_speed.setTime(thetime);
-        i_strafe.setTime(thetime);
         float use_trot = ctl_trot;
-        float use_speed = i_speed.get();
+        float use_speed = ctl_speed;
         float use_turn = cap(ctl_turn + ctl_heading);
-        float use_strafe = i_strafe.get();
+        float use_strafe = ctl_strafe;
         if (ss.torque_pending()) {
             use_speed = 0;
             use_trot = 0;
             use_turn = 0;
             use_strafe = 0;
         }
-        if (dt >= 0.01) {
+
+        i_speed.setTarget(use_speed);
+        i_strafe.setTarget(use_strafe);
+        i_turn.setTarget(use_turn);
+        i_height.setTarget(ctl_pose * 25.0 - 50.0);
+
+        if (dt >= 0.007) {
+            i_speed.setTime(thetime);
+            i_strafe.setTime(thetime);
+            i_turn.setTime(thetime);
+            i_height.setTime(thetime);
+
             //  don't fall more than 0.1 seconds behind, else catch up in one swell foop
             if (dt < 0.1f) {
                 step += dt * 100 * use_trot;
@@ -282,7 +328,10 @@ int main(int argc, char const *argv[]) {
             while (step < 0) {
                 step += 100;
             }
-            poselegs(ss, step, use_speed, -use_turn, use_strafe, ctl_pose * 30 - 30);
+            if (i_height.get() == 0 && i_speed.get() == 0 && i_turn.get() == 0 && i_strafe.get() == 0) {
+                step = 0;
+            }
+            poselegs(ss, step, i_speed.get(), -i_turn.get(), i_strafe.get(), i_height.get());
         }
         ss.step();
         if (ss.queue_depth() > 30) {

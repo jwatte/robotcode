@@ -47,19 +47,42 @@ public:
 };
 
 template<typename T>
-class SlewRateInterpolator :
-    public TimeInterpolator<T> {
+class SlewRateInterpolator {
 public:
     SlewRateInterpolator(T t, T slewRate, double slewTime, double now) :
-        TimeInterpolator<T>(t, now),
-        slew_((double)slewTime / (double)slewRate)
+        value_(t),
+        target_(t),
+        timeNow_(now),
+        slew_((double)slewRate / (double)slewTime)
     {
     }
-    void setTarget(T val)
-    {
-        double dt = fabs((double)(val - TimeInterpolator<T>::value_) / slew_);
-        setTarget(val, TimeInterpolator<T>::nowTime_ + dt);
+    void setTarget(T val) {
+        target_ = val;
     }
+    void setTime(double t) {
+        double dt = t - timeNow_;
+        timeNow_ = t;
+        if (dt < 0 || dt > 1) {
+            value_ = target_;
+        }
+        else {
+            if (value_ > target_ + slew_ * dt) {
+                value_ = value_ - slew_ * dt;
+            }
+            else if (value_ < target_ - slew_ * dt) {
+                value_ = value_ + slew_ * dt;
+            }
+            else {
+                value_ = target_;
+            }
+        }
+    }
+    T get() const {
+        return value_;
+    }
+    T value_;
+    T target_;
+    double timeNow_;
     double slew_;
 };
 

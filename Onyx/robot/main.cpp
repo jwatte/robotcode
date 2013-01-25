@@ -4,12 +4,15 @@
 #include "istatus.h"
 #include "protocol.h"
 #include "util.h"
+#include "Interpolator.h"
+
 #include <assert.h>
 
 #include "ServoSet.h"
 #include "IK.h"
 #include "util.h"
 #include <iostream>
+#include <sstream>
 #include <time.h>
 #include <string.h>
 
@@ -92,10 +95,13 @@ void poseleg(ServoSet &ss, int leg, float step, float speed, float strafe, float
     zpos += dz;
     legpose lp;
     if (!solve_leg(legs[leg], xpos, ypos, zpos, lp)) {
-        std::cerr << "Could not solve leg: " << leg << " step " << step
+        std::stringstream ss;
+        ss << "Could not solve leg: " << leg << " step " << step
             << " speed " << speed << " xpos " << xpos << " ypos " << ypos
-            << " zpos " << zpos << std::endl;
-        abort();
+            << " zpos " << zpos;
+        static std::string mstr[4];
+        mstr[leg] = ss.str();
+        istatus->error(mstr[leg].c_str());
     }
     ss.id(leg * 3 + 1).set_goal_position(lp.a);
     ss.id(leg * 3 + 2).set_goal_position(lp.b);
@@ -232,8 +238,8 @@ int main(int argc, char const *argv[]) {
 
     double thetime = 0, prevtime = 0, intime = read_clock();
     float step = 0;
-    float prevspeed = 0;
-    float prevstrafe = 0;
+    SlewRateInterpolator<float> i_speed(0, SPEED_SLEW, 1, intime);
+    SlewRateInterpolator<float> i_strafe(0, SPEED_SLEW, 1, intime);
     double frames = 0;
     while (true) {
         ipackets->step();
@@ -246,10 +252,12 @@ int main(int argc, char const *argv[]) {
             intime = thetime;
         }
         float dt = thetime - prevtime;
+        i_speed.setTime(thetime);
+        i_strafe.setTime(thetime);
         float use_trot = ctl_trot;
-        float use_speed = ctl_speed;
+        float use_speed = i_speed.get();
         float use_turn = cap(ctl_turn + ctl_heading);
-        float use_strafe = ctl_strafe;
+        float use_strafe = i_strafe.get();
         if (ss.torque_pending()) {
             use_speed = 0;
             use_trot = 0;
@@ -274,20 +282,6 @@ int main(int argc, char const *argv[]) {
             while (step < 0) {
                 step += 100;
             }
-            if (use_speed > prevspeed) {
-                use_speed = std::min(prevspeed + dt * SPEED_SLEW, use_speed);
-            }
-            else if (use_speed < prevspeed) {
-                use_speed = std::max(prevspeed - dt * SPEED_SLEW, use_speed);
-            }
-            if (use_strafe > prevstrafe) {
-                use_strafe = std::min(prevstrafe + dt * SPEED_SLEW, use_strafe);
-            }
-            else if (use_strafe < prevstrafe) {
-                use_strafe = std::max(prevstrafe - dt * SPEED_SLEW, use_strafe);
-            }
-            prevspeed = use_speed;
-            prevstrafe = use_strafe;
             poselegs(ss, step, use_speed, -use_turn, use_strafe, ctl_pose * 30 - 30);
         }
         ss.step();

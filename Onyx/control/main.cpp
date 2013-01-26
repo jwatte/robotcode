@@ -4,6 +4,8 @@
 #include "inetwork.h"
 #include "util.h"
 #include "protocol.h"
+#include "gui.h"
+#include "Image.h"
 #include <iostream>
 #include <boost/lexical_cast.hpp>
 #include <stdio.h>
@@ -29,6 +31,7 @@ IPacketizer *ipacketizer;
 
 bool has_robot = false;
 double last_status_time = 0;
+int hitpoints = 21;
 
 #define POSE_UP_BUTTON 0    //  dpad up
 #define POSE_DOWN_BUTTON 1  //  dpad down
@@ -191,16 +194,28 @@ void do_status(P_Status const *status) {
         has_robot = true;
     }
     last_status_time = itime->now();
+    hitpoints = status->hits;
+    /*
     istatus->message(std::string("Status: hits=") + boost::lexical_cast<std::string>((int)status->hits)
         + " status=" + hexnum(status->status) + " message=" + status->message);
+     */
 }
 
+boost::shared_ptr<Image> last_image;
+unsigned short last_image_seq;
+
 void do_videoframe(P_VideoFrame const *videoframe, size_t size) {
+    /*
     istatus->message(std::string("Video frame: serial=") +
         boost::lexical_cast<std::string>((int)videoframe->serial) +
         ", width=" + boost::lexical_cast<std::string>((int)videoframe->width) +
         ", height=" + boost::lexical_cast<std::string>((int)videoframe->height) +
         ", size=" + boost::lexical_cast<std::string>(size));
+     */
+    last_image = boost::shared_ptr<Image>(new Image());
+    void *d = last_image->alloc_compressed(size - sizeof(P_VideoFrame), true);
+    memcpy(d, &videoframe[1], size - sizeof(P_VideoFrame));
+    last_image->complete_compressed(size - sizeof(P_VideoFrame));
 }
 
 void dispatch(unsigned char type, size_t size, void const *data) {
@@ -241,6 +256,7 @@ void scan_for_robots() {
 }
 
 double last_vf_request;
+static GuiState gs;
 
 int main(int argc, char const *argv[]) {
 
@@ -251,6 +267,8 @@ int main(int argc, char const *argv[]) {
     ipacketizer = packetize(inet, istatus);
 
     joyopen();
+
+    open_gui(gs, itime);
 
     double then = itime->now();
     double bc = 0;
@@ -300,6 +318,12 @@ int main(int argc, char const *argv[]) {
         while (ipacketizer->receive(type, size, data)) {
             dispatch(type, size, data);
         }
+        gs.image = last_image;
+        gs.trot = trotvals[joytrotix];
+        gs.pose = joypose;
+        gs.hitpoints = hitpoints;
+        update_gui(gs);
+        step_gui();
     }
 
     return 1;

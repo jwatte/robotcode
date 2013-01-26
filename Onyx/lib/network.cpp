@@ -274,13 +274,14 @@ void Network::check_senders(double now) {
 void Network::check_packets(double now) {
     //  time out packets that have not received fragments for X seconds
     for (auto ptr(receivers_.begin()), end(receivers_.end()); ptr != end; ++ptr) {
-        auto fcs((*ptr).second->fragments_);
+        auto &fcs((*ptr).second->fragments_);
         auto x(fcs.begin()), y(fcs.end()), d(y);
         while (x != y) {
             d = x;
             ++x;
             if (now - (*d).lastTime_ > packet_timeout) {
-                status_->message("Timeout waiting for fragments from " + ipaddr((*ptr).first));
+                status_->message("Timeout waiting for fragments from " + ipaddr((*ptr).first) +
+                    " seq " + boost::lexical_cast<std::string>((int)(*d).seq_));
                 int nmissed = 0;
                 for (auto fp((*d).fragments_.begin()), fe((*d).fragments_.end()); 
                     fp != fe; ++fp) {
@@ -354,8 +355,7 @@ void Network::incoming_fragment(sockaddr_in const &from, boost::shared_ptr<fragm
     }
     receive_info &ri(*(*ptr).second);
     auto &rfc(ri.fragments_);
-    for (auto ptr(rfc.begin()), end(rfc.end());
-            ptr != end; ++ptr) {
+    for (auto ptr(rfc.begin()), end(rfc.end()); ptr != end; ++ptr) {
         if ((*ptr).seq_ == seq) {
             auto &pf((*ptr).fragments_);
             if (pf.size() != cnt) {

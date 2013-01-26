@@ -132,6 +132,7 @@ public:
     virtual void lock_address(double timeout);
     virtual void unlock_address();
     virtual bool is_locked();
+    virtual bool check_clear_overflow();
 
     Network(ISockets *socks, ITime *time, IStatus *status, bool useB);
     ~Network();
@@ -159,6 +160,7 @@ private:
     sockaddr_in remoteAddr_;
     bool locked_;
     bool broadcastOk_;
+    bool overflow_;
     double lockTimeout_;
     double lastLockReceiveTime_;
 };
@@ -172,6 +174,7 @@ Network::Network(ISockets *socks, ITime *time, IStatus *status, bool canB) {
     memset(&remoteAddr_, 0, sizeof(remoteAddr_));
     locked_ = false;
     broadcastOk_ = canB;
+    overflow_ = false;
     lockTimeout_ = 0;
     lastLockReceiveTime_ = 0;
 
@@ -195,8 +198,11 @@ void Network::step() {
                 error = true;
                 if (s < 0) {
                     int eno = errno;
-                    errmsg = std::string(strerror(eno)) + ": " +
+                    errmsg = std::string(strerror(eno)) + std::string(": ") +
                         boost::lexical_cast<std::string>(eno);
+                    if (eno == EBUSY || eno == EAGAIN) {
+                        overflow_ = true;
+                    }
                 }
                 else {
                     errmsg = std::string("short write: ") +
@@ -210,7 +216,7 @@ void Network::step() {
         }
         if (error) {
             status_->error("send error to " + ipaddr(si.addr_) +
-                errmsg);
+                std::string(": ") + errmsg);
         }
     }
 
@@ -410,6 +416,12 @@ void Network::unlock_address() {
 
 bool Network::is_locked() {
     return locked_;
+}
+
+bool Network::check_clear_overflow() {
+    bool ret = overflow_;
+    overflow_ = false;
+    return ret;
 }
 
 void Network::complete_fragment(sockaddr_in const &from, boost::shared_ptr<fragment> &frag) {

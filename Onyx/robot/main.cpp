@@ -286,6 +286,10 @@ int main(int argc, char const *argv[]) {
 
         camera->step();
         ipackets->step();
+        if (inet->check_clear_overflow()) {
+            //  don't send bulky video if I'm out of send space
+            request_video_time = 0;
+        }
         handle_packets();
         float use_trot = ctl_trot;
         float use_speed = ctl_speed;
@@ -308,12 +312,11 @@ int main(int argc, char const *argv[]) {
         float dt = thetime - prevtime;
 
         if (image_listener->check_and_clear()) {
-            //  todo: send an image, if requested!
+            ++request_video_serial;
             if (thetime < request_video_time) {
                 P_VideoFrame vf;
                 memset(&vf, 0, sizeof(vf));
                 vf.serial = request_video_serial;
-                ++request_video_serial;
                 Image &img = *image_listener->image_;
                 vf.width = img.width();
                 vf.height = img.height();

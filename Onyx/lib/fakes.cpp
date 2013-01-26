@@ -64,6 +64,10 @@ bool Fakenet::is_locked() {
     return locked_;
 }
 
+bool Fakenet::check_clear_overflow() {
+    return false;
+}
+
 
 
 void Fakestatus::message(std::string const &str) {

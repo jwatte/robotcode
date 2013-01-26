@@ -32,6 +32,8 @@ public:
     virtual void unlock_address() = 0;
     //  Am I locked?
     virtual bool is_locked() = 0;
+    //  Have I seen send overflows?
+    virtual bool check_clear_overflow() = 0;
 };
 
 class ITime;

@@ -23,6 +23,7 @@ public:
     virtual void lock_address(double timeout);
     virtual void unlock_address();
     virtual bool is_locked();
+    virtual bool check_clear_overflow();
 
     size_t stepCnt_;
     std::list<std::pair<size_t, void const *>> toReceive_;

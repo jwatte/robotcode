@@ -39,6 +39,7 @@ struct P_SetInput {
 struct P_RequestVideo {
     unsigned short width;
     unsigned short height;
+    unsigned short millis;
 };
 
 enum R2C {

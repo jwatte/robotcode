@@ -13,8 +13,11 @@
 #include <linux/joystick.h>
 
 
-//  never run faster than 40 Hz?
-#define MIN_LOOP_TIME 0.025
+//  never run faster than 125 Hz?
+#define MIN_LOOP_TIME 0.008
+#define VIDEO_REQUEST_INTERVAL 0.25
+#define VIDEO_REQUEST_WIDTH 1280
+#define VIDEO_REQUEST_HEIGHT 720
 
 unsigned short port = 6969;
 
@@ -39,6 +42,7 @@ double last_status_time = 0;
 #define AIM_X_AXIS 2    //  right X
 #define AIM_Y_AXIS 3    //  right Y
 #define MAXJOY 28000.0f
+#define MINJOY 1000.0f  //  dead zone
 
 float joyspeed = 0;
 float joyturn = 0;
@@ -109,6 +113,9 @@ void joystep() {
             continue;
         }
         else if (js.type & JS_EVENT_AXIS) {
+            if (js.value > -MINJOY && js.value < MINJOY) {
+                js.value = 0;
+            }
             if (js.number == SPEED_AXIS) {
                 joyspeed = cap(js.value / - MAXJOY);
             }
@@ -153,11 +160,13 @@ void joystep() {
             else if (js.number == POSE_UP_BUTTON) {
                 if (joypose < 6 && on) {
                     ++joypose;
+                    std::cerr << "pose: " << joypose << std::endl;
                 }
             }
             else if (js.number == POSE_DOWN_BUTTON) {
                 if (joypose > 0 && on) {
                     --joypose;
+                    std::cerr << "pose: " << joypose << std::endl;
                 }
             }
             else {
@@ -186,7 +195,12 @@ void do_status(P_Status const *status) {
         + " status=" + hexnum(status->status) + " message=" + status->message);
 }
 
-void do_videoframe(P_VideoFrame const *videoframe) {
+void do_videoframe(P_VideoFrame const *videoframe, size_t size) {
+    istatus->message(std::string("Video frame: serial=") +
+        boost::lexical_cast<std::string>((int)videoframe->serial) +
+        ", width=" + boost::lexical_cast<std::string>((int)videoframe->width) +
+        ", height=" + boost::lexical_cast<std::string>((int)videoframe->height) +
+        ", size=" + boost::lexical_cast<std::string>(size));
 }
 
 void dispatch(unsigned char type, size_t size, void const *data) {
@@ -212,7 +226,7 @@ void dispatch(unsigned char type, size_t size, void const *data) {
             istatus->message("Bad packet size " + boost::lexical_cast<std::string>(size) + " for R2C_VideoFrame.");
         }
         else {
-            do_videoframe((P_VideoFrame const *)data);
+            do_videoframe((P_VideoFrame const *)data, size);
         }
         break;
     default:
@@ -225,6 +239,8 @@ void scan_for_robots() {
     P_Discover pd;
     ipacketizer->broadcast(C2R_Discover, sizeof(pd), &pd);
 }
+
+double last_vf_request;
 
 int main(int argc, char const *argv[]) {
 
@@ -264,6 +280,14 @@ int main(int argc, char const *argv[]) {
             seti.aimHeading = joyheading;
             seti.pose = joypose;
             ipacketizer->respond(C2R_SetInput, sizeof(seti), &seti);
+            if (now > last_vf_request + VIDEO_REQUEST_INTERVAL) {
+                P_RequestVideo rv;
+                rv.width = VIDEO_REQUEST_WIDTH;
+                rv.height = VIDEO_REQUEST_HEIGHT;
+                rv.millis = (unsigned short)(VIDEO_REQUEST_INTERVAL * 1000 * 3);
+                ipacketizer->respond(C2R_RequestVideo, sizeof(rv), &rv);
+                last_vf_request = now;
+            }
         }
         if (!has_robot && now > bc) {
             scan_for_robots();

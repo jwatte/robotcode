@@ -167,20 +167,20 @@ void Packetizer::vrespond(unsigned char code, size_t count, iovec const *vecs) {
     iovec iov[10];
     size_t size = 0;
     for (size_t i = 0; i < count; ++i) {
-        size += vecs[i].iov_len;
         iov[i + 1] = vecs[i];
+        size += vecs[i].iov_len;
     }
     unsigned char hdr[10];
     hdr[0] = code;
     size_t hsz = 1 + write_sz(size, &hdr[1]);
+    iov[0].iov_base = hdr;
+    iov[0].iov_len = hsz;
     if (hsz + size > (size_t)(sizeof(r_buffer_) - (r_outPtr_ - r_buffer_))) {
         //  If I can't fit it into available space, flush whatever I've sent so far.
         flush_rbuf();
     }
     if (hsz + size > (size_t)(sizeof(r_buffer_) - (r_outPtr_ - r_buffer_))) {
         //  If I still cannot fit it into the buffer, send it as its own packet.
-        iov[0].iov_base = hdr;
-        iov[0].iov_len = hsz;
         inet_->vsend(true, 1 + count, iov);
     }
     else {

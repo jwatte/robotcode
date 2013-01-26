@@ -10,6 +10,7 @@
 #include <string>
 #include <stdexcept>
 #include <boost/shared_ptr.hpp>
+#include <boost/lexical_cast.hpp>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -263,6 +264,10 @@ void Network::check_packets(double now) {
             ++x;
             if (now - (*d).lastTime_ > packet_timeout) {
                 status_->message("Timeout waiting for fragments from " + ipaddr((*ptr).first));
+                status_->message(std::string("now=") +
+                    boost::lexical_cast<std::string>(now) + ", lastTime=" +
+                    boost::lexical_cast<std::string>((*d).lastTime_) + ", packet_timeout=" +
+                    boost::lexical_cast<std::string>(packet_timeout));
                 fcs.erase(d);
             }
         }
@@ -325,7 +330,7 @@ void Network::incoming_fragment(sockaddr_in const &from, boost::shared_ptr<fragm
     auto &rfc(ri.fragments_);
     for (auto ptr(rfc.begin()), end(rfc.end());
             ptr != end; ++ptr) {
-        if ((*ptr).seq_ ==  seq) {
+        if ((*ptr).seq_ == seq) {
             auto &pf((*ptr).fragments_);
             if (pf.size() != cnt) {
                 status_->message("Remote peer " + ipaddr(from) + " sent bad fragment count.");
@@ -341,6 +346,7 @@ void Network::incoming_fragment(sockaddr_in const &from, boost::shared_ptr<fragm
             }
             //  complete
             complete_fragment(from, *ptr);
+            rfc.erase(ptr);
             return;
         }
     }

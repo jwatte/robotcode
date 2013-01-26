@@ -187,11 +187,21 @@ void Network::step() {
     for (auto ptr(outqueue_.begin()), end(outqueue_.end()); ptr != end; ++ptr) {
         send_info &si(*ptr);
         bool error = false;
+        std::string errmsg;
         while (!si.fragments_.empty()) {
             fragment &f(*si.fragments_.front());
             int s = socks_->sendto(f.buf_ + f.offset_, f.usedSize_ - f.offset_, si.addr_);
             if ((size_t)s != f.usedSize_ - f.offset_) {
                 error = true;
+                if (s < 0) {
+                    int eno = errno;
+                    errmsg = std::string(strerror(eno)) + ": " +
+                        boost::lexical_cast<std::string>(eno);
+                }
+                else {
+                    errmsg = std::string("short write: ") +
+                        boost::lexical_cast<std::string>(s);
+                }
                 //  no use sending more to this guy
                 si.fragments_.clear();
                 break;
@@ -199,7 +209,8 @@ void Network::step() {
             si.fragments_.pop_front();
         }
         if (error) {
-            status_->error("send error to " + ipaddr(si.addr_));
+            status_->error("send error to " + ipaddr(si.addr_) +
+                errmsg);
         }
     }
 

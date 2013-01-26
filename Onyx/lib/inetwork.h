@@ -48,6 +48,7 @@ public:
     virtual bool receive(unsigned char &code, size_t &size, void const *&data) = 0;
     virtual void broadcast(unsigned char code, size_t size, void const *data) = 0;
     virtual void respond(unsigned char code, size_t size, void const *data) = 0;
+    virtual void vrespond(unsigned char code, size_t cnt, iovec const *vecs) = 0;
 };
 
 IPacketizer *packetize(INetwork *net, IStatus *status);

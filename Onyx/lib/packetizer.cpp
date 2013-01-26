@@ -2,6 +2,7 @@
 #include "inetwork.h"
 #include "istatus.h"
 #include <string.h>
+#include <stdexcept>
 
 
 enum {
@@ -15,6 +16,7 @@ public:
     virtual bool receive(unsigned char &code, size_t &size, void const *&data);
     virtual void broadcast(unsigned char code, size_t size, void const *data);
     virtual void respond(unsigned char code, size_t size, void const *data);
+    virtual void vrespond(unsigned char code, size_t count, iovec const *vecs);
     
     void flush_bbuf();
     void flush_rbuf();
@@ -151,6 +153,23 @@ void Packetizer::broadcast(unsigned char code, size_t size, void const *data) {
 }
 
 void Packetizer::respond(unsigned char code, size_t size, void const *data) {
+    iovec iov;
+    memset(&iov, 0, sizeof(iov));
+    iov.iov_base = const_cast<void *>(data);
+    iov.iov_len = size;
+    vrespond(code, 1, &iov);
+}
+
+void Packetizer::vrespond(unsigned char code, size_t count, iovec const *vecs) {
+    if (count > 9) {
+        throw std::runtime_error("Too many iovecs in operation");
+    }
+    iovec iov[10];
+    size_t size = 0;
+    for (size_t i = 0; i < count; ++i) {
+        size += vecs[i].iov_len;
+        iov[i + 1] = vecs[i];
+    }
     unsigned char hdr[10];
     hdr[0] = code;
     size_t hsz = 1 + write_sz(size, &hdr[1]);
@@ -160,18 +179,16 @@ void Packetizer::respond(unsigned char code, size_t size, void const *data) {
     }
     if (hsz + size > (size_t)(sizeof(r_buffer_) - (r_outPtr_ - r_buffer_))) {
         //  If I still cannot fit it into the buffer, send it as its own packet.
-        iovec iov[2];
         iov[0].iov_base = hdr;
         iov[0].iov_len = hsz;
-        iov[1].iov_base = const_cast<void *>(data);
-        iov[1].iov_len = size;
-        inet_->vsend(true, 2, iov);
+        inet_->vsend(true, 1 + count, iov);
     }
     else {
         //  accumulate data into the outgoing buffer.
-        memcpy(r_outPtr_, hdr, hsz);
-        memcpy(r_outPtr_ + hsz, data, size);
-        r_outPtr_ += hsz + size;
+        for (size_t i = 0; i <= count; ++i) {
+            memcpy(r_outPtr_, iov[i].iov_base, iov[i].iov_len);
+            r_outPtr_ += iov[i].iov_len;
+        }
     }
 }
 

@@ -149,8 +149,16 @@ static void handle_setinput(P_SetInput const &psi) {
     ctl_pose = psi.pose;
 }
 
+double request_video_time;
+int request_video_width;
+int request_video_height;
+unsigned short request_video_serial;
+
 static void handle_requestvideo(P_RequestVideo const &prv) {
     //  TODO: implement request video
+    request_video_time = itime->now() + prv.millis * 0.001;
+    request_video_width = prv.width;
+    request_video_height = prv.height;
 }
 
 
@@ -275,20 +283,10 @@ int main(int argc, char const *argv[]) {
     SlewRateInterpolator<float> i_height(0, HEIGHT_SLEW, 1, intime);
     double frames = 0;
     while (true) {
+
         camera->step();
-        if (image_listener->check_and_clear()) {
-            //  todo: send an image, if requested!
-        }
         ipackets->step();
         handle_packets();
-        thetime = read_clock();
-        frames = frames + 1;
-        if (thetime - intime > 20) {
-            fprintf(stderr, "fps: %.1f\n", frames / (thetime - intime));
-            frames = 0;
-            intime = thetime;
-        }
-        float dt = thetime - prevtime;
         float use_trot = ctl_trot;
         float use_speed = ctl_speed;
         float use_turn = cap(ctl_turn + ctl_heading);
@@ -300,6 +298,34 @@ int main(int argc, char const *argv[]) {
             use_strafe = 0;
         }
 
+        thetime = read_clock();
+        frames = frames + 1;
+        if (thetime - intime > 20) {
+            fprintf(stderr, "fps: %.1f\n", frames / (thetime - intime));
+            frames = 0;
+            intime = thetime;
+        }
+        float dt = thetime - prevtime;
+
+        if (image_listener->check_and_clear()) {
+            //  todo: send an image, if requested!
+            if (thetime < request_video_time) {
+                P_VideoFrame vf;
+                memset(&vf, 0, sizeof(vf));
+                vf.serial = request_video_serial;
+                ++request_video_serial;
+                Image &img = *image_listener->image_;
+                vf.width = img.width();
+                vf.height = img.height();
+                iovec iov[2];
+                memset(iov, 0, sizeof(iov));
+                iov[0].iov_base = &vf;
+                iov[0].iov_len = sizeof(vf);
+                iov[1].iov_base = const_cast<void *>(img.bits(CompressedBits));
+                iov[1].iov_len = img.size(CompressedBits);
+                ipackets->vrespond(R2C_VideoFrame, 2, iov);
+            }
+        }
         i_speed.setTarget(use_speed);
         i_strafe.setTarget(use_strafe);
         i_turn.setTarget(use_turn);

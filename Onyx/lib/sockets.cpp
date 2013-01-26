@@ -46,7 +46,7 @@ public:
             return;
         }
 
-        one = 1024*1024;
+        one = 1024*1024*2;
         slen = sizeof(one);
         err = setsockopt(fd_, SOL_SOCKET, SO_RCVBUF, &one, slen);
         if (err < 0) {

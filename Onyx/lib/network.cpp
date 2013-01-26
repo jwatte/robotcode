@@ -275,7 +275,16 @@ void Network::check_packets(double now) {
             ++x;
             if (now - (*d).lastTime_ > packet_timeout) {
                 status_->message("Timeout waiting for fragments from " + ipaddr((*ptr).first));
-                status_->message(std::string("now=") +
+                int nmissed = 0;
+                for (auto fp((*d).fragments_.begin()), fe((*d).fragments_.end()); 
+                    fp != fe; ++fp) {
+                    if (!*fp) {
+                        ++nmissed;
+                    }
+                }
+                status_->message(std::string("missed ") +
+                    boost::lexical_cast<std::string>(nmissed) + " of " +
+                    boost::lexical_cast<std::string>((*d).fragments_.size()) + "; now=" +
                     boost::lexical_cast<std::string>(now) + ", lastTime=" +
                     boost::lexical_cast<std::string>((*d).lastTime_) + ", packet_timeout=" +
                     boost::lexical_cast<std::string>(packet_timeout));

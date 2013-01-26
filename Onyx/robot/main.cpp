@@ -210,7 +210,7 @@ static void handle_packets() {
     if (want_status) {
         struct P_Status ps;
         memset(&ps, 0, sizeof(ps));
-        ps.hits = 0;
+        ps.hits = 21;
         ps.status = nst;
         Message msg;
         bool got_message = false;
@@ -238,7 +238,7 @@ class ImageListener : public Listener {
 public:
     ImageListener(boost::shared_ptr<Property> const &prop) :
         prop_(prop),
-        dirty_(true)
+        dirty_(false)
     {
     }
     void on_change() {
@@ -312,21 +312,25 @@ int main(int argc, char const *argv[]) {
         float dt = thetime - prevtime;
 
         if (image_listener->check_and_clear()) {
+            iovec iov[2];
             ++request_video_serial;
+            Image &img = *image_listener->image_;
             if (thetime < request_video_time) {
                 P_VideoFrame vf;
                 memset(&vf, 0, sizeof(vf));
                 vf.serial = request_video_serial;
-                Image &img = *image_listener->image_;
                 vf.width = img.width();
                 vf.height = img.height();
-                iovec iov[2];
                 memset(iov, 0, sizeof(iov));
                 iov[0].iov_base = &vf;
                 iov[0].iov_len = sizeof(vf);
                 iov[1].iov_base = const_cast<void *>(img.bits(CompressedBits));
                 iov[1].iov_len = img.size(CompressedBits);
                 ipackets->vrespond(R2C_VideoFrame, 2, iov);
+            }
+            if (!*(unsigned char *)img.bits(FullBits)) {
+                //  no-op, just add decompress overhead
+                iov[0].iov_len = 0;
             }
         }
         i_speed.setTarget(use_speed);

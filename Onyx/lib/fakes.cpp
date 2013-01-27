@@ -68,6 +68,11 @@ bool Fakenet::check_clear_overflow() {
     return false;
 }
 
+void Fakenet::check_clear_loss(int &lost, int &got) {
+    lost = 1;
+    got = 3;
+}
+
 
 
 void Fakestatus::message(std::string const &str) {

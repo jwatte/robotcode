@@ -133,6 +133,7 @@ public:
     virtual void unlock_address();
     virtual bool is_locked();
     virtual bool check_clear_overflow();
+    virtual void check_clear_loss(int &lost, int &gotten);
 
     Network(ISockets *socks, ITime *time, IStatus *status, bool useB);
     ~Network();
@@ -163,6 +164,8 @@ private:
     bool overflow_;
     double lockTimeout_;
     double lastLockReceiveTime_;
+    int lostFrags_;
+    int receivedFrags_;
 };
 
 
@@ -177,6 +180,8 @@ Network::Network(ISockets *socks, ITime *time, IStatus *status, bool canB) {
     overflow_ = false;
     lockTimeout_ = 0;
     lastLockReceiveTime_ = 0;
+    lostFrags_ = 0;
+    receivedFrags_ = 0;
 
     status->message("network opened OK");
 }
@@ -289,6 +294,7 @@ void Network::check_packets(double now) {
                         ++nmissed;
                     }
                 }
+                lostFrags_ += nmissed;
                 status_->message(std::string("missed ") +
                     boost::lexical_cast<std::string>(nmissed) + " of " +
                     boost::lexical_cast<std::string>((*d).fragments_.size()) + "; now=" +
@@ -314,6 +320,7 @@ void Network::incoming_fragment(sockaddr_in const &from, boost::shared_ptr<fragm
     if (frag->usedSize_ - frag->offset_ < 10) {
         //  bah! a packet of bad format. Probably not our protocol.
         status_->message("Bad packet from " + ipaddr(from) + ".");
+        ++lostFrags_;
         return;
     }
 
@@ -324,6 +331,7 @@ void Network::incoming_fragment(sockaddr_in const &from, boost::shared_ptr<fragm
     if (seg >= cnt) {
         status_->message("Remote peer " + ipaddr(from) + " sent fragment index " + hexnum(seg)
             + " out of range " + hexnum(cnt) + ".");
+        ++lostFrags_;
         return;
     }
 
@@ -333,6 +341,7 @@ void Network::incoming_fragment(sockaddr_in const &from, boost::shared_ptr<fragm
         ((uint32_t)bufEnd[-2] << 16) + ((uint32_t)bufEnd[-1] << 24);
     if (fnv2 != packetChecksum) {
         status_->message("Remote peer " + ipaddr(from) + " sent packet with bad checksum.");
+        ++lostFrags_;
         return;
     }
     //  extract the actual data from the fragment
@@ -424,7 +433,15 @@ bool Network::check_clear_overflow() {
     return ret;
 }
 
+void Network::check_clear_loss(int &lost, int &received) {
+    lost = lostFrags_;
+    lostFrags_ = 0;
+    received = receivedFrags_;
+    receivedFrags_ = 0;
+}
+
 void Network::complete_fragment(sockaddr_in const &from, boost::shared_ptr<fragment> &frag) {
+    receivedFrags_++;
     inqueue_.push_back(boost::shared_ptr<deliver_fragment>(new deliver_fragment(from, *frag)));
 }
 

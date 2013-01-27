@@ -34,6 +34,8 @@ public:
     virtual bool is_locked() = 0;
     //  Have I seen send overflows?
     virtual bool check_clear_overflow() = 0;
+    //  Have I seen receive loss?
+    virtual void check_clear_loss(int &lost, int &received) = 0;
 };
 
 class ITime;

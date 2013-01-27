@@ -24,6 +24,7 @@ public:
     virtual void unlock_address();
     virtual bool is_locked();
     virtual bool check_clear_overflow();
+    virtual void check_clear_loss(int &, int &);
 
     size_t stepCnt_;
     std::list<std::pair<size_t, void const *>> toReceive_;

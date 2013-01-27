@@ -20,6 +20,7 @@
 #define VIDEO_REQUEST_INTERVAL 0.25
 #define VIDEO_REQUEST_WIDTH 1280
 #define VIDEO_REQUEST_HEIGHT 720
+#define Q_CHECK_INTERVAL 0.25
 
 unsigned short port = 6969;
 
@@ -272,6 +273,8 @@ int main(int argc, char const *argv[]) {
 
     double then = itime->now();
     double bc = 0;
+    double lastQCheck = then;
+    double q = 1;
     while (true) {
         double now = itime->now();
         double dt = now - then;
@@ -318,10 +321,23 @@ int main(int argc, char const *argv[]) {
         while (ipacketizer->receive(type, size, data)) {
             dispatch(type, size, data);
         }
+        if (now >= lastQCheck + Q_CHECK_INTERVAL) {
+            lastQCheck = now;
+            int lost = 0;
+            int received = 0;
+            inet->check_clear_loss(lost, received);
+            if (lost == 0) {
+                q = q * 0.9 + 0.1;
+            }
+            else {
+                q = q * 0.9 + 0.1 * ((double)received / ((double)received + lost));
+            }
+        }
         gs.image = last_image;
         gs.trot = trotvals[joytrotix];
         gs.pose = joypose;
         gs.hitpoints = hitpoints;
+        gs.loss = q > 1 ? 0 : q < 0 ? 255 : (255 - (unsigned char)(255 * q));
         update_gui(gs);
         step_gui();
     }

@@ -13,6 +13,10 @@ static bool to_upload = false;
 static GLuint g_imgTex = 0;
 static GLuint g_bubble = 0;
 static GLuint g_ring = 0;
+static GLuint g_vmeter = 0;
+static GLuint g_bar = 0;
+static GLuint g_crouch = 0;
+static GLuint g_stretch = 0;
 
 #define test_glerror() test_glerror_(__LINE__, __FILE__)
 
@@ -69,18 +73,18 @@ template<typename T> static void draw_val(char const *fmt, T val, int left, int 
     test_glerror();
 }
 
-void draw_sprite(GLuint texture, int size, int x, int y) {
+void draw_sprite(GLuint texture, int sizex, int sizey, int x, int y) {
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, texture);
     glBegin(GL_TRIANGLE_STRIP);
         glTexCoord2f(0, 0);
-        glVertex2f(x, y+size);
+        glVertex2f(x, y+sizey);
         glTexCoord2f(0, 1);
         glVertex2f(x, y);
         glTexCoord2f(1, 0);
-        glVertex2f(x+size, y+size);
+        glVertex2f(x+sizex, y+sizey);
         glTexCoord2f(1, 1);
-        glVertex2f(x+size, y);
+        glVertex2f(x+sizex, y);
     glEnd();
     glDisable(GL_TEXTURE_2D);
     test_glerror();
@@ -101,6 +105,9 @@ static void do_display() {
     glDisable(GL_LIGHTING);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     test_glerror();
+
+    /* main video */
+
     if (to_upload) {
         if (!!g_state.image) {
             glBindTexture(GL_TEXTURE_2D, g_imgTex);
@@ -128,24 +135,50 @@ static void do_display() {
         glDisable(GL_TEXTURE_2D);
         test_glerror();
     }
+
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_BLEND);
     glColor4ub(255, 255, 255, 255);
     test_glerror();
+
+    /* hitpoints */
     float hpscale = g_state.hitpoints / 24.0f;
     if (hpscale > 1) hpscale = 1;
     if (hpscale < 0) hpscale = 0;
     glColor4f(1 - hpscale, hpscale, 0, 1);
     for (int i = 0; i < 25; ++i) {
-        draw_sprite(g_ring, 24, 1200, 30 + i * 24);
+        draw_sprite(g_ring, 24, 24, 1200, 30 + i * 24);
     }
     for (int i = 0; i < g_state.hitpoints; ++i) {
-        draw_sprite(g_bubble, 24, 1199, 31 + i * 24);
+        draw_sprite(g_bubble, 24, 24, 1199, 31 + i * 24);
     }
-    glDisable(GL_BLEND);
-    glColor4f(0.8f, 1.0f, 0.8f, 1.0f);
+
+    if (g_state.loss < 5) {
+        glColor4ub(192, 224, 192, 192);
+    }
+    else if (g_state.loss < 25) {
+        glColor4ub(224, 224, 160, 192);
+    }
+    else if (g_state.loss < 75) {
+        glColor4ub(240, 192, 160, 192);
+    }
+    else {
+        glColor4ub(255, 128, 128, 192);
+    }
+    draw_sprite(g_vmeter, 32, 64, 30, 630);
+    draw_sprite(g_bar, 16, g_state.loss / 4 + 1, 38, 630);
+
+    /* text */
+    glColor4f(0, 0, 0, 0.25f);
+    draw_sprite(g_bar, 100, 32, 40, 22);
+    draw_sprite(g_bar, 100, 32, 160, 22);
+    glColor4f(0.8f, 0.8f, 0.8f, 0.8f);
+    draw_sprite(g_crouch, 32, 32, 160, 22);
+    draw_sprite(g_stretch, 32, 32, 228, 22);
+    glColor4f(0.8f, 0.8f, 1.0f, 1.0f);
     draw_val("%.01f", g_state.trot, 80, 30);
     draw_val("%d", g_state.pose, 200, 30);
+
     glutSwapBuffers();
 }
 
@@ -164,6 +197,10 @@ void open_gui(GuiState const &state, ITime *it) {
         make_texture(&g_imgTex, 2048, 1024, false);
         load_tga("data/bubble-32.tga", &g_bubble);
         load_tga("data/ring-32.tga", &g_ring);
+        load_tga("data/vmeter-64.tga", &g_vmeter);
+        load_tga("data/bar-16.tga", &g_bar);
+        load_tga("data/crouch-32.tga", &g_crouch);
+        load_tga("data/stretch-32.tga", &g_stretch);
         glutSetWindow(g_win);
         glutDisplayFunc(&do_display);
         glutShowWindow();

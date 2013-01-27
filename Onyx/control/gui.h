@@ -18,6 +18,7 @@ struct GuiState {
     unsigned char hitpoints;
     unsigned char hitdir;
     unsigned char status;
+    unsigned char loss;
 };
 
 class ITime;

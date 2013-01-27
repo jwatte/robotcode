@@ -140,7 +140,7 @@ static void do_display() {
         draw_sprite(g_ring, 24, 1200, 30 + i * 24);
     }
     for (int i = 0; i < g_state.hitpoints; ++i) {
-        draw_sprite(g_bubble, 24, 1200, 30 + i * 24);
+        draw_sprite(g_bubble, 24, 1199, 31 + i * 24);
     }
     glDisable(GL_BLEND);
     glColor4f(0.8f, 1.0f, 0.8f, 1.0f);

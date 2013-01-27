@@ -290,7 +290,7 @@ void USBLink::step() {
 }
 
 void USBLink::thread_fn() {
-    sched_param parm = { .sched_priority = 20 };
+    sched_param parm = { .sched_priority = 30 };
     if (pthread_setschedparam(pthread_self(), SCHED_RR, &parm) < 0) {
         std::string err(strerror(errno));
         std::cerr << "USBLink::thread_fn(): pthread_setschedparam(): " << err << std::endl;

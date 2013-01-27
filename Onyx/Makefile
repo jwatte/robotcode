@@ -9,7 +9,8 @@ APP_BINS:=$(patsubst %,bld/obj/%,$(APPS))
 APP_OBJS:=
 LIB:=bld/obj/libonyx.a
 
-CFLAGS:=-O0 -gdwarf-4 -fdebug-types-section -fvar-tracking-assignments -std=gnu++11 -march=native -Wall -Werror -pipe -Ilib -I/usr/include/libusb-1.0
+OPT?=-O0
+CFLAGS:=$(OPT) -gdwarf-4 -fdebug-types-section -fvar-tracking-assignments -std=gnu++11 -march=native -Wall -Werror -pipe -Ilib -I/usr/include/libusb-1.0
 LFLAGS:=-gdwarf-3 -lusb-1.0 -Lbld/obj -lonyx -lboost_system -lboost_thread -lfltk -ljpeg -lv4l2 -lGL -lglut
 
 all:	$(LIB) $(TOOL_BINS) $(APP_BINS) tests

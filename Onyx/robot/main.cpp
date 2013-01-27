@@ -255,25 +255,18 @@ public:
     bool dirty_;
 };
 
-int main(int argc, char const *argv[]) {
-    itime = newclock();
-    istatus = mkstatus(itime, true);
-    isocks = mksocks(port, istatus);
-    inet = listen(isocks, itime, istatus);
-    ipackets = packetize(inet, istatus);
-
+void usb_thread_fn() {
+    sched_param parm = { .sched_priority = 25 };
+    if (pthread_setschedparam(pthread_self(), SCHED_RR, &parm) < 0) {
+        std::string err(strerror(errno));
+        std::cerr << "USBLink::thread_fn(): pthread_setschedparam(): " << err << std::endl;
+    }
     get_leg_params(lparam);
     ServoSet ss;
     for (size_t i = 0; i < sizeof(init)/sizeof(init[0]); ++i) {
         ss.add_servo(init[i].id, init[i].center);
     }
     ss.set_torque(900); //  not quite top torque
-
-    boost::shared_ptr<Settings> settings(Settings::load("onyx.json"));
-    boost::shared_ptr<Module> camera(Camera::open(settings->get_value("camera")));
-    boost::shared_ptr<Property> image(camera->get_property_named("image"));
-    boost::shared_ptr<ImageListener> image_listener(new ImageListener(image));
-    image->add_listener(image_listener);
 
     double thetime = 0, prevtime = 0, intime = read_clock();
     float step = 0;
@@ -283,14 +276,6 @@ int main(int argc, char const *argv[]) {
     SlewRateInterpolator<float> i_height(0, HEIGHT_SLEW, 1, intime);
     double frames = 0;
     while (true) {
-
-        camera->step();
-        ipackets->step();
-        if (inet->check_clear_overflow()) {
-            //  don't send bulky video if I'm out of send space
-            request_video_time = 0;
-        }
-        handle_packets();
         float use_trot = ctl_trot;
         float use_speed = ctl_speed;
         float use_turn = cap(ctl_turn + ctl_heading);
@@ -304,41 +289,19 @@ int main(int argc, char const *argv[]) {
 
         thetime = read_clock();
         frames = frames + 1;
-        if (thetime - intime > 20) {
-            fprintf(stderr, "fps: %.1f\n", frames / (thetime - intime));
+        if (thetime - intime > 10) {
+            fprintf(stderr, "usb fps: %.1f\n", frames / (thetime - intime));
             frames = 0;
             intime = thetime;
         }
         float dt = thetime - prevtime;
 
-        if (image_listener->check_and_clear()) {
-            iovec iov[2];
-            ++request_video_serial;
-            Image &img = *image_listener->image_;
-            if (thetime < request_video_time) {
-                P_VideoFrame vf;
-                memset(&vf, 0, sizeof(vf));
-                vf.serial = request_video_serial;
-                vf.width = img.width();
-                vf.height = img.height();
-                memset(iov, 0, sizeof(iov));
-                iov[0].iov_base = &vf;
-                iov[0].iov_len = sizeof(vf);
-                iov[1].iov_base = const_cast<void *>(img.bits(CompressedBits));
-                iov[1].iov_len = img.size(CompressedBits);
-                ipackets->vrespond(R2C_VideoFrame, 2, iov);
-            }
-            if (!*(unsigned char *)img.bits(FullBits)) {
-                //  no-op, just add decompress overhead
-                iov[0].iov_len = 0;
-            }
-        }
         i_speed.setTarget(use_speed);
         i_strafe.setTarget(use_strafe);
         i_turn.setTarget(use_turn);
         i_height.setTarget(ctl_pose * 25.0 - 50.0);
 
-        if (dt >= 0.007) {
+        if (dt >= 0.008) {
             i_speed.setTime(thetime);
             i_strafe.setTime(thetime);
             i_turn.setTime(thetime);
@@ -366,6 +329,9 @@ int main(int argc, char const *argv[]) {
             }
             poselegs(ss, step, i_speed.get(), -i_turn.get(), i_strafe.get(), i_height.get());
         }
+        else {
+            usleep(3000);
+        }
         ss.step();
         if (ss.queue_depth() > 30) {
             istatus->error("Servo queue overflow -- flushing.");
@@ -381,7 +347,69 @@ int main(int argc, char const *argv[]) {
             std::cerr << "status: " << hexnum(st) << std::endl;
             nst = st;
         }
-        usleep(500);
+    }
+}
+
+int main(int argc, char const *argv[]) {
+    itime = newclock();
+    istatus = mkstatus(itime, true);
+    isocks = mksocks(port, istatus);
+    inet = listen(isocks, itime, istatus);
+    ipackets = packetize(inet, istatus);
+
+    boost::shared_ptr<boost::thread> usb_thread(new boost::thread(boost::bind(usb_thread_fn)));
+
+    boost::shared_ptr<Settings> settings(Settings::load("onyx.json"));
+    boost::shared_ptr<Module> camera(Camera::open(settings->get_value("camera")));
+    boost::shared_ptr<Property> image(camera->get_property_named("image"));
+    boost::shared_ptr<ImageListener> image_listener(new ImageListener(image));
+    image->add_listener(image_listener);
+
+    double thetime = 0, intime = read_clock();
+    double frames = 0;
+    while (true) {
+
+        camera->step();
+        ipackets->step();
+        if (inet->check_clear_overflow()) {
+            //  don't send bulky video if I'm out of send space
+            request_video_time = 0;
+        }
+        handle_packets();
+
+        thetime = read_clock();
+        frames = frames + 1;
+        if (thetime - intime > 20) {
+            fprintf(stderr, "main fps: %.1f\n", frames / (thetime - intime));
+            frames = 0;
+            intime = thetime;
+        }
+
+        if (image_listener->check_and_clear()) {
+            iovec iov[2];
+            ++request_video_serial;
+            Image &img = *image_listener->image_;
+            if (thetime < request_video_time) {
+                P_VideoFrame vf;
+                memset(&vf, 0, sizeof(vf));
+                vf.serial = request_video_serial;
+                vf.width = img.width();
+                vf.height = img.height();
+                memset(iov, 0, sizeof(iov));
+                iov[0].iov_base = &vf;
+                iov[0].iov_len = sizeof(vf);
+                iov[1].iov_base = const_cast<void *>(img.bits(CompressedBits));
+                iov[1].iov_len = img.size(CompressedBits);
+                ipackets->vrespond(R2C_VideoFrame, 2, iov);
+            }
+            /*
+            if (!*(unsigned char *)img.bits(FullBits)) {
+                //  no-op, just add decompress overhead
+                iov[0].iov_len = 0;
+            }
+            */
+        }
+        usleep(1000);
     }
     return 0;
 }

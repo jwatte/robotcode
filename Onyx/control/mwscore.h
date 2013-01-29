@@ -5,18 +5,14 @@
 #include <map>
 #include <string>
 
-struct MechScore {
-    std::string name;
-    int score;
-};
-
 enum MWMode {
     MWM_TeamVsTeam = 1,
     MWM_FFA = 2
 };
 
 struct MWScore {
-    std::map<std::string, MechScore> scores;
+    //  team -> mech -> hitpoints
+    std::map<int, std::map<std::string, int>> scores;
     double time;
     MWMode mode;
 };

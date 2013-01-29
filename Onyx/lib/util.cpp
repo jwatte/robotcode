@@ -51,3 +51,20 @@ unsigned int fnv2_hash(void const *src, size_t sz) {
     return (unsigned int)(hash ^ (hash >> 32)); //  avoid last-bit-stickiness
 }
 
+char const *next(char *&ptr, char const *end, char delim) {
+    if (ptr == end) {
+        return 0;
+    }
+    char const *ret = ptr;
+    while (ptr < end) {
+        if (*ptr == delim) {
+            *ptr = 0;
+            ++ptr;
+            return ret;
+        }
+        ++ptr;
+    }
+    return ret;
+}
+
+

@@ -21,6 +21,7 @@ void safecpy(char (&dst)[Sz], char const *src) {
 inline float cap(float f) {
     return (f < -1) ? -1 : (f > 1) ? 1 : f;
 }
+char const *next(char *&ptr, char const *end, char delim);
 
 
 

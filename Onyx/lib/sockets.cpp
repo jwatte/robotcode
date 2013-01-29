@@ -27,17 +27,10 @@ public:
             status->error("could not open socket()");
             return;
         }
-        int err = fcntl(fd_, F_SETFL, O_NONBLOCK);
-        if (err < 0) {
-            status->error("socket set non-blocking failed");
-            close(fd_);
-            fd_ = -1;
-            return;
-        }
 
         int one = 1024*1024;
         socklen_t slen = sizeof(one);
-        err = setsockopt(fd_, SOL_SOCKET, SO_SNDBUF, &one, slen);
+        int err = setsockopt(fd_, SOL_SOCKET, SO_SNDBUF, &one, slen);
         if (err < 0) {
             status->error("set socket send buffer size failed");
             close(fd_);
@@ -59,6 +52,14 @@ public:
         if (err < 0) {
             int en = errno;
             status->error(std::string("Error connecting socket: ") + strerror(en));
+            close(fd_);
+            fd_ = -1;
+            return;
+        }
+
+        err = fcntl(fd_, F_SETFL, O_NONBLOCK);
+        if (err < 0) {
+            status->error("socket set non-blocking failed");
             close(fd_);
             fd_ = -1;
             return;

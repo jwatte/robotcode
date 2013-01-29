@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <sys/uio.h>
+#include <boost/shared_ptr.hpp>
 
 class INetwork {
 public:
@@ -59,15 +60,25 @@ IPacketizer *packetize(INetwork *net, IStatus *status);
 
 struct sockaddr_in;
 
+class ISocket {
+public:
+    virtual size_t peek(void *buf, size_t maxSize) = 0;
+    virtual void recvd(size_t maxSize) = 0;
+    virtual size_t send(void const *buf, size_t size) = 0;
+    virtual bool step() = 0;
+    virtual ~ISocket() {}
+};
+
 class ISockets {
 public:
     virtual int recvfrom(void *buf, size_t sz, sockaddr_in &addr) = 0;
     virtual int sendto(void const *buf, size_t sz, sockaddr_in const &addr) = 0;
+    virtual boost::shared_ptr<ISocket> connect(sockaddr_in const &addr) = 0;
     virtual ~ISockets() {}
 };
 
 ISockets *mksocks(unsigned short port, IStatus *status);
-
+std::string ipaddr(sockaddr_in const &sin);
 
 #endif  //  network_h
 

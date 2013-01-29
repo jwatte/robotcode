@@ -45,11 +45,30 @@ public:
     std::list<Message> messages_;
 };
 
+class Fakesockets;
+
+class Fakesocket : public ISocket {
+public:
+    virtual size_t peek(void *buf, size_t maxSize);
+    virtual void recvd(size_t maxSize);
+    virtual size_t send(void const *buf, size_t size);
+    virtual bool step();
+    ~Fakesocket();
+
+    sockaddr_in addr_;
+    std::list<std::vector<char>> toRecv_;
+    std::list<std::vector<char>> sent_;
+    Fakesockets *owner_;
+    bool connected_;
+};
+
 class Fakesockets : public ISockets {
 public:
+    virtual boost::shared_ptr<ISocket> connect(sockaddr_in const &addr);
+    std::list<Fakesocket *> sockets_;
+
     virtual int recvfrom(void *buf, size_t sz, sockaddr_in &addr);
     virtual int sendto(void const *buf, size_t sz, sockaddr_in const &addr);
-
     struct rec {
         rec() {
             ret = 0;
@@ -61,6 +80,7 @@ public:
     };
     std::list<rec> toReceive_;
     std::list<rec> wasSent_;
+
 };
 
 class Faketime : public ITime {

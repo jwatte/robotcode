@@ -1,6 +1,7 @@
 
 #include "fakes.h"
 #include <iostream>
+#include <stdexcept>
 
 
 Fakenet::Fakenet() {
@@ -116,6 +117,64 @@ int Fakesockets::sendto(void const *buf, size_t sz, sockaddr_in const &addr) {
     return sz;
 }
 
+boost::shared_ptr<ISocket> Fakesockets::connect(sockaddr_in const &addr) {
+    //  todo: maybe I should require pre-configuring addresses we connect to
+    Fakesocket *sock = new Fakesocket();
+    sock->addr_ = addr;
+    sock->owner_ = this;
+    sock->connected_ = true;
+    sockets_.push_back(sock);
+    return boost::shared_ptr<ISocket>(sock);
+}
+
+
+Fakesocket::~Fakesocket() {
+    owner_->sockets_.erase(std::find(owner_->sockets_.begin(), owner_->sockets_.end(), this));
+}
+
+bool Fakesocket::step() {
+    return connected_;
+}
+
+size_t Fakesocket::peek(void *buf, size_t maxSize) {
+    if (!toRecv_.size()) {
+        return 0;
+    }
+    if (maxSize > toRecv_.front().size()) {
+        maxSize = toRecv_.front().size();
+    }
+    if (maxSize) {
+        memcpy(buf, &toRecv_.front()[0], maxSize);
+    }
+    return maxSize;
+}
+
+void Fakesocket::recvd(size_t maxSize) {
+    if (!toRecv_.size()) {
+        if (maxSize > 0) {
+            throw std::runtime_error("bad call to recvd()");
+        }
+        return;
+    }
+    if (maxSize > toRecv_.front().size()) {
+        throw std::runtime_error("bad call to recvd()");
+    }
+    if (toRecv_.front().size() == maxSize) {
+        toRecv_.pop_front();
+    }
+    else {
+        toRecv_.front().erase(toRecv_.front().begin(), toRecv_.front().begin() +maxSize);
+    }
+}
+
+size_t Fakesocket::send(void const *buf, size_t size) {
+    sent_.push_back(std::vector<char>());
+    sent_.back().resize(size);
+    if (size) {
+        memcpy(&sent_.back()[0], buf, size);
+    }
+    return size;
+}
 
 
 Faketime::Faketime() {

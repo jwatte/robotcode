@@ -4,6 +4,7 @@
 
 #include <boost/shared_ptr.hpp>
 class Image;
+struct MWScore;
 
 enum {
     HitDirFront = 1,
@@ -27,6 +28,8 @@ void open_gui(GuiState const &state, ITime *it);
 void update_gui(GuiState const &state);
 void step_gui();
 void close_gui();
+void show_gui_score(MWScore &sc);
+void hide_gui_score();
 
 
 #endif  //  gui_h

@@ -6,6 +6,8 @@
 #include "protocol.h"
 #include "gui.h"
 #include "Image.h"
+#include "mwscore.h"
+#include "Settings.h"
 #include <iostream>
 #include <boost/lexical_cast.hpp>
 #include <stdio.h>
@@ -34,12 +36,19 @@ bool has_robot = false;
 double last_status_time = 0;
 int hitpoints = 21;
 
+double last_vf_request;
+static GuiState gs;
+bool showing_score = false;
+bool inited_score = false;
+
 #define POSE_UP_BUTTON 0    //  dpad up
 #define POSE_DOWN_BUTTON 1  //  dpad down
 #define TROT_UP_BUTTON 3    //  dpad right
 #define TROT_DOWN_BUTTON 2  //  dpad left
 #define TURN_LEFT_BUTTON 8  //  left shoulder
 #define TURN_RIGHT_BUTTON 9 //  right shoulder
+#define SHOW_MWSCORE_BUTTON 7
+
 
 #define SPEED_AXIS 1    //  left Y
 #define STRAFE_AXIS 0   //  left X
@@ -173,6 +182,14 @@ void joystep() {
                     std::cerr << "pose: " << joypose << std::endl;
                 }
             }
+            else if (js.number == SHOW_MWSCORE_BUTTON) {
+                if (inited_score) {
+                    showing_score = !showing_score;
+                }
+                else {
+                    istatus->error("mwscore not configured");
+                }
+            }
             else {
                 std::cerr << "button " << (int)js.number << " value " << js.value << std::endl;
             }
@@ -256,8 +273,21 @@ void scan_for_robots() {
     ipacketizer->broadcast(C2R_Discover, sizeof(pd), &pd);
 }
 
-double last_vf_request;
-static GuiState gs;
+void connect_mwscore(std::string const &addr) {
+    size_t pos = addr.find_last_of(':');
+    if (pos == 0 || pos == std::string::npos) {
+        istatus->error("Bad mwscore address: " + addr);
+        return;
+    }
+    std::string a(addr.substr(0, pos));
+    int port(atoi(addr.substr(pos+1).c_str()));
+    if (port < 1 || port > 65535) {
+        istatus->error("Bad mwscore port: " + addr);
+        return;
+    }
+    connect_score(a.c_str(), (unsigned short)port, istatus, isocks);
+    inited_score = true;
+}
 
 int main(int argc, char const *argv[]) {
 
@@ -266,6 +296,11 @@ int main(int argc, char const *argv[]) {
     isocks = mksocks(port, istatus);
     inet = scan(isocks, itime, istatus);
     ipacketizer = packetize(inet, istatus);
+
+    boost::shared_ptr<Settings> theSettings(Settings::load("control.json"));
+    if (theSettings->has_name("mwscore")) {
+        connect_mwscore(theSettings->get_value("mwscore")->get_string());
+    }
 
     joyopen();
 
@@ -338,6 +373,13 @@ int main(int argc, char const *argv[]) {
         gs.pose = joypose;
         gs.hitpoints = hitpoints;
         gs.loss = q > 1 ? 0 : q < 0 ? 255 : (255 - (unsigned char)(255 * q));
+        step_score();
+        if (showing_score) {
+            show_gui_score(cur_score());
+        }
+        else {
+            hide_gui_score();
+        }
         update_gui(gs);
         step_gui();
     }

@@ -1,6 +1,7 @@
 
 #include "gui.h"
 #include "Image.h"
+#include "mwscore.h"
 #include <stdexcept>
 #include <GL/freeglut.h>
 #include <string.h>
@@ -19,6 +20,8 @@ static GLuint g_crouch = 0;
 static GLuint g_stretch = 0;
 
 #define test_glerror() test_glerror_(__LINE__, __FILE__)
+static MWScore gui_score;
+static bool showing_score;
 
 static void test_glerror_(int line, char const *file) {
     int r = glGetError();
@@ -59,6 +62,17 @@ void load_tga(char const *name, GLuint *tex) {
     make_texture(tex, width, height, alpha);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, alpha ? GL_RGBA : GL_RGB, GL_UNSIGNED_BYTE, bytes);
     delete[] bytes;
+}
+
+static void draw_vstring(char const *str, int left, int bot) {
+    glLoadIdentity();
+    glTranslatef(-left, -bot, 0);
+    glScalef(0.1f, 0.1f, 0.1f);
+    glLineWidth(1.0f);
+    while (*str) {
+        glutStrokeCharacter(GLUT_STROKE_ROMAN, *str);
+        ++str;
+    }
 }
 
 template<typename T> static void draw_val(char const *fmt, T val, int left, int bot) {
@@ -172,6 +186,26 @@ static void do_display() {
     glColor4f(0, 0, 0, 0.25f);
     draw_sprite(g_bar, 100, 32, 40, 22);
     draw_sprite(g_bar, 100, 32, 160, 22);
+    if (showing_score) {
+        draw_sprite(g_bar, 100, 100, 1080, 520);
+        if (gui_score.scores.size() > 0) {
+            int w = 1070 / gui_score.scores.size();
+            int l = 0;
+            char buf[25];
+            sprintf(buf, "%.1f", gui_score.time);
+            draw_vstring(buf, 110, 600);
+            for (auto ptr(gui_score.scores.begin()), end(gui_score.scores.end()); ptr != end; ++ptr) {
+                int h = 0;
+                for (auto i((*ptr).second.begin()), e((*ptr).second.end()); i != e; ++i) {
+                    draw_vstring((*i).first.c_str(), 110 + w * l, 500 - h * 20);
+                    sprintf(buf, "%d", (*i).second);
+                    draw_vstring(buf, 90 + w * l, 600 - h * 20); 
+                    h++;
+                }
+                l++;
+            }
+        }
+    }
     glColor4f(0.8f, 0.8f, 0.8f, 0.8f);
     draw_sprite(g_crouch, 32, 32, 160, 22);
     draw_sprite(g_stretch, 32, 32, 228, 22);
@@ -224,5 +258,13 @@ void close_gui() {
     g_win = -1;
 }
 
+void show_gui_score(MWScore &score) {
+    showing_score = true;
+    gui_score = score;
+}
+
+void hide_gui_score() {
+    showing_score = false;
+}
 
 

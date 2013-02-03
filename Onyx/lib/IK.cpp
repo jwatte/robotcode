@@ -19,6 +19,19 @@ leginfo legs[] = {
     { -CENTER_X, -CENTER_Y, CENTER_Z, FIRST_LENGTH, 1,  SECOND_LENGTH, 1, THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
 };
 
+
+//  how much to compensate first joint for based on servo orientation?
+static short const leg_comp[] = {
+    0,
+    1024,
+    512
+};
+static LegConfiguration g_lc;
+
+void set_leg_configuration(LegConfiguration lc) {
+    g_lc = lc;
+}
+
 void get_leg_params(legparams &op) {
     op.center_x = CENTER_X;
     op.center_y = CENTER_Y;
@@ -196,7 +209,7 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
         solve_error = "too large angle2";
     }
 
-    op.a = (unsigned short)(2048 + angle0 * 2047 / pi * leg.direction0);
+    op.a = (unsigned short)(2048 + angle0 * 2047 / pi * leg.direction0 - leg.direction0 * leg_comp[g_lc]);
     op.b = (unsigned short)(2048 + angle1 * 2047 / pi * leg.direction1);
     op.c = (unsigned short)(2048 + angle2 * 2047 / pi * leg.direction2);
 

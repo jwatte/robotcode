@@ -357,6 +357,8 @@ int main(int argc, char const *argv[]) {
     inet = listen(isocks, itime, istatus);
     ipackets = packetize(inet, istatus);
 
+    set_leg_configuration(lc_long);
+
     boost::shared_ptr<boost::thread> usb_thread(new boost::thread(boost::bind(usb_thread_fn)));
 
     boost::shared_ptr<Settings> settings(Settings::load("onyx.json"));

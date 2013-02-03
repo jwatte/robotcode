@@ -36,9 +36,17 @@ struct legpose {
     unsigned short c;
 };
 
+enum LegConfiguration {
+    lc_wide = 0,    //  servos point outwards (default)
+    lc_long = 1,    //  servos point front/back
+    lc_x = 2        //  servos point in an X
+};
+
+
 extern leginfo legs[];
 extern std::string solve_error;
 
+extern void set_leg_configuration(LegConfiguration lc);
 extern bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op);
 extern void get_leg_params(legparams &op);
 

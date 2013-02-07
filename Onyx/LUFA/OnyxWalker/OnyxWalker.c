@@ -70,6 +70,7 @@ int main(void) {
 
 static unsigned char display_state;
 static unsigned char battery_level;
+static unsigned char battery_voltage;
 static unsigned short display_time;
 
 static unsigned char servo_stati[32];
@@ -532,30 +533,32 @@ void OnyxWalker_Task(void) {
         if (ADCSRA & (1 << ADIF)) {
             ADCSRA |= 1 << ADIF;
             unsigned short aval = (unsigned short)ADCL | ((unsigned short)ADCH << 8u);
+            battery_voltage = (unsigned char)((long)aval * 100 / 508);
             //  LiPo batteries are very nonlinear in voltage -- there is a large 
             //  capacity range where they hover around the 14.5-15.0 volt range.
             static struct {
                 unsigned char bits;
-                unsigned short value;
+                unsigned char voltage;
             } voltages[] = {  //  853 is 16.8 volts; these numbers assume some load
-                { (unsigned char)0xff, (unsigned short)(160*853ul/168) },  //  16.0 volts
-                { (unsigned char)0xfe, (unsigned short)(155*853ul/168) },  //  15.5 volts
-                { (unsigned char)0xfc, (unsigned short)(152*853ul/168) },  //  15.2 volts
-                { (unsigned char)0xf8, (unsigned short)(150*853ul/168) },  //  15.0 volts
-                { (unsigned char)0xf0, (unsigned short)(148*853ul/168) },  //  14.8 volts
-                { (unsigned char)0xe0, (unsigned short)(146*853ul/168) },  //  14.6 volts
-                { (unsigned char)0xc0, (unsigned short)(144*853ul/168) },  //  14.4 volts
-                { (unsigned char)0x80, (unsigned short)(128*853ul/168) },  //  12.8 volts
+                { 0xff, 160 },
+                { 0xfe, 155 },
+                { 0xfc, 151 },
+                { 0xf8, 148 },
+                { 0xf0, 145 },
+                { 0xe0, 142 },
+                { 0xc0, 138 },
+                { 0x80, 128 },
                 { 0, 0u },       //  terminator
             };
             int i = 0;
             do {
                 battery_level = voltages[i].bits;
-            } while (voltages[i++].value > aval);
-            if (aval < (140*853/168)) {  //  about to go bust -- turn off!
+            } while (voltages[i++].voltage > battery_voltage);
+            if (battery_voltage < 132) {  //  about to go bust -- turn off!
                 send_sync(notorque_packet, sizeof(notorque_packet));    //  turn off torque on all servos
                 display_state = 128;    //  force battery display
                 battery_level = 0x80;
+                //  todo: robot controller should kill power at this point
             }
             ADCSRA |= (1 << ADSC);  //  start another one
         }

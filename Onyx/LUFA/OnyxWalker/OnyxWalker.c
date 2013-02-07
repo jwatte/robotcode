@@ -47,6 +47,7 @@
 
 #define BLINK_CNT 2
 #define RECV_TIMEOUT_TICKS 50
+#define DISPLAY_TICKS 30
 
 void Reconfig(void);
 void clear_poses(void);
@@ -66,6 +67,10 @@ int main(void) {
     }
 }
 
+
+static unsigned char display_state;
+static unsigned char battery_level;
+static unsigned short display_time;
 
 static unsigned char servo_stati[32];
 static unsigned short target_pose[32];
@@ -118,6 +123,22 @@ void setup_weapons(void) {
     DDRD |= 0x20 | 0x10;
 }
 
+void setup_adc(void) {
+    power_adc_enable();
+    ADMUX = (1 << REFS0)    //  AVcc
+        | 6                 //  channel 6 (PF6, where the battery is)
+        ;
+    ADCSRA = (1 << ADEN)    //  enable
+        | (1 << ADIF)       //  clear complete flag
+        | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0)    //  clock divide by 128
+        ;
+    ADCSRB = 0;
+    DIDR0 = (1 << ADC6D)    //  disable digital buffer pin F6
+        ;
+    DIDR2 = 0;
+    ADCSRA |= (1 << ADSC);  //  read once, to bootstrap the system
+}
+
 
 void SetupHardware(void) {
     MCUSR &= ~(1 << WDRF);
@@ -146,6 +167,7 @@ void SetupHardware(void) {
     delayms(50);
     set_status(0xf, 0xff);
 
+    setup_adc();
     delayms(50);
     set_status(0x7, 0xff);
     delayms(50);
@@ -502,6 +524,62 @@ void OnyxWalker_Task(void) {
     if ((short)(now - clear_received) > 0) {
         set_status(0, RECEIVED_LED);
         clear_received = now;
+    }
+    if ((short)(now - display_time) >= DISPLAY_TICKS) {
+        ++display_state;
+        display_time = now;
+
+        if (ADCSRA & (1 << ADIF)) {
+            ADCSRA |= 1 << ADIF;
+            unsigned short aval = (unsigned short)ADCL | ((unsigned short)ADCH << 8u);
+            //  LiPo batteries are very nonlinear in voltage -- there is a large 
+            //  capacity range where they hover around the 14.5-15.0 volt range.
+            static struct {
+                unsigned char bits;
+                unsigned short value;
+            } voltages[] = {  //  853 is 16.8 volts; these numbers assume some load
+                { (unsigned char)0xff, (unsigned short)(160*853ul/168) },  //  16.0 volts
+                { (unsigned char)0xfe, (unsigned short)(155*853ul/168) },  //  15.5 volts
+                { (unsigned char)0xfc, (unsigned short)(152*853ul/168) },  //  15.2 volts
+                { (unsigned char)0xf8, (unsigned short)(150*853ul/168) },  //  15.0 volts
+                { (unsigned char)0xf0, (unsigned short)(148*853ul/168) },  //  14.8 volts
+                { (unsigned char)0xe0, (unsigned short)(146*853ul/168) },  //  14.6 volts
+                { (unsigned char)0xc0, (unsigned short)(144*853ul/168) },  //  14.4 volts
+                { (unsigned char)0x80, (unsigned short)(128*853ul/168) },  //  12.8 volts
+                { 0, 0u },       //  terminator
+            };
+            int i = 0;
+            do {
+                battery_level = voltages[i].bits;
+            } while (voltages[i++].value > aval);
+            if (aval < (140*853/168)) {  //  about to go bust -- turn off!
+                send_sync(notorque_packet, sizeof(notorque_packet));    //  turn off torque on all servos
+                display_state = 128;    //  force battery display
+                battery_level = 0x80;
+            }
+            ADCSRA |= (1 << ADSC);  //  start another one
+        }
+
+        if (display_state < 112) {
+            set_status_override(0, 0);
+        }
+        else if (display_state < 120) {
+            set_status_override(1 << (display_state - 112), 0xff);
+        }
+        else if (display_state < 128) {
+            set_status_override((0x80 >> (display_state - 120)) |
+                (battery_level & ~(0xff >> (display_state - 120))), 0xff);
+        }
+        else if (display_state < 180) {
+            set_status_override(battery_level, 0xff);
+        }
+        else if (display_state < 188) {
+            set_status_override((battery_level & (0xff >> (display_state - 180)))
+                | (0x80 >> (display_state - 180)), 0xff);
+        }
+        else {
+            set_status_override(0, 0);
+        }
     }
 }
 

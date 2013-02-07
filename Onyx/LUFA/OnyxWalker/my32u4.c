@@ -12,6 +12,8 @@ static volatile unsigned char rptr;
 static volatile unsigned char nmissed;
 
 static volatile unsigned char status;
+static volatile unsigned char status_override;
+static volatile unsigned char status_override_mask;
 
 void setup_status() {
     DDRF = DDRF | 0x80;
@@ -21,18 +23,25 @@ void setup_status() {
 }
 
 void set_status(unsigned char value, unsigned char mask) {
-    status = (status & ~mask) | value;
+    status = (status & ~mask) | (value & mask);
+    unsigned char show_status = (status & ~status_override_mask) | status_override;
     PORTF = (PORTF & ~0x80) |
-        ((status & 1) ? 0x80 : 0);
+        ((show_status & 1) ? 0x80 : 0);
     PORTE = (PORTE & ~(0x40 | 0x4)) |
-        ((status & 2) ? 0x40 : 0) |
-        ((status & 4) ? 0x4 : 0);
+        ((show_status & 2) ? 0x40 : 0) |
+        ((show_status & 4) ? 0x4 : 0);
     PORTD = (PORTD & ~(0x80 | 0x40 | 0x2 | 0x1)) |
-        ((status & 8) ? 0x80 : 0) |
-        ((status & 0x10) ? 0x40 : 0) |
-        ((status & 0x20) ? 0x2 : 0) |
-        ((status & 0x40) ? 0x1 : 0);
-    PORTB = (PORTB & ~0x8) | ((status & 0x80) ? 0x8 : 0);
+        ((show_status & 8) ? 0x80 : 0) |
+        ((show_status & 0x10) ? 0x40 : 0) |
+        ((show_status & 0x20) ? 0x2 : 0) |
+        ((show_status & 0x40) ? 0x1 : 0);
+    PORTB = (PORTB & ~0x8) | ((show_status & 0x80) ? 0x8 : 0);
+}
+
+void set_status_override(unsigned char value, unsigned char mask) {
+    status_override = value & mask;
+    status_override_mask = mask;
+    set_status(status, 0xff);
 }
 
 

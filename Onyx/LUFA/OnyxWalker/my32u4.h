@@ -11,7 +11,9 @@
 
 #define CONNECTED_LED 0x1
 #define RECEIVED_LED 0x2
-#define BLINKING_LED 0x10
+
+#define BATTERY_LEDS 0xF3
+
 
 void setup_uart(unsigned char brate);
 void send_sync(unsigned char const *data, unsigned char size);

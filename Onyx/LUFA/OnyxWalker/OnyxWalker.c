@@ -503,14 +503,5 @@ void OnyxWalker_Task(void) {
         set_status(0, RECEIVED_LED);
         clear_received = now;
     }
-    static unsigned short prevms;
-    static unsigned char taskctr;
-    if (now != prevms) {
-        ++taskctr;
-        prevms = now;
-    }
-    if ((taskctr & 31) == 0) {
-        set_status((taskctr & 32) ? BLINKING_LED : 0, BLINKING_LED);
-    }
 }
 

@@ -72,7 +72,6 @@ static unsigned short target_pose[32];
 static unsigned short target_prev_pose[32];
 
 unsigned short last_in = 0;
-unsigned short clearcnt = 0;
 unsigned char last_seq = 0;
 
 
@@ -107,44 +106,64 @@ void add_xbuf(unsigned char const *ptr, unsigned char len) {
     xbufptr += len;
 }
 
+
+void set_weapons(unsigned char code) {
+    PORTD = (PORTD & ~(0x20 | 0x10)) | ((code << 4) & (0x20 | 0x10));
+    PORTC = (PORTC & ~(0x80 | 0x40)) | ((code << 4) & (0x80 | 0x40));
+}
+
+void setup_weapons(void) {
+    set_weapons(0);
+    DDRC |= 0x80 | 0x40;
+    DDRD |= 0x20 | 0x10;
+}
+
+
 void SetupHardware(void) {
     MCUSR &= ~(1 << WDRF);
     wdt_disable();
 
     //  weapons fire off
-    PORTB &= ~((1 << PB4) | (1 << PB5));
-    DDRB |= ((1 << PB4) | (1 << PB5));
+    setup_weapons();
     
     //  Status LEDs on
-    DDRB |= 0xf;
-    PORTB |= 0xf;
+    setup_status();
+    set_status(0xff, 0xff);
 
     clock_prescale_set(clock_div_1);
+    set_status(0x7f, 0xff);
+
     setup_delay();
-    delayms(150);   //  show off a little bit
-    PORTB &= ~BLUE_LED;
+    delayms(50);
+    set_status(0x3f, 0xff);
 
     setup_uart(0);
-    delayms(150);
-    PORTB &= ~GREEN_LED;
+    delayms(50);
+    set_status(0x1f, 0xff);
 
     send_sync(notorque_packet, sizeof(notorque_packet));    //  turn off torque on all servos
-    delayms(150);
-    PORTB &= ~YELLOW_LED;
-
     clear_xbuf();
-    delayms(150);
-    PORTB &= ~RED_LED;
+    delayms(50);
+    set_status(0xf, 0xff);
 
+    delayms(50);
+    set_status(0x7, 0xff);
+    delayms(50);
+    set_status(0x3, 0xff);
+    delayms(50);
+    set_status(0x1, 0xff);
+    delayms(50);
+    set_status(0x0, 0xff);
+    
     USB_Init();
 }
 
 void EVENT_USB_Device_Connect(void) {
-    PORTB |= GREEN_LED;
+    set_status(CONNECTED_LED, CONNECTED_LED);
 }
 
 void EVENT_USB_Device_Disconnect(void) {
-    PORTB &= ~GREEN_LED;
+    set_status(0x0, CONNECTED_LED);
 }
 
 void EVENT_USB_Device_ConfigurationChanged(void) {
@@ -159,21 +178,21 @@ void Reconfig() {
     bool ConfigSuccess = true;
 
     ConfigSuccess &= Endpoint_ConfigureEndpoint(
-	DATA_RX_EPNUM,
+        DATA_RX_EPNUM,
         EP_TYPE_BULK, 
-	DATA_RX_EPSIZE,
+        DATA_RX_EPSIZE,
         2);
     ConfigSuccess &= Endpoint_ConfigureEndpoint(
-	DATA_TX_EPNUM,
+        DATA_TX_EPNUM,
         EP_TYPE_BULK, 
-	DATA_TX_EPSIZE,
+        DATA_TX_EPSIZE,
         1);
 
     if (!ConfigSuccess) {
         while (true) {
-            PORTB |= 0xf;
+            set_status(0xff, 0xff);
             delayms(100);
-            PORTB &= ~0xf;
+            set_status(0, 0xff);
             delayms(100);
         }
     }
@@ -213,15 +232,12 @@ void reg_write(unsigned char id, unsigned char reg, unsigned char const *buf, un
     pbuf[5] = reg;
     memcpy(&pbuf[6], buf, cnt);
     pbuf[6 + cnt] = cksum(&pbuf[2], cnt + 4);
-    PORTB |= YELLOW_LED;
     send_sync(pbuf, cnt + 7);
     //  assume servos do not ack writes
 }
 
 unsigned char recv_packet(unsigned char *dst, unsigned char maxsz) {
     unsigned char cnt = 0;
-    PORTB |= RED_LED;
-    clearcnt = getms() + BLINK_CNT;
     UCSR1B = (1 << RXEN1);
     unsigned char tc = TCNT0;
     unsigned char ntc = tc;
@@ -277,7 +293,6 @@ unsigned char sbuf[DATA_TX_EPSIZE];
 unsigned char sbuflen;
 
 void wait_for_idle(void) {
-    PORTB &= ~GREEN_LED;
     while (true) {
         unsigned char av = recv_avail();
         unsigned char ts = TCNT0;
@@ -290,13 +305,11 @@ void wait_for_idle(void) {
             break;
         }
     }
-    PORTB |= GREEN_LED;
 }
 
 unsigned char lerp_pos(unsigned char const *data, unsigned char sz) {
     if (sz < 3) {
         //  bad command
-        PORTB |= BLUE_LED;
         return sz;
     }
     unsigned short dt = data[0] + ((unsigned short)data[1] << 8);
@@ -308,7 +321,6 @@ unsigned char lerp_pos(unsigned char const *data, unsigned char sz) {
     unsigned char nid = data[2];
     if (nid > 32 || sz < nid * 3 + 3) {
         //  bad command
-        PORTB |= BLUE_LED;
         return sz;
     }
     unsigned char ptr = 3;
@@ -358,7 +370,6 @@ void do_get_status(void) {
 void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end) {
     while (offset < end) {
         if (rawmode && sbuf[offset] == CMD_RAW_DATA) {
-            PORTB |= YELLOW_LED;
             wait_for_idle();
             send_sync(&sbuf[offset+1], end - offset - 1);
             break;
@@ -375,7 +386,7 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
                 setup_uart(sbuf[offset+1]);
                 break;
             case CMD_SET_LEDS:
-                PORTB = (PORTB & 0xf0) | (sbuf[offset+1] & 0xf);
+                set_status(sbuf[offset+1], 0xff);
                 break;
             case CMD_SET_REG1:
                 rawmode = false;
@@ -394,10 +405,8 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
                 break;
             case CMD_DELAY:
                 rawmode = false;
-                PORTB |= YELLOW_LED;
                 delayms(sbuf[offset+1]);
                 wait_for_idle();
-                PORTB &= ~YELLOW_LED;
                 break;
             case CMD_NOP:
                 break;
@@ -420,6 +429,8 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
 unsigned char epic;
 unsigned char epiir;
 unsigned char epirwa;
+
+unsigned short clear_received;
 
 void OnyxWalker_Task(void) {
     if (USB_DeviceState != DEVICE_STATE_Configured) {
@@ -448,8 +459,6 @@ void OnyxWalker_Task(void) {
             if (m) {
                 unsigned char nm = m;
                 if (rawmode) {
-                    PORTB |= RED_LED;
-                    clearcnt = getms() + BLINK_CNT;
                     if ((unsigned short)m + gg > DATA_RX_EPSIZE) {
                         m = DATA_RX_EPSIZE - gg;
                     }
@@ -470,6 +479,8 @@ void OnyxWalker_Task(void) {
     Endpoint_SelectEndpoint(DATA_TX_EPNUM);
     Endpoint_SetEndpointDirection(ENDPOINT_DIR_OUT);
     if (Endpoint_IsConfigured() && Endpoint_IsOUTReceived() && Endpoint_IsReadWriteAllowed()) {
+        set_status(RECEIVED_LED, RECEIVED_LED);
+        clear_received = now + BLINK_CNT;
         uint8_t n = Endpoint_BytesInEndpoint();
         if (n > sizeof(sbuf)) {
             n = sizeof(sbuf);
@@ -477,7 +488,6 @@ void OnyxWalker_Task(void) {
         if (n) {
             last_seq = Endpoint_Read_8();
             --n;
-            PORTB &= ~GREEN_LED;
             for (unsigned char c = 0; c < n; ++c) {
                 sbuf[c] = Endpoint_Read_8();
             }
@@ -486,23 +496,21 @@ void OnyxWalker_Task(void) {
         if (n) {
             sbuflen = n;
             dispatch(sbuf, 0, n);
-            PORTB |= GREEN_LED;
         }
     }
 
-    unsigned short ms = getms();
+    if ((short)(now - clear_received) > 0) {
+        set_status(0, RECEIVED_LED);
+        clear_received = now;
+    }
     static unsigned short prevms;
     static unsigned char taskctr;
-    if (ms != prevms) {
+    if (now != prevms) {
         ++taskctr;
-        prevms = ms;
-    }
-    if ((short)(ms - clearcnt) >= 0) {
-        PORTB &= ~RED_LED;
-        clearcnt = ms;
+        prevms = now;
     }
     if ((taskctr & 31) == 0) {
-        PORTB &= ~YELLOW_LED;
+        set_status((taskctr & 32) ? BLINKING_LED : 0, BLINKING_LED);
     }
 }
 

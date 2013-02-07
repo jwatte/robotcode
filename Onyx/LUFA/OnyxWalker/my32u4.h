@@ -9,11 +9,9 @@
 #define BRATE_1000000 1
 #define BRATE_2000000 0
 
-//  on port B
-#define RED_LED 0x1
-#define YELLOW_LED 0x2
-#define GREEN_LED 0x4
-#define BLUE_LED 0x8
+#define CONNECTED_LED 0x1
+#define RECEIVED_LED 0x2
+#define BLINKING_LED 0x10
 
 void setup_uart(unsigned char brate);
 void send_sync(unsigned char const *data, unsigned char size);
@@ -31,5 +29,7 @@ void delayms(unsigned short ms);
 void delayus(unsigned short us);
 unsigned short getms(void);
 void show_error(unsigned char err, unsigned char info);
+void setup_status(void);
+void set_status(unsigned char value, unsigned char mask);
 
 #endif  //  my32u4_h

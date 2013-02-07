@@ -11,6 +11,31 @@ static volatile unsigned char rbuf[128];
 static volatile unsigned char rptr;
 static volatile unsigned char nmissed;
 
+static volatile unsigned char status;
+
+void setup_status() {
+    DDRF = DDRF | 0x80;
+    DDRE = DDRE | 0x40 | 0x4;
+    DDRD = DDRD | 0x80 | 0x40 | 0x2 | 0x1;
+    DDRB = DDRB | 0x8;
+}
+
+void set_status(unsigned char value, unsigned char mask) {
+    status = (status & ~mask) | value;
+    PORTF = (PORTF & ~0x80) |
+        ((status & 1) ? 0x80 : 0);
+    PORTE = (PORTE & ~(0x40 | 0x4)) |
+        ((status & 2) ? 0x40 : 0) |
+        ((status & 4) ? 0x4 : 0);
+    PORTD = (PORTD & ~(0x80 | 0x40 | 0x2 | 0x1)) |
+        ((status & 8) ? 0x80 : 0) |
+        ((status & 0x10) ? 0x40 : 0) |
+        ((status & 0x20) ? 0x2 : 0) |
+        ((status & 0x40) ? 0x1 : 0);
+    PORTB = (PORTB & ~0x8) | ((status & 0x80) ? 0x8 : 0);
+}
+
+
 ISR(USART1_RX_vect) {
     while ((UCSR1A & (1 << RXC1)) != 0) {
         unsigned char d = UDR1;
@@ -20,7 +45,6 @@ ISR(USART1_RX_vect) {
         }
         else {
             ++nmissed;
-            PORTB |= BLUE_LED;
         }
     }
 }
@@ -198,14 +222,15 @@ void show_error(unsigned char errkind, unsigned char errdata) {
 
     cli();
     while (1) {
-        PORTB |= BLUE_LED;
+        set_status(0xff, 0xff);
         delayms(50);
-        PORTB &= ~0xf;
+        set_status(0, 0xff);
         delayms(50);
-        PORTB = (PORTB & 0xf0) | (errkind & 0xf);
+        set_status(errkind, 0xff);
         delayms(200);
-        PORTB &= ~0xf;
-        delayms(20);
+        set_status(0, 0xff);
+        delayms(50);
+        set_status(errdata, 0xff);
         unsigned char buf[8] = {
             0xee, 0xee, errkind, errdata, 
             epic, epiir, epirwa,

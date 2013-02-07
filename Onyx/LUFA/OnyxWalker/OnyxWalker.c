@@ -533,7 +533,8 @@ void OnyxWalker_Task(void) {
         if (ADCSRA & (1 << ADIF)) {
             ADCSRA |= 1 << ADIF;
             unsigned short aval = (unsigned short)ADCL | ((unsigned short)ADCH << 8u);
-            battery_voltage = (unsigned char)((long)aval * 100 / 508);
+            //  102 is adjusted for high AREF (measured 5.1V)
+            battery_voltage = (unsigned char)((long)aval * 102 / 508);
             //  LiPo batteries are very nonlinear in voltage -- there is a large 
             //  capacity range where they hover around the 14.5-15.0 volt range.
             static struct {

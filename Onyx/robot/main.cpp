@@ -5,6 +5,7 @@
 #include "protocol.h"
 #include "util.h"
 #include "Interpolator.h"
+#include "logger.h"
 
 #include <assert.h>
 
@@ -31,6 +32,7 @@ static IStatus *istatus;
 static ISockets *isocks;
 static INetwork *inet;
 static IPacketizer *ipackets;
+static unsigned char battery;
 
 legparams lparam;
 
@@ -210,6 +212,7 @@ static void handle_packets() {
     if (want_status) {
         struct P_Status ps;
         memset(&ps, 0, sizeof(ps));
+        ps.battery = battery;
         ps.hits = 21;
         ps.status = nst;
         Message msg;
@@ -333,6 +336,8 @@ void usb_thread_fn() {
             usleep(3000);
         }
         ss.step();
+        battery = ss.battery();
+        log(LogKeyBattery, battery);
         if (ss.queue_depth() > 30) {
             istatus->error("Servo queue overflow -- flushing.");
             int n = 100;
@@ -356,6 +361,8 @@ int main(int argc, char const *argv[]) {
     isocks = mksocks(port, istatus);
     inet = listen(isocks, itime, istatus);
     ipackets = packetize(inet, istatus);
+
+    open_logger();
 
     set_leg_configuration(lc_long);
 

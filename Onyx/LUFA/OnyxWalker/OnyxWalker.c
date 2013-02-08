@@ -386,7 +386,7 @@ unsigned char lerp_pos(unsigned char const *data, unsigned char sz) {
 }
 
 void do_get_status(void) {
-    unsigned char cmd[3] = {
+    unsigned char cmd[4] = {
         STATUS_COMPLETE,
         2 + sizeof(servo_stati),
         get_nmissed(),

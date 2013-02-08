@@ -56,6 +56,7 @@ struct P_Info {
 struct P_Status {
     unsigned char hits;
     unsigned char status;
+    unsigned char battery;
     char message[32];
 };
 

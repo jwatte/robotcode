@@ -207,6 +207,7 @@ ServoSet::ServoSet() {
     lastSeq_ = nextSeq_ = 0;
     lastStep_ = 0;
     lastSend_ = 0;
+    battery_ = 0;
     //  Compensate for a bug: first packet doesn't register unless 
     //  the receiver board is freshly reset.
     unsigned char nop[] = { 0, NOP };
@@ -241,8 +242,8 @@ Servo &ServoSet::add_servo(unsigned char id, unsigned short neutral) {
         SET_REG1, id, REG_RETURN_DELAY_TIME, 2,
         SET_REG1, id, REG_ALARM_LED, 0x7C,      //  everything except voltage and angle limit
         SET_REG1, id, REG_ALARM_SHUTDOWN, 0x4,  //  temperature
-        SET_REG1, id, REG_HIGHEST_LIMIT_TEMPERATURE, 70,
-        SET_REG1, id, REG_HIGHEST_LIMIT_VOLTAGE, 169,
+        SET_REG1, id, REG_HIGHEST_LIMIT_TEMPERATURE, 75,
+        SET_REG1, id, REG_HIGHEST_LIMIT_VOLTAGE, 170,
         SET_REG1, id, REG_LOWEST_LIMIT_VOLTAGE, 120,
         SET_REG2, id, REG_TORQUE_LIMIT, 103, 0,     //  10% of full torque to start out
         SET_REG2, id, REG_GOAL_POSITION, (unsigned char)(neutral & 0xff), (unsigned char)((neutral >> 8) & 0xff),
@@ -478,8 +479,9 @@ unsigned char ServoSet::do_status_complete(unsigned char const *pack, unsigned c
         return sz;
     }
     status_.resize(pack[1]);
+    battery_ = pack[2];
     if (pack[1]) {
-        memcpy(&status_[0], &pack[2], pack[1]);
+        memcpy(&status_[0], &pack[3], pack[1]);
     }
     if (nincomplete > 0) {
         --nincomplete;
@@ -496,6 +498,10 @@ unsigned char ServoSet::get_status(unsigned char *buf, unsigned char n) {
         return status_.size();
     }
     return 0;
+}
+
+unsigned char ServoSet::battery() {
+    return battery_;
 }
 
 void ServoSet::lerp_pose(unsigned short ms, cmd_pose const *pose, unsigned char npose) {

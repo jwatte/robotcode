@@ -35,6 +35,7 @@ IPacketizer *ipacketizer;
 bool has_robot = false;
 double last_status_time = 0;
 int hitpoints = 21;
+unsigned char battery = 0;
 
 double last_vf_request;
 static GuiState gs;
@@ -213,6 +214,7 @@ void do_status(P_Status const *status) {
     }
     last_status_time = itime->now();
     hitpoints = status->hits;
+    battery = status->battery;
     /*
     istatus->message(std::string("Status: hits=") + boost::lexical_cast<std::string>((int)status->hits)
         + " status=" + hexnum(status->status) + " message=" + status->message);
@@ -372,6 +374,7 @@ int main(int argc, char const *argv[]) {
         gs.trot = trotvals[joytrotix];
         gs.pose = joypose;
         gs.hitpoints = hitpoints;
+        gs.battery = battery;
         gs.loss = q > 1 ? 0 : q < 0 ? 255 : (255 - (unsigned char)(255 * q));
         step_score();
         if (showing_score) {

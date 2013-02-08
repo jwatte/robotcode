@@ -171,6 +171,7 @@ void SetupHardware(void) {
     setup_adc();
     delayms(50);
     set_status(0x7, 0xff);
+
     delayms(50);
     set_status(0x3, 0xff);
     delayms(50);
@@ -385,9 +386,15 @@ unsigned char lerp_pos(unsigned char const *data, unsigned char sz) {
 }
 
 void do_get_status(void) {
-    unsigned char cmd[3] = { STATUS_COMPLETE, 1 + sizeof(servo_stati), get_nmissed() };
-    add_xbuf(cmd, 3);
+    unsigned char cmd[3] = {
+        STATUS_COMPLETE,
+        2 + sizeof(servo_stati),
+        get_nmissed(),
+        battery_voltage
+        };
+    add_xbuf(cmd, 4);
     add_xbuf(servo_stati, sizeof(servo_stati));
+    memset(servo_stati, 0, sizeof(servo_stati));
 }
 
 void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end) {

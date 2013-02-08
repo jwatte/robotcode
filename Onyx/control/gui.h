@@ -20,6 +20,7 @@ struct GuiState {
     unsigned char hitdir;
     unsigned char status;
     unsigned char loss;
+    unsigned char battery;
 };
 
 class ITime;

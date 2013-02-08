@@ -130,6 +130,7 @@ public:
     unsigned char get_status(unsigned char *bytes, unsigned char cnt);
     //  set many poses over some future amount of time
     void lerp_pose(unsigned short ms, cmd_pose const *pose, unsigned char npose);
+    unsigned char battery();
 
 private:
     friend class Servo;
@@ -137,14 +138,15 @@ private:
     std::vector<servo_cmd> cmds_;
     std::vector<unsigned char> status_;
     boost::shared_ptr<Module> usbModule_;
+    double lastStep_;
+    double lastSend_;
     USBLink *usb_;
     size_t pollIx_;
     unsigned short torqueLimit_;
     unsigned char lastServoId_;
     unsigned char lastSeq_;
     unsigned char nextSeq_;
-    double lastStep_;
-    double lastSend_;
+    unsigned char battery_;
 
     void add_cmd(servo_cmd const &cmd);
     unsigned char do_read_complete(unsigned char const *pack, unsigned char sz);

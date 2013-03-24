@@ -197,10 +197,15 @@ unsigned int Servo::queue_depth() const {
 
 
 
-ServoSet::ServoSet() {
+ServoSet::ServoSet(bool usb) {
     boost::shared_ptr<Settings> st(Settings::load("settings.ini"));
-    usbModule_ = USBLink::open(st);
-    usb_ = usbModule_->cast_as<USBLink>();
+    if (usb) {
+        usbModule_ = USBLink::open(st);
+        usb_ = usbModule_->cast_as<USBLink>();
+    }
+    else {
+        usb_ = nullptr;
+    }
     pollIx_ = 0;
     torqueLimit_ = DEFAULT_TORQUE_LIMIT; //  some fraction of max power
     lastServoId_ = 0;
@@ -208,15 +213,17 @@ ServoSet::ServoSet() {
     lastStep_ = 0;
     lastSend_ = 0;
     battery_ = 0;
-    //  Compensate for a bug: first packet doesn't register unless 
-    //  the receiver board is freshly reset.
-    unsigned char nop[] = { 0, NOP };
-    usb_->raw_send(&nop, 2);
-    //  broadcast turn off torque
-    unsigned char disable_torque_pack[] = {
-        0, SET_REG1, 0xfe, REG_TORQUE_ENABLE, 0,
-    };
-    usb_->raw_send(disable_torque_pack, sizeof(disable_torque_pack));
+    if (usb) {
+        //  Compensate for a bug: first packet doesn't register unless 
+        //  the receiver board is freshly reset.
+        unsigned char nop[] = { 0, NOP };
+        usb_->raw_send(&nop, 2);
+        //  broadcast turn off torque
+        unsigned char disable_torque_pack[] = {
+            0, SET_REG1, 0xfe, REG_TORQUE_ENABLE, 0,
+        };
+        usb_->raw_send(disable_torque_pack, sizeof(disable_torque_pack));
+    }
 }
 
 ServoSet::~ServoSet() {
@@ -236,24 +243,26 @@ Servo &ServoSet::add_servo(unsigned char id, unsigned short neutral) {
     }
     servos_[id] = boost::shared_ptr<Servo>(new Servo(id, neutral, *this));
     unsigned short torque = std::min((unsigned short)103, torqueLimit_);
-    unsigned char set_regs_pack[] = {
-        nextSeq_,
-        SET_REG1, id, REG_STATUS_RETURN_LEVEL, 1,           //  set reg
-        DELAY, 0,
-        SET_REG1, id, REG_RETURN_DELAY_TIME, 2,
-        SET_REG1, id, REG_ALARM_LED, 0x7C,      //  everything except voltage and angle limit
-        SET_REG1, id, REG_ALARM_SHUTDOWN, 0x4,  //  temperature
-        SET_REG1, id, REG_HIGHEST_LIMIT_TEMPERATURE, 75,
-        SET_REG1, id, REG_HIGHEST_LIMIT_VOLTAGE, 170,
-        SET_REG1, id, REG_LOWEST_LIMIT_VOLTAGE, 120,
-        SET_REG2, id, REG_TORQUE_LIMIT, (unsigned char)(torque & 0xff), (unsigned char)((torque >> 8) & 0xff),     //  10% of full torque to start out
-        SET_REG2, id, REG_GOAL_POSITION, (unsigned char)(neutral & 0xff), (unsigned char)((neutral >> 8) & 0xff),
-        SET_REG2, id, REG_MOVING_SPEED, 0, 0,       //  set speed at max
-        SET_REG1, id, REG_LOCK, 1,
-        SET_REG1, id, REG_TORQUE_ENABLE, 1,
-    };
+    if (!!usb_) {
+        unsigned char set_regs_pack[] = {
+            nextSeq_,
+            SET_REG1, id, REG_STATUS_RETURN_LEVEL, 1,           //  set reg
+            DELAY, 0,
+            SET_REG1, id, REG_RETURN_DELAY_TIME, 2,
+            SET_REG1, id, REG_ALARM_LED, 0x7C,      //  everything except voltage and angle limit
+            SET_REG1, id, REG_ALARM_SHUTDOWN, 0x4,  //  temperature
+            SET_REG1, id, REG_HIGHEST_LIMIT_TEMPERATURE, 75,
+            SET_REG1, id, REG_HIGHEST_LIMIT_VOLTAGE, 170,
+            SET_REG1, id, REG_LOWEST_LIMIT_VOLTAGE, 120,
+            SET_REG2, id, REG_TORQUE_LIMIT, (unsigned char)(torque & 0xff), (unsigned char)((torque >> 8) & 0xff),     //  10% of full torque to start out
+            SET_REG2, id, REG_GOAL_POSITION, (unsigned char)(neutral & 0xff), (unsigned char)((neutral >> 8) & 0xff),
+            SET_REG2, id, REG_MOVING_SPEED, 0, 0,       //  set speed at max
+            SET_REG1, id, REG_LOCK, 1,
+            SET_REG1, id, REG_TORQUE_ENABLE, 1,
+        };
+        usb_->raw_send(set_regs_pack, sizeof(set_regs_pack));
+    }
     ++nextSeq_;
-    usb_->raw_send(set_regs_pack, sizeof(set_regs_pack));
     return *servos_[id];
 }
 
@@ -268,6 +277,10 @@ Servo &ServoSet::id(unsigned char id) {
 }
 
 void ServoSet::step() {
+
+    if (!usb_) {
+        return;
+    }
 
     //  pack up as many commands as can fit in a single USB packet
     unsigned char buf[56];
@@ -370,7 +383,9 @@ void ServoSet::step() {
         }
         if ((bufptr > 1) || (now - lastSend_ > MIN_SEND_PERIOD)) {
             lastSend_ = now;
-            usb_->raw_send(buf, bufptr);
+            if (!!usb_) {
+                usb_->raw_send(buf, bufptr);
+            }
             cmds_.erase(cmds_.begin(), ptr);
         }
     }
@@ -438,7 +453,9 @@ void ServoSet::add_cmd(servo_cmd const &cmd) {
             return;
         }
     }
-    cmds_.push_back(cmd);
+    if (!!usb_) {
+        cmds_.push_back(cmd);
+    }
 }
 
 static int nincomplete = 0;
@@ -508,6 +525,9 @@ unsigned char ServoSet::battery() {
 void ServoSet::lerp_pose(unsigned short ms, cmd_pose const *pose, unsigned char npose) {
     if (npose > 19) {
         throw std::runtime_error("attempt to lerp_pose() with too many servos");
+    }
+    if (!usb_) {
+        return;
     }
     unsigned char cmd[64];
     cmd[0] = nextSeq_;

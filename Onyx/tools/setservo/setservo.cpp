@@ -40,9 +40,11 @@ int main(int argc, char const *argv[]) {
     for (auto ptr(positions.begin()), end(positions.end()); ptr != end; ++ptr) {
         ss.add_servo((*ptr).first, (*ptr).second);
     }
-    for (int i = 0; i < 1500; ++i) {
+    int i = 0;
+    while (true) {
         ss.step();
         usleep(5000);
+        ++i;
         if (i == 10) {
             ss.set_torque(900);
             for (auto ptr(positions.begin()), end(positions.end()); ptr != end; ++ptr) {

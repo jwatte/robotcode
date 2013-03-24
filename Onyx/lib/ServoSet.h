@@ -115,7 +115,7 @@ private:
 
 class ServoSet {
 public:
-    ServoSet();
+    ServoSet(bool usb = true);
     ~ServoSet();
 
     Servo &add_servo(unsigned char id, unsigned short neutral = 2048);

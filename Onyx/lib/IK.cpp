@@ -13,8 +13,8 @@
 #define THIRD_LENGTH_B 164
 
 leginfo legs[] = {
-    { CENTER_X, CENTER_Y, CENTER_Z,   FIRST_LENGTH, 1,  SECOND_LENGTH, -1,  THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, 1 },
-    { -CENTER_X, CENTER_Y, CENTER_Z,  FIRST_LENGTH, -1, SECOND_LENGTH, 1, THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
+    { CENTER_X, CENTER_Y, CENTER_Z,   FIRST_LENGTH, 1,  SECOND_LENGTH, 1,  THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
+    { -CENTER_X, CENTER_Y, CENTER_Z,  FIRST_LENGTH, -1, SECOND_LENGTH, -1, THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, 1 },
     { CENTER_X, -CENTER_Y, CENTER_Z,  FIRST_LENGTH, -1, SECOND_LENGTH, -1,  THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, 1 },
     { -CENTER_X, -CENTER_Y, CENTER_Z, FIRST_LENGTH, 1,  SECOND_LENGTH, 1, THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
 };
@@ -22,8 +22,8 @@ leginfo legs[] = {
 
 //  how much to compensate first joint for based on servo orientation?
 static short const leg_comp[] = {
-    0,
     1024,
+    0,
     512
 };
 static LegConfiguration g_lc;
@@ -53,12 +53,16 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     float dx = x - leg.cx;
     float dy = y - leg.cy;
     float dz = z - leg.cz;
+    //  solve as if it's the front-right leg
     bool ret = true;
+    bool flip = false;
     if (leg.cx < 0) {
         dx *= -1;
+        flip = !flip;
     }
     if (leg.cy < 0) {
         dy *= -1;
+        flip = !flip;
     }
     if (dx <= 0) {
         if (dy < 20) {
@@ -101,25 +105,6 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     //  check minimum reach
     float d = sqrtf(ndx*ndx + dz*dz);
     float md = fabsf(leg.l2 - leg.x1);
-    /*
-    if (d < md) {
-        solve_error = "too close to joint; ";
-        solve_error += "d=" + boost::lexical_cast<std::string>(d);
-        solve_error += "; md=" + boost::lexical_cast<std::string>(md);
-        solve_error += "; ndx=" + boost::lexical_cast<std::string>(ndx);
-        solve_error += "; dz=" + boost::lexical_cast<std::string>(dz);
-        //  cannot possibly get within the inner circle
-        if (d == 0) {
-            ndx = md;
-        }
-        else {
-            float r = md / d;
-            ndx = ndx * r;
-            dz = dz * r;
-        }
-        ret = false;
-    }
-    */
     //  check maximum reach
     md = leg.l2 + leg.x1;
     if (d > md) {
@@ -209,7 +194,7 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
         solve_error = "too large angle2";
     }
 
-    op.a = (unsigned short)(2048 + angle0 * 2047 / pi * leg.direction0 - leg.direction0 * leg_comp[g_lc]);
+    op.a = (unsigned short)(2048 + angle0 * 2047 / pi * leg.direction0 + leg.direction0 * leg_comp[g_lc]);
     op.b = (unsigned short)(2048 + angle1 * 2047 / pi * leg.direction1);
     op.c = (unsigned short)(2048 + angle2 * 2047 / pi * leg.direction2);
 

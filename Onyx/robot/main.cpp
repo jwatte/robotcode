@@ -21,6 +21,8 @@
 #include <string.h>
 
 
+bool REAL_USB = true;
+
 static double const LOCK_ADDRESS_TIME = 5.0;
 
 static unsigned short port = 6969;
@@ -48,11 +50,11 @@ static const initinfo init[] = {
     { 5, 2048-512 },
     { 6, 2048-512 },
     { 7, 2048-512 },
-    { 8, 2048+512 },
-    { 9, 2048+512 },
+    { 8, 2048-512 },
+    { 9, 2048-512 },
     { 10, 2048+512 },
-    { 11, 2048-512 },
-    { 12, 2048-512 },
+    { 11, 2048+512 },
+    { 12, 2048+512 },
 };
 
 static unsigned char nst = 0;
@@ -71,6 +73,8 @@ float ctl_strafe = 0;
 float ctl_heading = 0;
 float ctl_elevation = 0;
 unsigned char ctl_pose = 3;
+
+legpose last_pose[4];
 
 void poseleg(ServoSet &ss, int leg, float step, float speed, float strafe, float deltaPose) {
     float dx = 0, dy = 0, dz = 0;
@@ -101,14 +105,15 @@ void poseleg(ServoSet &ss, int leg, float step, float speed, float strafe, float
     zpos += dz;
     legpose lp;
     if (!solve_leg(legs[leg], xpos, ypos, zpos, lp)) {
-        std::stringstream ss;
-        ss << "Could not solve leg: " << leg << " step " << step
+        std::stringstream sst;
+        sst << "Could not solve leg: " << leg << " step " << step
             << " speed " << speed << " xpos " << xpos << " ypos " << ypos
             << " zpos " << zpos;
         static std::string mstr[4];
-        mstr[leg] = ss.str();
+        mstr[leg] = sst.str();
         istatus->error(mstr[leg].c_str());
     }
+    last_pose[leg] = lp;
     ss.id(leg * 3 + 1).set_goal_position(lp.a);
     ss.id(leg * 3 + 2).set_goal_position(lp.b);
     ss.id(leg * 3 + 3).set_goal_position(lp.c);
@@ -265,7 +270,7 @@ void usb_thread_fn() {
         std::cerr << "USBLink::thread_fn(): pthread_setschedparam(): " << err << std::endl;
     }
     get_leg_params(lparam);
-    ServoSet ss;
+    ServoSet ss(REAL_USB);
     for (size_t i = 0; i < sizeof(init)/sizeof(init[0]); ++i) {
         ss.add_servo(init[i].id, init[i].center);
     }
@@ -283,12 +288,14 @@ void usb_thread_fn() {
         float use_speed = ctl_speed;
         float use_turn = cap(ctl_turn + ctl_heading);
         float use_strafe = ctl_strafe;
+        #if REAL_USB
         if (ss.torque_pending()) {
             use_speed = 0;
             use_trot = 0;
             use_turn = 0;
             use_strafe = 0;
         }
+        #endif
 
         thetime = read_clock();
         frames = frames + 1;
@@ -356,6 +363,15 @@ void usb_thread_fn() {
 }
 
 int main(int argc, char const *argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        if (!strcmp(argv[i], "--fakeusb")) {
+            REAL_USB = false;
+        }
+        else {
+            fprintf(stderr, "usage: robot [--fakeusb]\n");
+            exit(1);
+        }
+    }
     itime = newclock();
     istatus = mkstatus(itime, true);
     isocks = mksocks(port, istatus);
@@ -388,10 +404,17 @@ int main(int argc, char const *argv[]) {
 
         thetime = read_clock();
         frames = frames + 1;
-        if (thetime - intime > 20) {
+        if (thetime - intime > (REAL_USB ? 20 : 2)) {
             fprintf(stderr, "main fps: %.1f\n", frames / (thetime - intime));
             frames = 0;
             intime = thetime;
+            if (!REAL_USB) {
+                fprintf(stderr, "1:%d 2:%d 3:%d  4:%d 5:%d 6:%d  7:%d 8:%d 9:%d  10:%d 11:%d 12:%d\n",
+                    last_pose[0].a, last_pose[0].b, last_pose[0].c,
+                    last_pose[1].a, last_pose[1].b, last_pose[1].c,
+                    last_pose[2].a, last_pose[2].b, last_pose[2].c,
+                    last_pose[3].a, last_pose[3].b, last_pose[3].c);
+            }
         }
 
         if (image_listener->check_and_clear()) {

@@ -562,46 +562,47 @@ void OnyxWalker_Task(void) {
     }
 
     /* display LED status (voltage animation etc) */
-    if (PINF & (1 << PF5)) {
-        if ((short)(now - display_time) >= DISPLAY_TICKS) {
-            ++display_state;
-            display_time = now;
-            display_blink = !display_blink;
+    if ((short)(now - display_time) >= DISPLAY_TICKS) {
+        ++display_state;
+        display_time = now;
+        display_blink = !display_blink;
 
-            if (ADCSRA & (1 << ADIF)) {
-                ADCSRA |= 1 << ADIF;
-                unsigned short aval = (unsigned short)ADCL | ((unsigned short)ADCH << 8u);
-                //  102 is adjusted for high AREF (measured 5.1V)
-                battery_voltage = (unsigned char)((long)aval * 102 / 508);
-                //  LiPo batteries are very nonlinear in voltage -- there is a large 
-                //  capacity range where they hover around the 14.5-15.0 volt range.
-                static struct {
-                    unsigned char bits;
-                    unsigned char voltage;
-                } voltages[] = {  //  853 is 16.8 volts; these numbers assume some load
-                    { 0xff, 160 },
-                    { 0xfe, 155 },
-                    { 0xfc, 151 },
-                    { 0xf8, 148 },
-                    { 0xf0, 145 },
-                    { 0xe0, 142 },
-                    { 0xc0, 138 },
-                    { 0x80, 128 },
-                    { 0, 0u },       //  terminator
-                };
-                int i = 0;
-                do {
-                    battery_level = voltages[i].bits;
-                } while (voltages[i++].voltage > battery_voltage);
-                if (battery_voltage < 132) {  //  about to go bust -- turn off!
-                    send_sync(notorque_packet, sizeof(notorque_packet));    //  turn off torque on all servos
-                    display_state = 128;    //  force battery display
-                    battery_level = 0x80;
-                    //  todo: robot controller should kill power at this point
-                }
-                ADCSRA |= (1 << ADSC);  //  start another one
+        if (ADCSRA & (1 << ADIF)) {
+            ADCSRA |= 1 << ADIF;
+            unsigned short aval = (unsigned short)ADCL | ((unsigned short)ADCH << 8u);
+            //  102 is adjusted for high AREF (measured 5.1V)
+            battery_voltage = (unsigned char)((long)aval * 102 / 508);
+            //  LiPo batteries are very nonlinear in voltage -- there is a large 
+            //  capacity range where they hover around the 14.5-15.0 volt range.
+            static struct {
+                unsigned char bits;
+                unsigned char voltage;
+            } voltages[] = {  //  853 is 16.8 volts; these numbers assume some load
+                { 0xff, 160 },
+                { 0xfe, 155 },
+                { 0xfc, 151 },
+                { 0xf8, 148 },
+                { 0xf0, 145 },
+                { 0xe0, 142 },
+                { 0xc0, 138 },
+                { 0x80, 128 },
+                { 0, 0u },       //  terminator
+            };
+            int i = 0;
+            do {
+                battery_level = voltages[i].bits;
+            } while (voltages[i++].voltage > battery_voltage);
+            if (battery_voltage < 132) {  //  about to go bust -- turn off!
+                send_sync(notorque_packet, sizeof(notorque_packet));    //  turn off torque on all servos
+                display_state = 128;    //  force battery display
+                battery_level = 0x80;
+                //  todo: robot controller should kill power at this point
             }
+            ADCSRA |= (1 << ADSC);  //  start another one
+        }
 
+        /* switch 4 can turn off battery display, but not the voltage checking part */
+        if (PINF & (1 << PF5)) {
             if (display_state < 112) {
                 set_status_override(0, 0);
             }

@@ -187,10 +187,7 @@ static void do_display() {
 
     //  battery voltage meter
     unsigned char bat = g_state.battery;
-    if (bat == 0) {
-        bat = 164;
-    }
-    else if (bat < 128) {
+    if (bat < 128) {
         bat = 128;
     }
     if (bat > 144) {

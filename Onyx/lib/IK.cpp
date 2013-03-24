@@ -13,18 +13,18 @@
 #define THIRD_LENGTH_B 164
 
 leginfo legs[] = {
-    { CENTER_X, CENTER_Y, CENTER_Z,   FIRST_LENGTH, 1,  SECOND_LENGTH, 1,  THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
-    { -CENTER_X, CENTER_Y, CENTER_Z,  FIRST_LENGTH, -1, SECOND_LENGTH, -1, THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, 1 },
-    { CENTER_X, -CENTER_Y, CENTER_Z,  FIRST_LENGTH, -1, SECOND_LENGTH, -1,  THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, 1 },
-    { -CENTER_X, -CENTER_Y, CENTER_Z, FIRST_LENGTH, 1,  SECOND_LENGTH, 1, THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
+    { CENTER_X, CENTER_Y, CENTER_Z,   FIRST_LENGTH, -1,  SECOND_LENGTH, 1,  THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
+    { -CENTER_X, CENTER_Y, CENTER_Z,  FIRST_LENGTH, -1, SECOND_LENGTH, 1, THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
+    { CENTER_X, -CENTER_Y, CENTER_Z,  FIRST_LENGTH, -1, SECOND_LENGTH, 1,  THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
+    { -CENTER_X, -CENTER_Y, CENTER_Z, FIRST_LENGTH, -1,  SECOND_LENGTH, 1, THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
 };
 
 
 //  how much to compensate first joint for based on servo orientation?
 static short const leg_comp[] = {
-    1024,
     0,
-    512
+    -1024,
+    -512
 };
 static LegConfiguration g_lc;
 
@@ -50,17 +50,21 @@ std::string solve_error;
 //  and some pose approximating the general direction intended 
 //  is returned as the "solution."
 bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
+    const float hpi = M_PI * 0.5;
+    const float qpi = M_PI * 0.25;
+    const float pi = M_PI;
+
     float dx = x - leg.cx;
     float dy = y - leg.cy;
     float dz = z - leg.cz;
     //  solve as if it's the front-right leg
     bool ret = true;
     bool flip = false;
-    if (leg.cx < 0) {
+    if (leg.cx < 0) {   //  left side
         dx *= -1;
         flip = !flip;
     }
-    if (leg.cy < 0) {
+    if (leg.cy < 0) {   //  back side
         dy *= -1;
         flip = !flip;
     }
@@ -74,9 +78,12 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
             }
         }
         ret = false;
-        solve_error = "negative dx";
+        solve_error = "negative dx into robot";
     }
+
+    //  what's the angle of the closest leg?
     float angle0 = atan2f(dy, dx);
+
     //  now position joint 1+2 in the given plane
     float sn = sinf(angle0);
     float cs = cosf(angle0);
@@ -157,9 +164,6 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     float angle1 = atan2f(root, out);
     ndx -= out;
     dz -= root;
-    float hpi = M_PI * 0.5;
-    float qpi = M_PI * 0.25;
-    float pi = M_PI;
     float angle2 = atan2f(dz, ndx) + hpi - atan2f(leg.x2, leg.z2) - angle1;
     
     //  limit to "safe" movement angles
@@ -194,9 +198,53 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
         solve_error = "too large angle2";
     }
 
-    op.a = (unsigned short)(2048 + angle0 * 2047 / pi * leg.direction0 + leg.direction0 * leg_comp[g_lc]);
-    op.b = (unsigned short)(2048 + angle1 * 2047 / pi * leg.direction1);
-    op.c = (unsigned short)(2048 + angle2 * 2047 / pi * leg.direction2);
+    int dir = leg.direction0;
+    if (flip) {
+        dir = -dir;
+    }
+    op.a = (unsigned short)(((angle0 * 2048 / pi + leg_comp[g_lc]) * dir) + 2048);
+    if (op.a < 0) {
+        op.a = 0;
+        ret = false;
+        solve_error = "negative A joint solution";
+    }
+    if (op.a > 4095) {
+        op.a = 4095;
+        ret = false;
+        solve_error = "too large A joint solution";
+    }
+
+    dir = leg.direction1;
+    if (flip) {
+        dir = -dir;
+    }
+    op.b = (unsigned short)(angle1 * 2048 / pi * dir + 2048);
+    if (op.b < 0) {
+        op.b = 0;
+        ret = false;
+        solve_error = "negative B joint solution";
+    }
+    if (op.b > 4095) {
+        op.b = 4095;
+        ret = false;
+        solve_error = "too large B joint solution";
+    }
+
+    dir = leg.direction2;
+    if (flip) {
+        dir = -dir;
+    }
+    op.c = (unsigned short)(angle2 * 2048 / pi * dir + 2048);
+    if (op.c < 0) {
+        op.c = 0;
+        ret = false;
+        solve_error = "negative C joint solution";
+    }
+    if (op.c > 4095) {
+        op.c = 4095;
+        ret = false;
+        solve_error = "too large C joint solution";
+    }
 
     return ret;
 }

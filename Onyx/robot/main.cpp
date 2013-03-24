@@ -55,6 +55,8 @@ static const initinfo init[] = {
     { 10, 2048+512 },
     { 11, 2048+512 },
     { 12, 2048+512 },
+    { 13, 2048 },
+    { 14, 2048 },
 };
 
 static unsigned char nst = 0;

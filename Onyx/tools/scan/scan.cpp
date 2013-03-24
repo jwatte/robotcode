@@ -14,6 +14,7 @@ public:
 };
 
 unsigned char ping_packet[] = {
+    0,      //  serial
     0x01, 0, // RAW mode, uart @ 2 Mbit
     0x00, // DATA
     0xff, 0xff, //  start packet
@@ -23,9 +24,11 @@ unsigned char ping_packet[] = {
     (unsigned char)~(1 + 0x02 + 0x01)   //  checksum
 };
 
+#define ID_OFFSET 6
+#define CKSUM_OFFSET 9
 void set_id(unsigned char id) {
-    ping_packet[5] = id;
-    ping_packet[8] = 0xff - id - 2 - 1;
+    ping_packet[ID_OFFSET] = id;
+    ping_packet[CKSUM_OFFSET] = 0xff - id - 2 - 1;
 }
 
 void do_packet(unsigned char const *start, size_t size) {
@@ -66,7 +69,7 @@ int main(int argc, char const *argv[]) {
         time_t now;
         time(&now);
         if (now != last) {
-            std::cerr << "ping " << hexnum(ping_packet[5]) << " @ " << now << std::endl;
+            std::cerr << "ping " << hexnum(ping_packet[ID_OFFSET]) << " @ " << now << std::endl;
             ul->raw_send(ping_packet, sizeof(ping_packet));
             last = now;
         }

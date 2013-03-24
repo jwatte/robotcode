@@ -58,45 +58,54 @@ ISR(USART1_RX_vect) {
     }
 }
 
+static unsigned char old_ubrr = 0xff;
+
 void setup_uart(unsigned char rate) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         power_usart1_enable();
         PORTD |= (1 << PD3) | (1 << PD2);   //  TXD, RXD pull-up
         DDRD &= ~((1 << PD2) | (1 << PD3));//  RXD
         rptr = 0;
-        nmissed = 240;
         UCSR1C = (1 << USBS1) | (1 << UCSZ11) | (1 << UCSZ10);   //  async mode, 8N2
         UCSR1A = (1 << U2X1);       //  double speed (also, more accurate!)
-        UCSR1B = (1 << RXCIE1) | (1 << RXEN1) | (1 << TXEN1);
+        unsigned char new_ubrr = rate;
         switch (rate) {
             case BRATE_9600:
-                UBRR1 = 207;
+                new_ubrr = 207;
                 break;
             case BRATE_57600:
-                UBRR1 = 34;
+                new_ubrr = 34;
                 break;
             case BRATE_1000000:
-                UBRR1 = 1;
+                new_ubrr = 1;
                 break;
             case BRATE_2000000:
-                UBRR1 = 0;
+                new_ubrr = 0;
                 break;
             default:
                 // 'rate' is a divider value
-                UBRR1 = rate;
+                new_ubrr = rate;
                 break;
         }
-        //  a small delay
-        while (nmissed) {
-            ++nmissed;
+        if (old_ubrr != new_ubrr || old_ubrr == 0xff) {
+            UBRR1H = 0;
+            UBRR1L = new_ubrr;
+            UCSR1B = (1 << RXCIE1) | (1 << RXEN1) | (1 << TXEN1);   //  transmitter and receiver enable
+            old_ubrr = new_ubrr;
+            delayms(100);
         }
+        nmissed = 0;
     }
 }
 
+extern unsigned short clear_received;   //  ugh! hack!
+
 void send_sync(unsigned char const *data, unsigned char size) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-        //  enable transmitter
+        //  enable transmitter, disable receiver and interrupt
         UCSR1B = (1 << TXEN1);
+        clear_received = getms() + 10;
+        set_status(SENDING_LED, SENDING_LED);
         //  send data
         while (size > 0) {
             while ((UCSR1A & (1 << UDRE1)) == 0) {
@@ -112,8 +121,8 @@ void send_sync(unsigned char const *data, unsigned char size) {
             //  wait for transmit to complete
         }
         rptr = 0;
-        //  disable transmitter, enable interrupt
-        UCSR1B = (1 << RXCIE1) | (1 << RXEN1);
+        //  enable interrupt
+        UCSR1B = (1 << RXCIE1) | (1 << RXEN1) | (1 << TXEN1);
     }
 }
 
@@ -230,16 +239,18 @@ extern unsigned char epirwa;
 void show_error(unsigned char errkind, unsigned char errdata) {
 
     cli();
+    set_status_override(0, 0);
     while (1) {
         set_status(0xff, 0xff);
         delayms(50);
         set_status(0, 0xff);
         delayms(50);
         set_status(errkind, 0xff);
-        delayms(200);
+        delayms(300);
         set_status(0, 0xff);
         delayms(50);
         set_status(errdata, 0xff);
+        delayms(300);
         unsigned char buf[8] = {
             0xee, 0xee, errkind, errdata, 
             epic, epiir, epirwa,

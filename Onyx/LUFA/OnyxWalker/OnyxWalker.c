@@ -8,6 +8,8 @@
 #define EMPTY_IN_TIMEOUT 8
 
 
+//  DIP switch 4: do not display/animate battery level
+
 #define CMD_RAW_MODE 0x01
 //  param is baud rate
 #define CMD_RAW_DATA 0x00
@@ -45,7 +47,7 @@
 #define DXL_REG_GOAL_POSITION 0x1E
 #define DXL_REG_MOVING_SPEED 0x20
 
-#define BLINK_CNT 2
+#define BLINK_CNT 10
 #define RECV_TIMEOUT_TICKS 50
 #define DISPLAY_TICKS 30
 
@@ -72,6 +74,7 @@ static unsigned char display_state;
 static unsigned char battery_level;
 static unsigned char battery_voltage;
 static unsigned short display_time;
+static bool display_blink;
 
 static unsigned char servo_stati[32];
 static unsigned short target_pose[32];
@@ -124,6 +127,12 @@ void setup_weapons(void) {
     DDRD |= 0x20 | 0x10;
 }
 
+void setup_dip(void) {
+    DDRF &= ~((1 << PF5) | (1 << PF4) | (1 << PF1) | (1 << PF0));
+    //  pull-up
+    PORTF |= (1 << PF5) | (1 << PF4) | (1 << PF1) | (1 << PF0);
+}
+
 void setup_adc(void) {
     power_adc_enable();
     ADMUX = (1 << REFS0)    //  AVcc
@@ -145,8 +154,15 @@ void SetupHardware(void) {
     MCUSR &= ~(1 << WDRF);
     wdt_disable();
 
+    //  settle down TxD/RxD
+    PORTD |= ((1 << PD2) | (1 << PD3));
+    DDRD &= ~((1 << PD2) | (1 << PD3));
+
     //  weapons fire off
     setup_weapons();
+
+    //  config
+    setup_dip();
     
     //  Status LEDs on
     setup_status();
@@ -160,11 +176,12 @@ void SetupHardware(void) {
     set_status(0x3f, 0xff);
 
     setup_uart(0);
-    delayms(50);
-    set_status(0x1f, 0xff);
-
+    //  delayms built into setup_uart
+    send_sync((unsigned char const *)"\0\0\0\0\0", 6);
     send_sync(notorque_packet, sizeof(notorque_packet));    //  turn off torque on all servos
     clear_xbuf();
+    set_status(0x1f, 0xff);
+
     delayms(50);
     set_status(0xf, 0xff);
 
@@ -174,11 +191,12 @@ void SetupHardware(void) {
 
     delayms(50);
     set_status(0x3, 0xff);
+
     delayms(50);
     set_status(0x1, 0xff);
     delayms(50);
     set_status(0x0, 0xff);
-    
+
     USB_Init();
 }
 
@@ -316,6 +334,11 @@ bool rawmode = false;
 unsigned char sbuf[DATA_TX_EPSIZE];
 unsigned char sbuflen;
 
+void set_rawmode(bool rm) {
+    rawmode = rm;
+    set_status(rm ? RAWMODE_LED : 0, RAWMODE_LED);
+}
+
 void wait_for_idle(void) {
     while (true) {
         unsigned char av = recv_avail();
@@ -399,7 +422,8 @@ void do_get_status(void) {
 
 void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end) {
     while (offset < end) {
-        if (rawmode && sbuf[offset] == CMD_RAW_DATA) {
+        bool clear_rawmode = true;
+        if (rawmode && (sbuf[offset] == CMD_RAW_DATA)) {
             wait_for_idle();
             send_sync(&sbuf[offset+1], end - offset - 1);
             break;
@@ -412,29 +436,26 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
         }
         switch (sbuf[offset]) {
             case CMD_RAW_MODE:
-                rawmode = true;
+                set_rawmode(true);
+                clear_rawmode = false;
                 setup_uart(sbuf[offset+1]);
                 break;
             case CMD_SET_LEDS:
                 set_status(sbuf[offset+1], 0xff);
                 break;
             case CMD_SET_REG1:
-                rawmode = false;
                 reg_write(sbuf[offset+1], sbuf[offset+2], &sbuf[offset+3], 1, 1);
                 break;
             case CMD_SET_REG2:
-                rawmode = false;
                 reg_write(sbuf[offset+1], sbuf[offset+2], &sbuf[offset+3], 2, 1);
                 break;
             case CMD_GET_REGS:
-                rawmode = false;
                 reg_read(sbuf[offset+1], sbuf[offset+2], sbuf[offset+3]);
                 break;
             case CMD_GET_STATUS:
                 do_get_status();
                 break;
             case CMD_DELAY:
-                rawmode = false;
                 delayms(sbuf[offset+1]);
                 wait_for_idle();
                 break;
@@ -444,7 +465,6 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
                 cmdSize = lerp_pos(sbuf+offset+1, end-offset-1) + 1;
                 break;
             default:
-                rawmode = false;
                 //  unknown command
                 show_error(2, sbuf[offset]);
                 return;
@@ -453,6 +473,9 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
             show_error(4, sbuf[offset]);
         }
         offset += cmdSize;
+        if (clear_rawmode && rawmode) {
+            set_rawmode(false);
+        }
     }
 }
 
@@ -463,10 +486,12 @@ unsigned char epirwa;
 unsigned short clear_received;
 
 void OnyxWalker_Task(void) {
+
     if (USB_DeviceState != DEVICE_STATE_Configured) {
         return;
     }
 
+    /* see if there's data to send to host */
     unsigned short now = getms();
     Endpoint_SelectEndpoint(DATA_RX_EPNUM);
     Endpoint_SetEndpointDirection(ENDPOINT_DIR_IN);
@@ -506,6 +531,7 @@ void OnyxWalker_Task(void) {
         }
     }
 
+    /* see if there's data from the host */
     Endpoint_SelectEndpoint(DATA_TX_EPNUM);
     Endpoint_SetEndpointDirection(ENDPOINT_DIR_OUT);
     if (Endpoint_IsConfigured() && Endpoint_IsOUTReceived() && Endpoint_IsReadWriteAllowed()) {
@@ -529,68 +555,82 @@ void OnyxWalker_Task(void) {
         }
     }
 
+    /* remove received status */
     if ((short)(now - clear_received) > 0) {
-        set_status(0, RECEIVED_LED);
+        set_status(0, RECEIVED_LED | SENDING_LED);
         clear_received = now;
     }
-    if ((short)(now - display_time) >= DISPLAY_TICKS) {
-        ++display_state;
-        display_time = now;
 
-        if (ADCSRA & (1 << ADIF)) {
-            ADCSRA |= 1 << ADIF;
-            unsigned short aval = (unsigned short)ADCL | ((unsigned short)ADCH << 8u);
-            //  102 is adjusted for high AREF (measured 5.1V)
-            battery_voltage = (unsigned char)((long)aval * 102 / 508);
-            //  LiPo batteries are very nonlinear in voltage -- there is a large 
-            //  capacity range where they hover around the 14.5-15.0 volt range.
-            static struct {
-                unsigned char bits;
-                unsigned char voltage;
-            } voltages[] = {  //  853 is 16.8 volts; these numbers assume some load
-                { 0xff, 160 },
-                { 0xfe, 155 },
-                { 0xfc, 151 },
-                { 0xf8, 148 },
-                { 0xf0, 145 },
-                { 0xe0, 142 },
-                { 0xc0, 138 },
-                { 0x80, 128 },
-                { 0, 0u },       //  terminator
-            };
-            int i = 0;
-            do {
-                battery_level = voltages[i].bits;
-            } while (voltages[i++].voltage > battery_voltage);
-            if (battery_voltage < 132) {  //  about to go bust -- turn off!
-                send_sync(notorque_packet, sizeof(notorque_packet));    //  turn off torque on all servos
-                display_state = 128;    //  force battery display
-                battery_level = 0x80;
-                //  todo: robot controller should kill power at this point
+    /* display LED status (voltage animation etc) */
+    if (PINF & (1 << PF5)) {
+        if ((short)(now - display_time) >= DISPLAY_TICKS) {
+            ++display_state;
+            display_time = now;
+            display_blink = !display_blink;
+
+            if (ADCSRA & (1 << ADIF)) {
+                ADCSRA |= 1 << ADIF;
+                unsigned short aval = (unsigned short)ADCL | ((unsigned short)ADCH << 8u);
+                //  102 is adjusted for high AREF (measured 5.1V)
+                battery_voltage = (unsigned char)((long)aval * 102 / 508);
+                //  LiPo batteries are very nonlinear in voltage -- there is a large 
+                //  capacity range where they hover around the 14.5-15.0 volt range.
+                static struct {
+                    unsigned char bits;
+                    unsigned char voltage;
+                } voltages[] = {  //  853 is 16.8 volts; these numbers assume some load
+                    { 0xff, 160 },
+                    { 0xfe, 155 },
+                    { 0xfc, 151 },
+                    { 0xf8, 148 },
+                    { 0xf0, 145 },
+                    { 0xe0, 142 },
+                    { 0xc0, 138 },
+                    { 0x80, 128 },
+                    { 0, 0u },       //  terminator
+                };
+                int i = 0;
+                do {
+                    battery_level = voltages[i].bits;
+                } while (voltages[i++].voltage > battery_voltage);
+                if (battery_voltage < 132) {  //  about to go bust -- turn off!
+                    send_sync(notorque_packet, sizeof(notorque_packet));    //  turn off torque on all servos
+                    display_state = 128;    //  force battery display
+                    battery_level = 0x80;
+                    //  todo: robot controller should kill power at this point
+                }
+                ADCSRA |= (1 << ADSC);  //  start another one
             }
-            ADCSRA |= (1 << ADSC);  //  start another one
-        }
 
-        if (display_state < 112) {
-            set_status_override(0, 0);
+            if (display_state < 112) {
+                set_status_override(0, 0);
+            }
+            else if (display_state < 120) {
+                set_status_override(1 << (display_state - 112), 0xff);
+            }
+            else if (display_state < 128) {
+                set_status_override((0x80 >> (display_state - 120)) |
+                    (battery_level & ~(0xff >> (display_state - 120))), 0xff);
+            }
+            else if (display_state < 180) {
+                unsigned char dl = battery_level;
+                if (battery_level == 0x80 && display_blink) {
+                    dl = 0;
+                }
+                set_status_override(dl, 0xff);
+            }
+            else if (display_state < 188) {
+                set_status_override((battery_level & (0xff >> (display_state - 180)))
+                    | (0x80 >> (display_state - 180)), 0xff);
+            }
+            else {
+                set_status_override(0, 0);
+            }
         }
-        else if (display_state < 120) {
-            set_status_override(1 << (display_state - 112), 0xff);
-        }
-        else if (display_state < 128) {
-            set_status_override((0x80 >> (display_state - 120)) |
-                (battery_level & ~(0xff >> (display_state - 120))), 0xff);
-        }
-        else if (display_state < 180) {
-            set_status_override(battery_level, 0xff);
-        }
-        else if (display_state < 188) {
-            set_status_override((battery_level & (0xff >> (display_state - 180)))
-                | (0x80 >> (display_state - 180)), 0xff);
-        }
-        else {
-            set_status_override(0, 0);
-        }
+    }
+    else {
+        display_time = now;
+        set_status_override(0, 0);
     }
 }
 

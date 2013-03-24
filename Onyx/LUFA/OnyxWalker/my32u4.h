@@ -11,6 +11,8 @@
 
 #define CONNECTED_LED 0x1
 #define RECEIVED_LED 0x2
+#define RAWMODE_LED 0x10
+#define SENDING_LED 0x8
 
 
 void setup_uart(unsigned char brate);

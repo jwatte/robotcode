@@ -7,6 +7,9 @@
 
 #define EMPTY_IN_TIMEOUT 8
 
+//  how many ms per "shot" fired
+#define GUNS_TIMER 200
+
 
 //  DIP switch 4: do not display/animate battery level
 
@@ -16,6 +19,8 @@
 //  all data is data
 #define CMD_SET_LEDS 0x11
 //  data is byte of LED state
+#define CMD_FIRE_GUNS 0x12
+//  data is left, right fire time
 #define CMD_SET_REG1 0x13
 //  param is id, reg, data
 #define CMD_SET_REG2 0x14
@@ -75,6 +80,10 @@ static unsigned char battery_level;
 static unsigned char battery_voltage;
 static unsigned short display_time;
 static bool display_blink;
+static unsigned char guns_left = 0;
+static unsigned char guns_right = 0;
+static unsigned char guns_timer = 0;
+static unsigned char guns_lasttime = 0;
 
 static unsigned char servo_stati[32];
 static unsigned short target_pose[32];
@@ -420,6 +429,41 @@ void do_get_status(void) {
     memset(servo_stati, 0, sizeof(servo_stati));
 }
 
+void fire_guns(unsigned char left, unsigned char right) {
+    guns_left = left;
+    guns_right = right;
+    guns_timer = GUNS_TIMER;
+    guns_lasttime = getms();
+}
+
+void set_guns(void) {
+    if (guns_left) {
+    }
+    if (guns_right) {
+    }
+}
+
+void run_guns(void) {
+    if (guns_timer) {
+        unsigned char d = getms() - guns_lasttime;
+        if (d >= guns_timer) {
+            guns_timer = 0;
+            if (guns_left) {
+                --guns_left;
+                guns_timer = GUNS_TIMER;
+            }
+            if (guns_right) {
+                --guns_right;
+                guns_timer = GUNS_TIMER;
+            }
+        }
+        else {
+            guns_timer -= d;
+        }
+        set_guns();
+    }
+}
+
 void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end) {
     while (offset < end) {
         bool clear_rawmode = true;
@@ -442,6 +486,9 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
                 break;
             case CMD_SET_LEDS:
                 set_status(sbuf[offset+1], 0xff);
+                break;
+            case CMD_FIRE_GUNS:
+                fire_guns(sbuf[offset+1], sbuf[offset+2]);
                 break;
             case CMD_SET_REG1:
                 reg_write(sbuf[offset+1], sbuf[offset+2], &sbuf[offset+3], 1, 1);
@@ -561,6 +608,8 @@ void OnyxWalker_Task(void) {
         clear_received = now;
     }
 
+    run_guns();
+
     /* display LED status (voltage animation etc) */
     if ((short)(now - display_time) >= DISPLAY_TICKS) {
         ++display_state;
@@ -628,10 +677,9 @@ void OnyxWalker_Task(void) {
                 set_status_override(0, 0);
             }
         }
-    }
-    else {
-        display_time = now;
-        set_status_override(0, 0);
+        else {
+            set_status_override(0, 0);
+        }
     }
 }
 

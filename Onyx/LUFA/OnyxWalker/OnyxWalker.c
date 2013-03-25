@@ -53,7 +53,7 @@
 #define DXL_REG_MOVING_SPEED 0x20
 
 #define BLINK_CNT 10
-#define RECV_TIMEOUT_TICKS 50
+#define RECV_TIMEOUT_TICKS 150
 #define DISPLAY_TICKS 30
 
 void Reconfig(void);
@@ -308,8 +308,7 @@ unsigned char recv_packet(unsigned char *dst, unsigned char maxsz) {
             //  don't spend more than X microseconds waiting for something that won't come
             ntc = TCNT0;
             if (ntc - tc > RECV_TIMEOUT_TICKS) {
-                show_error(8, cnt);
-                break;
+                return 0;
             }
         }
         tc = ntc;
@@ -336,15 +335,20 @@ void reg_read(unsigned char id, unsigned char reg, unsigned char cnt) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         send_sync(pbuf, 8);
         cnt = recv_packet(pbuf, 6 + cnt);
-        if (pbuf[2] < sizeof(servo_stati)) {
-            servo_stati[pbuf[2]] = pbuf[4];
-        }
-        pbuf[1] = READ_COMPLETE;
-        pbuf[2] = id;
-        pbuf[3] = reg;
-        pbuf[4] = cnt - 6;
         if (cnt > 6) {
-            add_xbuf(&pbuf[1], cnt - 2);
+            if (pbuf[2] < sizeof(servo_stati)) {
+                servo_stati[pbuf[2]] = pbuf[4];
+            }
+            pbuf[1] = READ_COMPLETE;
+            pbuf[2] = id;
+            pbuf[3] = reg;
+            pbuf[4] = cnt - 6;
+            if (cnt > 6) {
+                add_xbuf(&pbuf[1], cnt - 2);
+            }
+        }
+        else {
+            //  talk about incomplete read
         }
     }
 }

@@ -130,6 +130,21 @@ void setup_guns(void) {
     PORTC = PORTC & ~(0x80 | 0x40);
     DDRC |= 0x80 | 0x40;
     DDRD |= 0x20 | 0x10;
+    //  timer 3, for PC6, which is gun motor left
+    TCCR3A = (1 << WGM30);  //  8 bit PWM mode
+    TCCR3B = (1 << WGM32) | (1 << CS32) | (1 << CS30);  //  clock / 1024
+    TCCR3C = 0;
+    OCR3AH = 0;
+    OCR3AL = 0x60;
+    //  timer 4, for PC7, which is gun motor right
+    TCCR4A = (1 << PWM4A);
+    TCCR4B = (1 << CS43) | (1 << CS41) | (1 << CS40);
+    TCCR4C = 0;
+    TCCR4D = 0;
+    TCCR4E = 0;
+    TCNT4 = 0;
+    OCR4A = 0x60;
+    DT4 = 0;
 }
 
 void setup_dip(void) {
@@ -434,17 +449,21 @@ void fire_guns(unsigned char left, unsigned char right) {
 
 void set_guns(void) {
     unsigned char dreg = 0;
-    unsigned char creg = 0;
     if (guns_left) {
         dreg |= (1 << 4);
-        creg |= (1 << 6);
+        TCCR3A = TCCR3A | (1 << COM3A1);
+    }
+    else {
+        TCCR3A = TCCR3A & ~(1 << COM3A1);
     }
     if (guns_right) {
         dreg |= (1 << 5);
-        creg |= (1 << 7);
+        TCCR4A = TCCR4A | (1 << COM4A1);
+    }
+    else {
+        TCCR4A = TCCR4A & ~(1 << COM4A1);
     }
     PORTD = (PORTD & ~((1 << 4) | (1 << 5))) | dreg;
-    PORTC = (PORTC & ~((1 << 6) | (1 << 7))) | creg;
 }
 
 void run_guns(void) {

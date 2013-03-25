@@ -224,10 +224,6 @@ void do_status(P_Status const *status) {
     }
     last_status_time = itime->now();
     hitpoints = status->hits;
-    if (status->battery != battery) {
-        istatus->message(std::string("Battery value: ")
-            + boost::lexical_cast<std::string>((int)status->battery));
-    }
     battery = status->battery;
     /*
     istatus->message(std::string("Status: hits=") + boost::lexical_cast<std::string>((int)status->hits)

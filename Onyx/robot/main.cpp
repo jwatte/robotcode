@@ -355,7 +355,10 @@ void usb_thread_fn() {
                 step = 0;
             }
             poselegs(ss, step, i_speed.get(), -i_turn.get(), i_strafe.get(), i_height.get());
-            if (firing_value != ctl_fire) {
+            if (ctl_fire || (firing_value != ctl_fire)) {
+                if (firing_value != ctl_fire) {
+                    std::cerr << "firing_value: " << (int)ctl_fire << std::endl;
+                }
                 firing_value = ctl_fire;
                 do_fire(ss);
             }
@@ -374,8 +377,12 @@ void usb_thread_fn() {
                 ss.step();
             }
         }
-        unsigned char status[33];
-        unsigned char st = ss.get_status(status, 33);
+        unsigned char status[32];
+        unsigned char bst = ss.get_status(status, 32);
+        unsigned char st = 0;
+        for (unsigned char si = 0; si != bst; ++si) {
+            st = st | status[si];
+        }
         if (st != nst) {
             std::cerr << "status: " << hexnum(st) << std::endl;
             nst = st;

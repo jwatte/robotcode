@@ -496,12 +496,10 @@ unsigned char ServoSet::do_status_complete(unsigned char const *pack, unsigned c
         }
         return sz;
     }
-    std::cerr << "status pack[0]=" << (int)pack[0] << " pack[1]=" << (int)pack[1]
-        << " pack[3]=" << (int)pack[3] << " sz=" << (int)sz << std::endl;
     status_.resize(pack[1] - 2);
     //  nmissed == pack[2]
     battery_ = pack[3];
-    if (pack[1]) {
+    if (pack[1] > 2) {
         memcpy(&status_[0], &pack[4], pack[1] - 2);
     }
     if (nincomplete > 0) {

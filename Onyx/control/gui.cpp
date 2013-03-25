@@ -2,6 +2,7 @@
 #include "gui.h"
 #include "Image.h"
 #include "mwscore.h"
+#include "util.h"
 #include <stdexcept>
 #include <GL/freeglut.h>
 #include <string.h>
@@ -105,6 +106,7 @@ void draw_sprite(GLuint texture, int sizex, int sizey, int x, int y) {
 }
 
 static void do_display() {
+    double now = read_clock();
     test_glerror();
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClearDepth(1.0f);
@@ -167,6 +169,7 @@ static void do_display() {
         draw_sprite(g_bubble, 24, 24, 1199, 31 + i * 24);
     }
 
+    //  network loss meter
     if (g_state.loss < 5) {
         glColor4ub(192, 224, 192, 192);
     }
@@ -181,6 +184,38 @@ static void do_display() {
     }
     draw_sprite(g_vmeter, 32, 64, 30, 630);
     draw_sprite(g_bar, 16, g_state.loss / 4 + 1, 38, 630);
+
+    //  battery voltage meter
+    unsigned char bat = g_state.battery;
+    if (bat == 0) {
+        bat = 164;
+    }
+    else if (bat < 128) {
+        bat = 128;
+    }
+    if (bat > 144) {
+        //  green goodness
+        glColor4ub(32, 128, 96, 128);
+    }
+    else if (bat > 137) {
+        //  yellow warning
+        if ((int)(fmod(now, 4.0) * 2) % 4) {
+            glColor4ub(192, 192, 128, 192);
+        }
+        else {
+            glColor4ub(192, 192, 128, 255);
+        }
+    }
+    else {
+        //  red alert!
+        if ((int)(fmod(now, 4.0) * 10) % 4) {
+            glColor4ub(192, 32, 32, 192);
+        }
+        else {
+            glColor4ub(255, 96, 32, 255);
+        }
+    }
+    draw_sprite(g_bar, (bat - 127) * 5, 22, 200, 680);
 
     /* text */
     glColor4f(0, 0, 0, 0.25f);
@@ -206,6 +241,8 @@ static void do_display() {
             }
         }
     }
+    glColor4f(0.8f, 0.8f, 0.8f, 0.8f);
+    draw_val("%.01f V", bat / 10.0, 200, 684);
     glColor4f(0.8f, 0.8f, 0.8f, 0.8f);
     draw_sprite(g_crouch, 32, 32, 160, 22);
     draw_sprite(g_stretch, 32, 32, 228, 22);

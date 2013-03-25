@@ -125,13 +125,9 @@ void add_xbuf(unsigned char const *ptr, unsigned char len) {
 }
 
 
-void set_weapons(unsigned char code) {
-    PORTD = (PORTD & ~(0x20 | 0x10)) | ((code << 4) & (0x20 | 0x10));
-    PORTC = (PORTC & ~(0x80 | 0x40)) | ((code << 4) & (0x80 | 0x40));
-}
-
-void setup_weapons(void) {
-    set_weapons(0);
+void setup_guns(void) {
+    PORTD = PORTD & ~(0x20 | 0x10);
+    PORTC = PORTC & ~(0x80 | 0x40);
     DDRC |= 0x80 | 0x40;
     DDRD |= 0x20 | 0x10;
 }
@@ -168,7 +164,7 @@ void SetupHardware(void) {
     DDRD &= ~((1 << PD2) | (1 << PD3));
 
     //  weapons fire off
-    setup_weapons();
+    setup_guns();
 
     //  config
     setup_dip();
@@ -437,10 +433,18 @@ void fire_guns(unsigned char left, unsigned char right) {
 }
 
 void set_guns(void) {
+    unsigned char dreg = 0;
+    unsigned char creg = 0;
     if (guns_left) {
+        dreg |= (1 << 4);
+        creg |= (1 << 6);
     }
     if (guns_right) {
+        dreg |= (1 << 5);
+        creg |= (1 << 7);
     }
+    PORTD = (PORTD & ~((1 << 4) | (1 << 5))) | dreg;
+    PORTC = (PORTC & ~((1 << 6) | (1 << 7))) | creg;
 }
 
 void run_guns(void) {

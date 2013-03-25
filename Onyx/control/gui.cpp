@@ -19,6 +19,7 @@ static GLuint g_vmeter = 0;
 static GLuint g_bar = 0;
 static GLuint g_crouch = 0;
 static GLuint g_stretch = 0;
+static GLuint g_noise = 0;
 
 #define test_glerror() test_glerror_(__LINE__, __FILE__)
 static MWScore gui_score;
@@ -38,8 +39,8 @@ static void make_texture(GLuint *tex, int width, int height, bool alpha) {
     glTexImage2D(GL_TEXTURE_2D, 0, alpha ? GL_RGBA : GL_RGB, width, height, 0, alpha ? GL_RGBA : GL_RGB, GL_UNSIGNED_BYTE, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     test_glerror();
 }
 
@@ -148,6 +149,24 @@ static void do_display() {
             glTexCoord2f(g_state.image->width() / 2048.0f, g_state.image->height() / 1024.0f);
             glVertex2f(1280, 0);
         glEnd();
+        //  if the image is old, pretend it has distortion
+        if (g_state.image_old) {
+            glBindTexture(GL_TEXTURE_2D, g_noise);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glEnable(GL_BLEND);
+            int left = 1;   //  don't rand -- a static image is more clear about the problem
+            int top = 1;
+            glBegin(GL_TRIANGLE_STRIP);
+                glTexCoord2f(left / 1024.0f, top / 1024.0f);
+                glVertex2f(0, 720);
+                glTexCoord2f(left / 1024.0f, (top + 720) / 1024.0f);
+                glVertex2f(0, 0);
+                glTexCoord2f((left + 1280) / 1024.0f, top / 1024.0f);
+                glVertex2f(1280, 720);
+                glTexCoord2f((left + 1280) / 1024.0f, (top + 720) / 1024.0f);
+                glVertex2f(1280, 0);
+            glEnd();
+        }
         glDisable(GL_TEXTURE_2D);
         test_glerror();
     }
@@ -269,6 +288,7 @@ void open_gui(GuiState const &state, ITime *it) {
         load_tga("data/bar-16.tga", &g_bar);
         load_tga("data/crouch-32.tga", &g_crouch);
         load_tga("data/stretch-32.tga", &g_stretch);
+        load_tga("data/noise-256.tga", &g_noise);
         glutSetWindow(g_win);
         glutDisplayFunc(&do_display);
         glutShowWindow();

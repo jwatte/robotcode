@@ -14,6 +14,7 @@ enum {
 };
 struct GuiState {
     boost::shared_ptr<Image> image;
+    bool image_old;
     float trot;
     unsigned char pose;
     unsigned char hitpoints;

@@ -237,6 +237,7 @@ void do_status(P_Status const *status) {
 
 boost::shared_ptr<Image> last_image;
 unsigned short last_image_seq;
+double last_image_time = 0;
 
 void do_videoframe(P_VideoFrame const *videoframe, size_t size) {
     /*
@@ -250,6 +251,7 @@ void do_videoframe(P_VideoFrame const *videoframe, size_t size) {
     void *d = last_image->alloc_compressed(size - sizeof(P_VideoFrame), true);
     memcpy(d, &videoframe[1], size - sizeof(P_VideoFrame));
     last_image->complete_compressed(size - sizeof(P_VideoFrame));
+    last_image_time = itime->now();
 }
 
 void dispatch(unsigned char type, size_t size, void const *data) {
@@ -386,6 +388,7 @@ int main(int argc, char const *argv[]) {
             }
         }
         gs.image = last_image;
+        gs.image_old = (now - last_image_time > 0.2);
         gs.trot = trotvals[joytrotix];
         gs.pose = joypose;
         gs.hitpoints = hitpoints;

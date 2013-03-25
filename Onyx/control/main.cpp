@@ -67,7 +67,7 @@ float joystrafe = 0;
 float joyelevate = 0;
 float joyheading = 0;
 int joypose = 3;    //  0 .. 6
-int joytrotix = 15;
+int joytrotix = 17;
 int joyfire = 0; // 0x1 | 0x2
 
 float const trotvals[22] = {

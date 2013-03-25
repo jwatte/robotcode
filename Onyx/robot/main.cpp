@@ -20,6 +20,8 @@
 #include <time.h>
 #include <string.h>
 
+#define CMD_FIRE 0x12
+
 
 bool REAL_USB = true;
 
@@ -35,6 +37,8 @@ static ISockets *isocks;
 static INetwork *inet;
 static IPacketizer *ipackets;
 static unsigned char battery;
+
+static unsigned char firing_value;
 
 legparams lparam;
 
@@ -75,6 +79,7 @@ float ctl_strafe = 0;
 float ctl_heading = 0;
 float ctl_elevation = 0;
 unsigned char ctl_pose = 3;
+unsigned char ctl_fire = 0;
 
 legpose last_pose[4];
 
@@ -132,6 +137,17 @@ void poselegs(ServoSet &ss, float step, float speed, float turn, float strafe, f
     poseleg(ss, 3, step, cap(speed - turn), strafe, deltaPose);
 }
 
+void do_fire(ServoSet &ss) {
+    unsigned char buf[3] = { CMD_FIRE, 0, 0 };
+    if (firing_value & 1) {
+        buf[1] = 1;
+    }
+    if (firing_value & 2) {
+        buf[2] = 1;
+    }
+    ss.raw_cmd(buf, 3);
+}
+
 
 static void handle_discover(P_Discover const &pd) {
     P_Info ifo;
@@ -148,7 +164,6 @@ static void handle_connect(P_Connect const &pc) {
 }
 
 static void handle_setinput(P_SetInput const &psi) {
-    //  TODO: implement set input
     ctl_trot = psi.trot;
     ctl_speed = psi.speed;
     ctl_turn = psi.turn;
@@ -156,6 +171,7 @@ static void handle_setinput(P_SetInput const &psi) {
     ctl_heading = psi.aimHeading;
     ctl_elevation = psi.aimElevation;
     ctl_pose = psi.pose;
+    ctl_fire = psi.fire;
 }
 
 double request_video_time;
@@ -164,7 +180,6 @@ int request_video_height;
 unsigned short request_video_serial;
 
 static void handle_requestvideo(P_RequestVideo const &prv) {
-    //  TODO: implement request video
     request_video_time = itime->now() + prv.millis * 0.001;
     request_video_width = prv.width;
     request_video_height = prv.height;
@@ -340,6 +355,10 @@ void usb_thread_fn() {
                 step = 0;
             }
             poselegs(ss, step, i_speed.get(), -i_turn.get(), i_strafe.get(), i_height.get());
+            if (firing_value != ctl_fire) {
+                firing_value = ctl_fire;
+                do_fire(ss);
+            }
         }
         else {
             usleep(3000);

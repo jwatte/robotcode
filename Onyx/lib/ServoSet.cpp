@@ -522,6 +522,19 @@ unsigned char ServoSet::battery() {
     return battery_;
 }
 
+void ServoSet::raw_cmd(void const *data, unsigned char sz) {
+    char buf[32];
+    if (sz > 30) {
+        throw std::runtime_error("Too long raw_cmd in ServoSet");
+    }
+    buf[0] = nextSeq_;
+    memcpy(&buf[1], data, sz);
+    nextSeq_++;
+    if (!!usb_) {
+        usb_->raw_send(buf, sz + 1);
+    }
+}
+
 void ServoSet::lerp_pose(unsigned short ms, cmd_pose const *pose, unsigned char npose) {
     if (npose > 19) {
         throw std::runtime_error("attempt to lerp_pose() with too many servos");

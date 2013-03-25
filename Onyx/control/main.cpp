@@ -65,6 +65,7 @@ float joyelevate = 0;
 float joyheading = 0;
 int joypose = 3;    //  0 .. 6
 int joytrotix = 15;
+int joyfire = 0; // 0x1 | 0x2
 
 float const trotvals[22] = {
     0.1f,       //  0
@@ -189,6 +190,22 @@ void joystep() {
                 }
                 else {
                     istatus->error("mwscore not configured");
+                }
+            }
+            else if (js.number == FIRE_LEFT_BUTTON) {
+                if (on) {
+                    joyfire |= 0x1;
+                }
+                else {
+                    joyfire &= ~0x1;
+                }
+            }
+            else if (js.number == FIRE_RIGHT_BUTTON) {
+                if (on) {
+                    joyfire |= 0x2;
+                }
+                else {
+                    joyfire &= ~0x2;
                 }
             }
             else {
@@ -341,6 +358,7 @@ int main(int argc, char const *argv[]) {
             seti.aimElevation = joyelevate;
             seti.aimHeading = joyheading;
             seti.pose = joypose;
+            seti.fire = joyfire;
             ipacketizer->respond(C2R_SetInput, sizeof(seti), &seti);
             if (now > last_vf_request + VIDEO_REQUEST_INTERVAL) {
                 P_RequestVideo rv;

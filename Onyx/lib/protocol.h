@@ -34,6 +34,7 @@ struct P_SetInput {
     unsigned char pose;
     //  buttons should increment a counter each time they're pushed,
     //  to detect button presses even when packets are lost.
+    unsigned char fire;
 };
 
 struct P_RequestVideo {

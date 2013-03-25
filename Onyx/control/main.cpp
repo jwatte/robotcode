@@ -55,6 +55,9 @@ bool inited_score = false;
 #define STRAFE_AXIS 0   //  left X
 #define AIM_X_AXIS 2    //  right X
 #define AIM_Y_AXIS 3    //  right Y
+#define FIRE_RIGHT_AXIS 4    //  left trigger
+#define FIRE_LEFT_AXIS 5    //  left trigger
+
 #define MAXJOY 28000.0f
 #define MINJOY 1000.0f  //  dead zone
 
@@ -143,6 +146,12 @@ void joystep() {
             else if (js.number == AIM_Y_AXIS) {
                 joyelevate = cap(js.value / MAXJOY);
             }
+            else if (js.number == FIRE_LEFT_AXIS) {
+                joyfire = (joyfire & ~1) | (js.value > 10000 ? 1 : 0);
+            }
+            else if (js.number == FIRE_RIGHT_AXIS) {
+                joyfire = (joyfire & ~2) | (js.value > 10000 ? 2 : 0);
+            }
             else {
                 std::cerr << "axis " << (int)js.number << " value " << js.value << std::endl;;
             }
@@ -190,22 +199,6 @@ void joystep() {
                 }
                 else {
                     istatus->error("mwscore not configured");
-                }
-            }
-            else if (js.number == FIRE_LEFT_BUTTON) {
-                if (on) {
-                    joyfire |= 0x1;
-                }
-                else {
-                    joyfire &= ~0x1;
-                }
-            }
-            else if (js.number == FIRE_RIGHT_BUTTON) {
-                if (on) {
-                    joyfire |= 0x2;
-                }
-                else {
-                    joyfire &= ~0x2;
                 }
             }
             else {

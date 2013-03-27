@@ -106,7 +106,7 @@ int main(int argc, char const *argv[]) {
         std::cerr << "usage: monitor [file.txt | <id> ...]" << std::endl;
         return 1;
     }
-    ServoSet ss;
+    ServoSet ss(true, boost::shared_ptr<Logger>());
     top_info ti;
     ti.ss = &ss;
     struct initinfo {

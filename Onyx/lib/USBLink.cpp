@@ -11,7 +11,6 @@
 
 //#include "protocol.h"
 
-
 #define WRITE_USB 1
 
 
@@ -23,7 +22,7 @@ int outComplete_;
 
 class Transfer {
 public:
-    Transfer(libusb_device_handle *dh, unsigned char iep, unsigned char oep) :
+    Transfer(libusb_device_handle *dh, unsigned char iep, unsigned char oep, boost::shared_ptr<Logger> const &l) :
         dh_(dh),
         iep_(iep),
         oep_(oep),
@@ -34,7 +33,9 @@ public:
         outXfer_(libusb_alloc_transfer(0)),
         outQueueDepth_(0),
         outRetrying_(false),
-        complained_(false) {
+        complained_(false),
+        logger_(l)
+    {
 
         memset(dd_out, 0, sizeof(dd_out));
         dn_out = 0;
@@ -56,6 +57,23 @@ public:
         BOOST_FOREACH(auto p, outQueue_) {
             p->destroy();
         }
+    }
+
+    void log_output_data(void const *data, size_t size)
+    {
+        if (!logger_)
+        {
+            return;
+        }
+        logger_->log_data(LogUSBWrite, data, size);
+    }
+    void log_input_data(void const *data, size_t size)
+    {
+        if (!logger_)
+        {
+            return;
+        }
+        logger_->log_data(LogUSBRead, data, size);
     }
 
     unsigned int in_ready() {
@@ -130,6 +148,7 @@ private:
 
         memset(outXfer_, 0, sizeof(*outXfer_));
         outXfer_->dev_handle = dh_;
+        log_output_data(outPack_->buffer(), outPack_->size());
         libusb_fill_bulk_transfer(outXfer_, dh_, oep_, outPack_->buffer(), outPack_->size(),
                 &Transfer::out_callback, this, 1000); //  a second is a long time!
         outCount_++;
@@ -223,6 +242,7 @@ private:
         }
         boost::unique_lock<boost::mutex> lock(lock_);
         inPack_->set_size(inXfer_->actual_length);
+        log_input_data(inPack_->buffer(), inPack_->size());
         inQueue_.push_back(const_cast<Packet *>(inPack_));
         inPack_ = 0;
         inReady_.release();
@@ -245,10 +265,13 @@ private:
     size_t outQueueDepth_;
     bool outRetrying_;
     bool complained_;
+
+    boost::shared_ptr<Logger> logger_;
 };
 
 
-boost::shared_ptr<Module> USBLink::open(boost::shared_ptr<Settings> const &set) {
+boost::shared_ptr<Module> USBLink::open(boost::shared_ptr<Settings> const &set,
+    boost::shared_ptr<Logger> const &l) {
     std::string vid("f000");
     std::string pid("0002");
     std::string ep_output("2");
@@ -269,7 +292,7 @@ boost::shared_ptr<Module> USBLink::open(boost::shared_ptr<Settings> const &set) 
     if (!!v) {
         ep_output = v->get_string();
     }
-    return boost::shared_ptr<Module>(new USBLink(vid, pid, ep_input, ep_output));
+    return boost::shared_ptr<Module>(new USBLink(vid, pid, ep_input, ep_output, l));
 }
 
 void USBLink::step() {
@@ -343,7 +366,7 @@ static std::string str_drop_packets("drop_packets");
 //  for debugging
 USBLink *lastUsbLink_;
 
-USBLink::USBLink(std::string const &vid, std::string const &pid, std::string const &ep_input, std::string const &ep_output) :
+USBLink::USBLink(std::string const &vid, std::string const &pid, std::string const &ep_input, std::string const &ep_output, boost::shared_ptr<Logger> const &l) :
     vid_(vid),
     pid_(pid),
     ep_input_(ep_input),
@@ -359,7 +382,8 @@ USBLink::USBLink(std::string const &vid, std::string const &pid, std::string con
     inPacketsProperty_(new PropertyImpl<long>(str_in_packets)),
     outPacketsProperty_(new PropertyImpl<long>(str_out_packets)),
     dropPacketsProperty_(new PropertyImpl<long>(str_drop_packets)),
-    name_(vid + ":" + pid) {
+    name_(vid + ":" + pid)
+{
 
     lastUsbLink_ = this;
 
@@ -386,7 +410,7 @@ USBLink::USBLink(std::string const &vid, std::string const &pid, std::string con
         throw std::runtime_error("Could not claim USB interface for comm board " +
             name_ + ". Is another process using it? " + libusb_error_name(er));
     }
-    xfer_ = new Transfer(dh_, iep_, oep_);
+    xfer_ = new Transfer(dh_, iep_, oep_, l);
     libusb_device_descriptor ldd;
     er = libusb_get_device_descriptor(libusb_get_device(dh_), &ldd);
     if (er < 0) {

@@ -10,6 +10,9 @@
 //  how many ms per "shot" fired
 #define GUNS_TIMER 200
 
+//  duty cycle of gun PWM
+#define GUN_DUTY_CYCLE 0x40
+
 
 //  DIP switch 4: do not display/animate battery level
 
@@ -52,9 +55,11 @@
 #define DXL_REG_GOAL_POSITION 0x1E
 #define DXL_REG_MOVING_SPEED 0x20
 
-#define BLINK_CNT 10
-#define RECV_TIMEOUT_TICKS 150
-#define DISPLAY_TICKS 30
+#define BLINK_CNT 5
+//  one tick is 5 microseconds
+#define RECV_TIMEOUT_TICKS 50
+
+#define DISPLAY_MS 30
 
 void Reconfig(void);
 void clear_poses(void);
@@ -78,6 +83,7 @@ int main(void) {
 static unsigned char display_state;
 static unsigned char battery_level;
 static unsigned char battery_voltage;
+static unsigned char dropped_id;
 static unsigned short display_time;
 static bool display_blink;
 static unsigned char guns_left = 0;
@@ -116,7 +122,7 @@ unsigned char last_cmd = 0;
 
 void add_xbuf(unsigned char const *ptr, unsigned char len) {
     if (sizeof(xbuf) - xbufptr < len) {
-        //  dropped packet
+        //  too high data rate
         show_error(7, xbufptr);
         return;
     }
@@ -135,7 +141,7 @@ void setup_guns(void) {
     TCCR3B = (1 << WGM32) | (1 << CS32) | (1 << CS30);  //  clock / 1024
     TCCR3C = 0;
     OCR3AH = 0;
-    OCR3AL = 0x60;
+    OCR3AL = GUN_DUTY_CYCLE;
     //  timer 4, for PC7, which is gun motor right
     TCCR4A = (1 << PWM4A);
     TCCR4B = (1 << CS43) | (1 << CS41) | (1 << CS40);
@@ -143,7 +149,7 @@ void setup_guns(void) {
     TCCR4D = 0;
     TCCR4E = 0;
     TCNT4 = 0;
-    OCR4A = 0x60;
+    OCR4A = GUN_DUTY_CYCLE;
     DT4 = 0;
 }
 
@@ -299,6 +305,7 @@ void reg_write(unsigned char id, unsigned char reg, unsigned char const *buf, un
 }
 
 unsigned char recv_packet(unsigned char *dst, unsigned char maxsz) {
+    set_status(WAITING_LED, WAITING_LED);
     unsigned char cnt = 0;
     UCSR1B = (1 << RXEN1);
     unsigned char tc = TCNT0;
@@ -308,6 +315,7 @@ unsigned char recv_packet(unsigned char *dst, unsigned char maxsz) {
             //  don't spend more than X microseconds waiting for something that won't come
             ntc = TCNT0;
             if (ntc - tc > RECV_TIMEOUT_TICKS) {
+                set_status(TIMEOUT_LED, TIMEOUT_LED | WAITING_LED);
                 return 0;
             }
         }
@@ -316,6 +324,7 @@ unsigned char recv_packet(unsigned char *dst, unsigned char maxsz) {
         ++cnt;
     }
     UCSR1B = (1 << RXEN1) | (1 << RXCIE1);
+    set_status(0, WAITING_LED);
     return cnt;
 }
 
@@ -336,8 +345,8 @@ void reg_read(unsigned char id, unsigned char reg, unsigned char cnt) {
         send_sync(pbuf, 8);
         cnt = recv_packet(pbuf, 6 + cnt);
         if (cnt > 6) {
-            if (pbuf[2] < sizeof(servo_stati)) {
-                servo_stati[pbuf[2]] = pbuf[4];
+            if (id < sizeof(servo_stati)) {
+                servo_stati[id] |= pbuf[4];
             }
             pbuf[1] = READ_COMPLETE;
             pbuf[2] = id;
@@ -349,6 +358,10 @@ void reg_read(unsigned char id, unsigned char reg, unsigned char cnt) {
         }
         else {
             //  talk about incomplete read
+            dropped_id = id;
+            if (id < sizeof(servo_stati)) {
+                servo_stati[id] |= 0x80;
+            }
         }
     }
 }
@@ -433,15 +446,18 @@ unsigned char lerp_pos(unsigned char const *data, unsigned char sz) {
 }
 
 void do_get_status(void) {
-    unsigned char cmd[4] = {
+    unsigned char cmd[5] = {
         STATUS_COMPLETE,
-        2 + sizeof(servo_stati),
+        3 + sizeof(servo_stati),
         get_nmissed(),
-        battery_voltage
+        battery_voltage,
+        dropped_id
         };
-    add_xbuf(cmd, 4);
+    dropped_id = 0;
+    add_xbuf(cmd, 5);
     add_xbuf(servo_stati, sizeof(servo_stati));
     memset(servo_stati, 0, sizeof(servo_stati));
+    set_status(0, TIMEOUT_LED);
 }
 
 void fire_guns(unsigned char left, unsigned char right) {
@@ -453,21 +469,37 @@ void fire_guns(unsigned char left, unsigned char right) {
 
 void set_guns(void) {
     unsigned char dreg = 0;
+    unsigned char creg = 0;
     if (guns_left) {
         dreg |= (1 << 4);
-        TCCR3A = TCCR3A | (1 << COM3A1);
+        creg |= (1 << 6);
+        /*
+        if (!(TCCR3A & (1 < COM3A1))) {
+            TCCR3A |= (1 << COM3A1);
+        }
+        */
     }
     else {
+        /*
         TCCR3A = TCCR3A & ~(1 << COM3A1);
+        */
     }
     if (guns_right) {
         dreg |= (1 << 5);
-        TCCR4A = TCCR4A | (1 << COM4A1);
+        creg |= (1 << 7);
+        /*
+        if (!(TCCR4A & (1 << COM4A1))) {
+            TCCR4A |= (1 << COM4A1);
+        }
+        */
     }
     else {
+        /*
         TCCR4A = TCCR4A & ~(1 << COM4A1);
+        */
     }
     PORTD = (PORTD & ~((1 << 4) | (1 << 5))) | dreg;
+    PORTC = (PORTC & ~((1 << 6) | (1 << 7))) | creg;
 }
 
 void run_guns(void) {
@@ -576,6 +608,8 @@ void OnyxWalker_Task(void) {
         unsigned char gg = xbufptr;
         unsigned char m = recv_avail();
         if (gg || m || (now - last_in > EMPTY_IN_TIMEOUT)) {
+            set_status(POLLING_LED, POLLING_LED);
+            clear_received = now + BLINK_CNT;
             last_in = now;
             Endpoint_Write_8(last_seq);
             if (gg) {
@@ -631,14 +665,14 @@ void OnyxWalker_Task(void) {
 
     /* remove received status */
     if ((short)(now - clear_received) > 0) {
-        set_status(0, RECEIVED_LED | SENDING_LED);
+        set_status(0, RECEIVED_LED | SENDING_LED | POLLING_LED);
         clear_received = now;
     }
 
     run_guns();
 
     /* display LED status (voltage animation etc) */
-    if ((short)(now - display_time) >= DISPLAY_TICKS) {
+    if ((short)(now - display_time) >= DISPLAY_MS) {
         ++display_state;
         display_time = now;
         display_blink = !display_blink;

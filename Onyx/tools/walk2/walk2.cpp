@@ -211,7 +211,7 @@ void joystep() {
 int main() {
     joyopen();
     get_leg_params(lparam);
-    ServoSet ss;
+    ServoSet ss(true, boost::shared_ptr<Logger>());
     for (size_t i = 0; i < sizeof(init)/sizeof(init[0]); ++i) {
         ss.add_servo(init[i].id, init[i].center);
     }

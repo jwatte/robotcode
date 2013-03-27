@@ -9,6 +9,7 @@
 
 #include <assert.h>
 
+#include "USBLink.h"
 #include "ServoSet.h"
 #include "IK.h"
 #include "util.h"
@@ -280,6 +281,15 @@ public:
     bool dirty_;
 };
 
+
+class USBLogger : public Logger {
+public:
+    virtual void log_data(LogWhat what, void const *data, size_t size)
+    {
+        log(what == LogUSBWrite ? LogKeyUSBOut : LogKeyUSBIn, data, size);
+    }
+};
+
 void usb_thread_fn() {
     sched_param parm = { .sched_priority = 25 };
     if (pthread_setschedparam(pthread_self(), SCHED_RR, &parm) < 0) {
@@ -287,7 +297,8 @@ void usb_thread_fn() {
         std::cerr << "USBLink::thread_fn(): pthread_setschedparam(): " << err << std::endl;
     }
     get_leg_params(lparam);
-    ServoSet ss(REAL_USB);
+    boost::shared_ptr<Logger> logger(new USBLogger());
+    ServoSet ss(REAL_USB, logger);
     for (size_t i = 0; i < sizeof(init)/sizeof(init[0]); ++i) {
         ss.add_servo(init[i].id, init[i].center);
     }

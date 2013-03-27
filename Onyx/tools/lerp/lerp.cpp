@@ -24,7 +24,7 @@ table[] = {
 };
 
 int main() {
-    ServoSet ss;
+    ServoSet ss(true, boost::shared_ptr<Logger>());
     for (size_t i = 0; i < sizeof(table)/sizeof(table[0]); ++i) {
         ss.add_servo(table[i].id, table[i].normal);
     }

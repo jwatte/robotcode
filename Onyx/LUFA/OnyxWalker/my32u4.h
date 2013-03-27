@@ -11,8 +11,11 @@
 
 #define CONNECTED_LED 0x1
 #define RECEIVED_LED 0x2
-#define RAWMODE_LED 0x10
+#define POLLING_LED 0x4
 #define SENDING_LED 0x8
+#define RAWMODE_LED 0x10
+#define WAITING_LED 0x20
+#define TIMEOUT_LED 0x40
 
 
 void setup_uart(unsigned char brate);

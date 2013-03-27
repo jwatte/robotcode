@@ -197,10 +197,10 @@ unsigned int Servo::queue_depth() const {
 
 
 
-ServoSet::ServoSet(bool usb) {
+ServoSet::ServoSet(bool usb, boost::shared_ptr<Logger> const &l) {
     boost::shared_ptr<Settings> st(Settings::load("settings.ini"));
     if (usb) {
-        usbModule_ = USBLink::open(st);
+        usbModule_ = USBLink::open(st, l);
         usb_ = usbModule_->cast_as<USBLink>();
     }
     else {
@@ -499,13 +499,16 @@ unsigned char ServoSet::do_status_complete(unsigned char const *pack, unsigned c
     status_.resize(pack[1] - 2);
     //  nmissed == pack[2]
     battery_ = pack[3];
-    if (pack[1] > 2) {
-        memcpy(&status_[0], &pack[4], pack[1] - 2);
+    if (pack[4]) {
+        std::cerr << "lost packet from servo 0x" << std::hex << (int)pack[4] << std::dec << std::endl;
+    }
+    if (pack[1] > 3) {
+        memcpy(&status_[0], &pack[5], pack[1] - 3);
     }
     if (nincomplete > 0) {
         --nincomplete;
     }
-    //  hdr, size, nmissed, battery, size*data
+    //  hdr, size, nmissed, battery, dropped, (size-3)*data
     return 2 + pack[1];
 }
 

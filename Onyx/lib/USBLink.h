@@ -12,6 +12,7 @@ struct libusb_device_handle;
 class Settings;
 class Transfer;
 class Board;
+class Logger;
 
 class Packet {
 public:
@@ -33,9 +34,21 @@ public:
 };
 
 
+enum LogWhat {
+    LogUSBWrite = 1,
+    LogUSBRead = 2
+};
+
+class Logger {
+public:
+    virtual void log_data(LogWhat what, void const *data, size_t size) = 0;
+    virtual ~Logger() {}
+};
+
 class USBLink : public cast_as_impl<Module, USBLink> {
 public:
-    static boost::shared_ptr<Module> open(boost::shared_ptr<Settings> const &set);
+    static boost::shared_ptr<Module> open(boost::shared_ptr<Settings> const &set,
+        boost::shared_ptr<Logger> const &l);
     ~USBLink();
     void step();
     std::string const &name();
@@ -49,7 +62,8 @@ public:
 private:
     friend class USBReturn;
     USBLink(std::string const &vid, std::string const &pid,
-        std::string const &ep_input, std::string const &ep_output);
+        std::string const &ep_input, std::string const &ep_output,
+        boost::shared_ptr<Logger> const &logger);
     void thread_fn();
 
     std::string vid_;

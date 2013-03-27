@@ -55,7 +55,7 @@ void do_packet(unsigned char const *start, size_t size) {
 
 int main(int argc, char const *argv[]) {
     boost::shared_ptr<Settings> st(Settings::load("settings.ini"));
-    boost::shared_ptr<Module> usbl(USBLink::open(st));
+    boost::shared_ptr<Module> usbl(USBLink::open(st, boost::shared_ptr<Logger>()));
     USBLink *ul = usbl->cast_as<USBLink>();
     unsigned char init_junk = 0xfe;
     ul->raw_send(&init_junk, 1);

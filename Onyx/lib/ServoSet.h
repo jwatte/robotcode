@@ -5,6 +5,7 @@
 
 class USBLink;
 class Module;
+class Logger;
 
 struct servo_cmd {
     unsigned char id;
@@ -115,7 +116,7 @@ private:
 
 class ServoSet {
 public:
-    ServoSet(bool usb = true);
+    ServoSet(bool usb, boost::shared_ptr<Logger> const &l);
     ~ServoSet();
 
     Servo &add_servo(unsigned char id, unsigned short neutral = 2048);

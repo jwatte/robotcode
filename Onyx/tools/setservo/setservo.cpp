@@ -1,5 +1,6 @@
 
 #include "ServoSet.h"
+#include "USBLink.h"
 #include <math.h>
 #include <boost/lexical_cast.hpp>
 
@@ -10,6 +11,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <map>
+#include <sstream>
 
 
 void usage() {
@@ -21,12 +23,26 @@ void usage() {
 
 std::map<int, int> positions;
 
+class L : public Logger {
+public:
+    L() {}
+    virtual void log_data(LogWhat what, void const *data, size_t size)
+    {
+        std::stringstream ss;
+        ss << std::hex << (int)what;
+        for (size_t i = 0; i < size; ++i)
+        {
+            ss << " " << (int)((unsigned char *)data)[i];
+        }
+        std::cerr << ss.str() << std::endl;
+    }
+};
+
 int main(int argc, char const *argv[]) {
     if (argc < 2) {
         usage();
     }
-    ServoSet ss;
-    ss.step();
+    ServoSet ss(true, boost::shared_ptr<Logger>(new L()));
     for (int i = 1; i < argc; ++i) {
         int id, pos;
         if (sscanf(argv[i], "%d:%d", &id, &pos) != 2) {
@@ -43,7 +59,7 @@ int main(int argc, char const *argv[]) {
     int i = 0;
     while (true) {
         ss.step();
-        usleep(5000);
+        usleep(50000);
         ++i;
         if (i == 10) {
             ss.set_torque(900);

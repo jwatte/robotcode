@@ -25,7 +25,7 @@ int main(int argc, char const *argv[]) {
         std::cerr << "left .. right must be in 0 .. 4095; got " << left << " .. " << right << std::endl;
         return 1;
     }
-    ServoSet ss;
+    ServoSet ss(true, boost::shared_ptr<Logger>());
     Servo &s(ss.add_servo(id));
     unsigned short pos = (left + right) / 2;
     short delta = -1;

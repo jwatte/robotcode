@@ -20,6 +20,8 @@
 //  param is baud rate
 #define CMD_RAW_DATA 0x00
 //  all data is data
+#define CMD_GET_DIPS 0x10
+//  no data
 #define CMD_SET_LEDS 0x11
 //  data is byte of LED state
 #define CMD_FIRE_GUNS 0x12
@@ -43,6 +45,7 @@
 
 #define READ_COMPLETE 0x41
 #define STATUS_COMPLETE 0x51
+#define DIPS_COMPLETE 0x61
 
 #define DXL_PING 1
 #define DXL_REG_READ 2
@@ -363,7 +366,6 @@ unsigned char recv_packet(unsigned char *dst, unsigned char maxsz) {
         ++cnt;
     }
     UCSR1B = (1 << RXEN1) | (1 << RXCIE1);
-    set_status(0, TIMEOUT_LED);
     return cnt;
 }
 
@@ -509,6 +511,14 @@ void do_get_status(void) {
     set_status(0, TIMEOUT_LED);
 }
 
+void get_dips() {
+    unsigned char cmd[2] = {
+        DIPS_COMPLETE,
+        PINF
+        };
+    add_xbuf(cmd, 2);
+}
+
 void fire_guns(unsigned char left, unsigned char right) {
     guns_left = left;
     guns_right = right;
@@ -591,6 +601,9 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
                 set_rawmode(1);
                 clear_rawmode = 0;
                 setup_uart(sbuf[offset+1]);
+                break;
+            case CMD_GET_DIPS:
+                get_dips();
                 break;
             case CMD_SET_LEDS:
                 set_status(sbuf[offset+1], 0xff);

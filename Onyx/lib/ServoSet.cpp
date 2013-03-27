@@ -496,19 +496,32 @@ unsigned char ServoSet::do_status_complete(unsigned char const *pack, unsigned c
         }
         return sz;
     }
-    status_.resize(pack[1] - 2);
+    status_.resize(32, 0);
     //  nmissed == pack[2]
     battery_ = pack[3];
     if (pack[4]) {
         std::cerr << "lost packet from servo 0x" << std::hex << (int)pack[4] << std::dec << std::endl;
     }
-    if (pack[1] > 3) {
-        memcpy(&status_[0], &pack[5], pack[1] - 3);
+    if (pack[5] != dips_) {
+        dips_ = pack[5];
+        if (dips_ & (1 << 5)) {
+            //  so, once torqueLimit_ has gone to 103, it won't return
+            set_torque(torqueLimit_);
+        }
+        else {
+            set_torque(103);
+        }
+        std::cerr << "dip change: dips 0x" << std::hex << (int)dips_
+            << std::dec << "; torque limit " << torqueLimit_ << std::endl;
+    }
+    //  the last 32 bytes are always servo status
+    if (pack[1] > 32) {
+        memcpy(&status_[0], &pack[pack[1]-32], 32);
     }
     if (nincomplete > 0) {
         --nincomplete;
     }
-    //  hdr, size, nmissed, battery, dropped, (size-3)*data
+    //  hdr, size, (nmissed, battery, dropped, dips, ...)=size
     return 2 + pack[1];
 }
 
@@ -525,6 +538,10 @@ unsigned char ServoSet::get_status(unsigned char *buf, unsigned char n) {
 
 unsigned char ServoSet::battery() {
     return battery_;
+}
+
+unsigned char ServoSet::dips() {
+    return dips_;
 }
 
 void ServoSet::raw_cmd(void const *data, unsigned char sz) {

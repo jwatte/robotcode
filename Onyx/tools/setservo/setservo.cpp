@@ -15,7 +15,7 @@
 
 
 void usage() {
-    fprintf(stderr, "usage: setservo id:position ...\n");
+    fprintf(stderr, "usage: setservo [-v] id:position ...\n");
     fprintf(stderr, "id = 1 .. 254\n");
     fprintf(stderr, "position = 0 .. 4095\n");
     exit(1);
@@ -39,10 +39,16 @@ public:
 };
 
 int main(int argc, char const *argv[]) {
+    boost::shared_ptr<Logger> logger;
+    if (argv[1] && !strcmp(argv[1], "-v")) {
+        logger.reset(new L());
+        --argc;
+        ++argv;
+    }
     if (argc < 2) {
         usage();
     }
-    ServoSet ss(true, boost::shared_ptr<Logger>(new L()));
+    ServoSet ss(true, logger);
     for (int i = 1; i < argc; ++i) {
         int id, pos;
         if (sscanf(argv[i], "%d:%d", &id, &pos) != 2) {

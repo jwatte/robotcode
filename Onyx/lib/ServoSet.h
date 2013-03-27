@@ -132,6 +132,7 @@ public:
     //  set many poses over some future amount of time
     void lerp_pose(unsigned short ms, cmd_pose const *pose, unsigned char npose);
     unsigned char battery();
+    unsigned char dips();
     //  this is needed because ServoSet actually does protocol 
     //  framing, which ought to live in USBLink
     void raw_cmd(void const *data, unsigned char sz);
@@ -151,6 +152,7 @@ private:
     unsigned char lastSeq_;
     unsigned char nextSeq_;
     unsigned char battery_;
+    unsigned char dips_;
 
     void add_cmd(servo_cmd const &cmd);
     unsigned char do_read_complete(unsigned char const *pack, unsigned char sz);

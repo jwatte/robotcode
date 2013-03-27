@@ -20,8 +20,6 @@
 //  param is baud rate
 #define CMD_RAW_DATA 0x00
 //  all data is data
-#define CMD_GET_DIPS 0x10
-//  no data
 #define CMD_SET_LEDS 0x11
 //  data is byte of LED state
 #define CMD_FIRE_GUNS 0x12
@@ -497,26 +495,20 @@ unsigned char lerp_pos(unsigned char const *data, unsigned char sz) {
 }
 
 void do_get_status(void) {
-    unsigned char cmd[5] = {
+    unsigned char cmd[6] = {
         STATUS_COMPLETE,
-        3 + sizeof(servo_stati),
+        0,
         get_nmissed(),
         battery_voltage,
-        dropped_id
+        dropped_id,
+        PINF & 0x33
         };
+    cmd[1] = sizeof(cmd) - 2 + sizeof(servo_stati);
     dropped_id = 0;
-    add_xbuf(cmd, 5);
+    add_xbuf(cmd, sizeof(cmd));
     add_xbuf(servo_stati, sizeof(servo_stati));
     memset(servo_stati, 0, sizeof(servo_stati));
     set_status(0, TIMEOUT_LED);
-}
-
-void get_dips() {
-    unsigned char cmd[2] = {
-        DIPS_COMPLETE,
-        PINF
-        };
-    add_xbuf(cmd, 2);
 }
 
 void fire_guns(unsigned char left, unsigned char right) {
@@ -601,9 +593,6 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
                 set_rawmode(1);
                 clear_rawmode = 0;
                 setup_uart(sbuf[offset+1]);
-                break;
-            case CMD_GET_DIPS:
-                get_dips();
                 break;
             case CMD_SET_LEDS:
                 set_status(sbuf[offset+1], 0xff);

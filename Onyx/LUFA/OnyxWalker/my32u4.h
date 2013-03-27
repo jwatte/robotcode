@@ -19,7 +19,7 @@
 
 
 void setup_uart(unsigned char brate);
-void send_sync(unsigned char const *data, unsigned char size);
+void send_sync(unsigned char const *data, unsigned char size, unsigned char enable_rx_intr);
 unsigned char recv_avail(void);
 unsigned char const *recv_buf(void);
 void recv_eat(unsigned char cnt);

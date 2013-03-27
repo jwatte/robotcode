@@ -56,7 +56,9 @@
 #define DXL_REG_MOVING_SPEED 0x20
 
 #define BLINK_CNT 5
-//  one tick is 5 microseconds
+//  one tick is 5 microseconds; used in an uchar with timer, so 
+//  if it's big, there's a very small window to actually detect 
+//  the timeout
 #define RECV_TIMEOUT_TICKS 50
 
 #define DISPLAY_MS 30
@@ -72,7 +74,7 @@ int main(void) {
 
     sei();
 
-    while (true) {
+    while (1) {
         wdt_reset();
         USB_USBTask();
         OnyxWalker_Task();
@@ -203,8 +205,8 @@ void SetupHardware(void) {
 
     setup_uart(0);
     //  delayms built into setup_uart
-    send_sync((unsigned char const *)"\0\0\0\0\0", 6);
-    send_sync(notorque_packet, sizeof(notorque_packet));    //  turn off torque on all servos
+    send_sync((unsigned char const *)"\0\0\0\0\0", 6, 0);
+    send_sync(notorque_packet, sizeof(notorque_packet), 1);    //  turn off torque on all servos
     clear_xbuf();
     set_status(0x1f, 0xff);
 
@@ -243,7 +245,7 @@ void EVENT_USB_Device_Reset(void) {
 }
 
 void Reconfig() {
-    bool ConfigSuccess = true;
+    bool ConfigSuccess = 1;
 
     ConfigSuccess &= Endpoint_ConfigureEndpoint(
         DATA_RX_EPNUM,
@@ -257,7 +259,7 @@ void Reconfig() {
         1);
 
     if (!ConfigSuccess) {
-        while (true) {
+        while (1) {
             set_status(0xff, 0xff);
             delayms(100);
             set_status(0, 0xff);
@@ -300,26 +302,64 @@ void reg_write(unsigned char id, unsigned char reg, unsigned char const *buf, un
     pbuf[5] = reg;
     memcpy(&pbuf[6], buf, cnt);
     pbuf[6 + cnt] = cksum(&pbuf[2], cnt + 4);
-    send_sync(pbuf, cnt + 7);
+    send_sync(pbuf, cnt + 7, 1);
     //  assume servos do not ack writes
 }
+
+#if INTERRUPT_RECV
+
+//  turns out, interrupts are too slow for 2 Mbit!
+/*
+unsigned char recv_packet(unsigned char *dst, unsigned char sz) {
+    set_status(WAITING_LED, WAITING_LED);
+    unsigned char cnt = 0;
+    unsigned char timo = TCNT0;
+    while (cnt < sz) {
+        unsigned char ra = recv_avail();
+        if (ra > cnt) {
+            timo = TCNT0;
+            cnt = ra;
+        }
+        else {
+            unsigned char nn = TCNT0;
+            if (nn < timo) {
+                timo += 5;
+            }
+            if (nn - timo > RECV_TIMEOUT_TICKS) {
+                if (cnt) {
+                    recv_eat(cnt);
+                }
+                set_status(TIMEOUT_LED, WAITING_LED | TIMEOUT_LED);
+                return 0;
+            }
+        }
+    }
+    memcpy(dst, recv_buf(), sz);
+    recv_eat(sz);
+    set_status(0, WAITING_LED | TIMEOUT_LED);
+    return sz;
+}
+*/
+
+#else 
 
 unsigned char recv_packet(unsigned char *dst, unsigned char maxsz) {
     set_status(WAITING_LED, WAITING_LED);
     unsigned char cnt = 0;
+    //  turn off receive interrupts
     UCSR1B = (1 << RXEN1);
-    unsigned char tc = TCNT0;
-    unsigned char ntc = tc;
     while (cnt < maxsz) {
+        //  new timeout for each byte received
+        unsigned char tc = TCNT0;
         while (!(UCSR1A & (1 << RXC1))) {
             //  don't spend more than X microseconds waiting for something that won't come
-            ntc = TCNT0;
+            unsigned char ntc = TCNT0;
             if (ntc - tc > RECV_TIMEOUT_TICKS) {
+                UCSR1B = (1 << RXEN1) | (1 << RXCIE1);
                 set_status(TIMEOUT_LED, TIMEOUT_LED | WAITING_LED);
                 return 0;
             }
         }
-        tc = ntc;
         dst[cnt] = UDR1;
         ++cnt;
     }
@@ -327,6 +367,9 @@ unsigned char recv_packet(unsigned char *dst, unsigned char maxsz) {
     set_status(0, WAITING_LED);
     return cnt;
 }
+
+#endif
+
 
 void reg_read(unsigned char id, unsigned char reg, unsigned char cnt) {
     if (cnt > 9) {
@@ -342,7 +385,7 @@ void reg_read(unsigned char id, unsigned char reg, unsigned char cnt) {
     pbuf[6] = cnt;
     pbuf[7] = cksum(&pbuf[2], 5);
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-        send_sync(pbuf, 8);
+        send_sync(pbuf, 8, 0);
         cnt = recv_packet(pbuf, 6 + cnt);
         if (cnt > 6) {
             if (id < sizeof(servo_stati)) {
@@ -367,7 +410,7 @@ void reg_read(unsigned char id, unsigned char reg, unsigned char cnt) {
 }
 
 
-bool rawmode = false;
+bool rawmode = 0;
 unsigned char sbuf[DATA_TX_EPSIZE];
 unsigned char sbuflen;
 
@@ -377,13 +420,20 @@ void set_rawmode(bool rm) {
 }
 
 void wait_for_idle(void) {
-    while (true) {
+    while (1) {
         unsigned char av = recv_avail();
         unsigned char ts = TCNT0;
         //  Wait for 40 us without any data -- that's 80 bits; plenty of time 
-        //  for the bus to clear!
-        while ((unsigned char)(TCNT0 - ts) < 10) {
-            ; // do nothing
+        //  for the bus to clear! Don't do this in delayus, as I still want 
+        //  to keep interrupts enabled.
+        while (1) {
+            unsigned char ts2 = TCNT0;
+            if (ts2 < ts) {
+                ts += 5;
+            }
+            if (ts2 - ts >= 10) {
+                break;
+            }
         }
         if (av == recv_avail()) {
             break;
@@ -525,10 +575,10 @@ void run_guns(void) {
 
 void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end) {
     while (offset < end) {
-        bool clear_rawmode = true;
+        bool clear_rawmode = 1;
         if (rawmode && (sbuf[offset] == CMD_RAW_DATA)) {
             wait_for_idle();
-            send_sync(&sbuf[offset+1], end - offset - 1);
+            send_sync(&sbuf[offset+1], end - offset - 1, 1);
             break;
         }
         unsigned char cmdSize = (sbuf[offset] & 0x7) + 1;
@@ -539,8 +589,8 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
         }
         switch (sbuf[offset]) {
             case CMD_RAW_MODE:
-                set_rawmode(true);
-                clear_rawmode = false;
+                set_rawmode(1);
+                clear_rawmode = 0;
                 setup_uart(sbuf[offset+1]);
                 break;
             case CMD_SET_LEDS:
@@ -580,7 +630,7 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
         }
         offset += cmdSize;
         if (clear_rawmode && rawmode) {
-            set_rawmode(false);
+            set_rawmode(0);
         }
     }
 }
@@ -703,7 +753,7 @@ void OnyxWalker_Task(void) {
                 battery_level = voltages[i].bits;
             } while (voltages[i++].voltage > battery_voltage);
             if (battery_voltage < 132) {  //  about to go bust -- turn off!
-                send_sync(notorque_packet, sizeof(notorque_packet));    //  turn off torque on all servos
+                send_sync(notorque_packet, sizeof(notorque_packet), 1);    //  turn off torque on all servos
                 display_state = 128;    //  force battery display
                 battery_level = 0x80;
                 //  todo: robot controller should kill power at this point

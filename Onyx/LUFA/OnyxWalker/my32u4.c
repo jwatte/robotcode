@@ -100,7 +100,7 @@ void setup_uart(unsigned char rate) {
 
 extern unsigned short clear_received;   //  ugh! hack!
 
-void send_sync(unsigned char const *data, unsigned char size) {
+void send_sync(unsigned char const *data, unsigned char size, unsigned char enable_rx_intr) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         //  enable transmitter, disable receiver and interrupt
         UCSR1B = (1 << TXEN1);
@@ -122,7 +122,7 @@ void send_sync(unsigned char const *data, unsigned char size) {
         }
         rptr = 0;
         //  enable interrupt
-        UCSR1B = (1 << RXCIE1) | (1 << RXEN1) | (1 << TXEN1);
+        UCSR1B = (enable_rx_intr ? (1 << RXCIE1) : 0) | (1 << RXEN1) | (1 << TXEN1);
     }
 }
 
@@ -204,6 +204,7 @@ void delayms(unsigned short ms) {
     }
 }
 
+/* note: this keeps interrupts disabled! */
 void delayus(unsigned short us) {
     if (us > 500) {
         us = 500;
@@ -213,7 +214,12 @@ void delayus(unsigned short us) {
         unsigned char tc = TCNT0;
         while (delayed < us) {
             unsigned char tc2 = TCNT0;
-            delayed += (tc2 - tc) * 5;
+            //  each time we wrap around 250, we get another 20 microseconds
+            //  that we didn't actually spend...
+            if (tc2 < tc) {
+                tc += 5;
+            }
+            delayed += (tc2 - tc) * 4;
             tc = tc2;
         }
     }
@@ -256,8 +262,8 @@ void show_error(unsigned char errkind, unsigned char errdata) {
             epic, epiir, epirwa,
             sbuflen
         };
-        send_sync(buf, 8);
-        send_sync(sbuf, sbuflen);
+        send_sync(buf, 8, 0);
+        send_sync(sbuf, sbuflen, 0);
     }
 }
 

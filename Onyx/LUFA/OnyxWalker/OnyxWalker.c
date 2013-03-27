@@ -344,7 +344,6 @@ unsigned char recv_packet(unsigned char *dst, unsigned char sz) {
 #else 
 
 unsigned char recv_packet(unsigned char *dst, unsigned char maxsz) {
-    set_status(WAITING_LED, WAITING_LED);
     unsigned char cnt = 0;
     //  turn off receive interrupts
     UCSR1B = (1 << RXEN1);
@@ -354,9 +353,9 @@ unsigned char recv_packet(unsigned char *dst, unsigned char maxsz) {
         while (!(UCSR1A & (1 << RXC1))) {
             //  don't spend more than X microseconds waiting for something that won't come
             unsigned char ntc = TCNT0;
-            if (ntc - tc > RECV_TIMEOUT_TICKS) {
+            if ((unsigned char)(ntc - tc) > RECV_TIMEOUT_TICKS) {
                 UCSR1B = (1 << RXEN1) | (1 << RXCIE1);
-                set_status(TIMEOUT_LED, TIMEOUT_LED | WAITING_LED);
+                set_status(TIMEOUT_LED, TIMEOUT_LED);
                 return 0;
             }
         }
@@ -364,7 +363,7 @@ unsigned char recv_packet(unsigned char *dst, unsigned char maxsz) {
         ++cnt;
     }
     UCSR1B = (1 << RXEN1) | (1 << RXCIE1);
-    set_status(0, WAITING_LED);
+    set_status(0, TIMEOUT_LED);
     return cnt;
 }
 
@@ -431,7 +430,7 @@ void wait_for_idle(void) {
             if (ts2 < ts) {
                 ts += 5;
             }
-            if (ts2 - ts >= 10) {
+            if ((unsigned char)(ts2 - ts) >= 10) {
                 break;
             }
         }

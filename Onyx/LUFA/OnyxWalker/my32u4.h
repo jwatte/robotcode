@@ -14,7 +14,6 @@
 #define POLLING_LED 0x4
 #define SENDING_LED 0x8
 #define RAWMODE_LED 0x10
-#define WAITING_LED 0x20
 #define TIMEOUT_LED 0x40
 
 

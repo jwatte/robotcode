@@ -219,7 +219,7 @@ void delayus(unsigned short us) {
             if (tc2 < tc) {
                 tc += 5;
             }
-            delayed += (tc2 - tc) * 4;
+            delayed += (unsigned short)((unsigned char)(tc2 - tc)) * 4;
             tc = tc2;
         }
     }

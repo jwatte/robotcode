@@ -103,15 +103,20 @@ public:
     unsigned short get_reg2(unsigned char reg) const;
     unsigned int queue_depth() const;
 
+    void set_torque(unsigned short thousandths, unsigned char steps);
+
 private:
 
     friend class ServoSet;
-    unsigned short neutral_;
-    unsigned char id_;
     ServoSet &ss_;
     unsigned char registers_[NUM_SERVO_REGS];
+    unsigned char id_;
     unsigned char lastSlowRd_;
     unsigned char updateTorque_;
+    unsigned char torqueSteps_;
+    unsigned short neutral_;
+    unsigned short prevTorque_;
+    unsigned short nextTorque_;
 };
 
 class ServoSet {

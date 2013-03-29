@@ -84,14 +84,33 @@ static const unsigned char frequent_read_regs[] = {
 };
 
 Servo::Servo(unsigned char id, unsigned short neutral, ServoSet &ss) :
-    neutral_(neutral),
-    id_(id),
     ss_(ss),
+    id_(id),
     lastSlowRd_(0),
-    updateTorque_(10) {
+    updateTorque_(10),
+    torqueSteps_(10),
+    neutral_(neutral),
+    prevTorque_(0),
+    nextTorque_(206)
+{
     memset(registers_, 0, sizeof(registers_));
     set_goal_position(neutral);
 }
+
+void Servo::set_torque(unsigned short thousandths, unsigned char steps)
+{
+    if (thousandths >= 1024) {
+        throw std::runtime_error("Bad torque argument to Servo::set_torque().");
+    }
+    if (steps == 0 || steps > 30) {
+        throw std::runtime_error("Bad steps argument to Servo::set_torque().");
+    }
+    prevTorque_ = (prevTorque_ * updateTorque_ + nextTorque_ * (torqueSteps_ - updateTorque_)) / torqueSteps_;
+    nextTorque_ = thousandths;
+    torqueSteps_ = steps;
+    updateTorque_ = steps;
+}
+
 
 Servo::~Servo() {
 }
@@ -249,8 +268,8 @@ Servo &ServoSet::add_servo(unsigned char id, unsigned short neutral) {
             SET_REG1, id, REG_STATUS_RETURN_LEVEL, 1,           //  set reg
             DELAY, 0,
             SET_REG1, id, REG_RETURN_DELAY_TIME, 2,
-            SET_REG1, id, REG_ALARM_LED, 0x7C,      //  everything except voltage and angle limit
-            SET_REG1, id, REG_ALARM_SHUTDOWN, 0x4,  //  temperature
+            SET_REG1, id, REG_ALARM_LED, 0x7C,       //  everything except voltage and angle limit
+            SET_REG1, id, REG_ALARM_SHUTDOWN, 0x24,  //  temperature, overload
             SET_REG1, id, REG_HIGHEST_LIMIT_TEMPERATURE, 75,
             SET_REG1, id, REG_HIGHEST_LIMIT_VOLTAGE, 170,
             SET_REG1, id, REG_LOWEST_LIMIT_VOLTAGE, 120,
@@ -339,10 +358,10 @@ void ServoSet::step() {
                 s.lastSlowRd_ = 0;
                 if (s.updateTorque_) {
                     s.updateTorque_--;
-                    if (!s.updateTorque_) {
-                        s.set_reg2(REG_TORQUE_LIMIT, torqueLimit_);
-                        std::cerr << "torque for servo " << (int)lastServoId_ << " is " << torqueLimit_ << std::endl;
-                    }
+                    unsigned short torque =
+                        (s.nextTorque_ * (s.torqueSteps_ - s.updateTorque_) + s.prevTorque_ * s.updateTorque_) / s.torqueSteps_;
+                    s.set_reg2(REG_TORQUE_LIMIT, torque);
+                    std::cerr << "torque for servo " << (int)lastServoId_ << " is " << torque << std::endl;
                 }
             }
             buf[bufptr++] = GET_REGS;
@@ -430,9 +449,8 @@ void ServoSet::set_torque(unsigned short thousandths) {
     }
     torqueLimit_ = thousandths;
     for (auto ptr(servos_.begin()), end(servos_.end()); ptr != end; ++ptr) {
-        if (!!*ptr && !(*ptr)->updateTorque_) {
-            //  catch this guy up the next time I see him
-            (*ptr)->updateTorque_ = 1;
+        if (!!*ptr) {
+            (*ptr)->set_torque(thousandths, 1);
         }
     }
 }
@@ -504,8 +522,9 @@ unsigned char ServoSet::do_status_complete(unsigned char const *pack, unsigned c
     }
     if (pack[5] != dips_) {
         dips_ = pack[5];
+        //  switch 4 is "turn off battery animation and turn on low torque"
         if (dips_ & (1 << 5)) {
-            //  so, once torqueLimit_ has gone to 103, it won't return
+            //  once torqueLimit_ has gone to 103, it won't return
             set_torque(torqueLimit_);
         }
         else {

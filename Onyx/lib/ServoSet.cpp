@@ -272,10 +272,13 @@ Servo &ServoSet::add_servo(unsigned char id, unsigned short neutral) {
             SET_REG1, id, REG_ALARM_SHUTDOWN, 0x24,  //  temperature, overload
             SET_REG1, id, REG_HIGHEST_LIMIT_TEMPERATURE, 75,
             SET_REG1, id, REG_HIGHEST_LIMIT_VOLTAGE, 170,
-            SET_REG1, id, REG_LOWEST_LIMIT_VOLTAGE, 120,
+            SET_REG1, id, REG_LOWEST_LIMIT_VOLTAGE, 110,
             SET_REG2, id, REG_TORQUE_LIMIT, (unsigned char)(torque & 0xff), (unsigned char)((torque >> 8) & 0xff),     //  10% of full torque to start out
             SET_REG2, id, REG_GOAL_POSITION, (unsigned char)(neutral & 0xff), (unsigned char)((neutral >> 8) & 0xff),
             SET_REG2, id, REG_MOVING_SPEED, 0, 0,       //  set speed at max
+            SET_REG1, id, REG_D_GAIN, 2,
+            SET_REG1, id, REG_I_GAIN, 4,
+            SET_REG1, id, REG_P_GAIN, 16,
             SET_REG1, id, REG_LOCK, 1,
             SET_REG1, id, REG_TORQUE_ENABLE, 1,
         };

@@ -11,7 +11,11 @@
 #define GUNS_TIMER 200
 
 //  duty cycle of gun PWM
-#define GUN_DUTY_CYCLE 0x40
+#define INIT_GUN_DUTY_CYCLE 0xD0
+
+unsigned char GUN_DUTY_CYCLE = INIT_GUN_DUTY_CYCLE;
+
+#define PWM_FIRE 1
 
 
 //  DIP switch 4: do not display/animate battery level
@@ -30,6 +34,8 @@
 //  param is id, reg, datal, datah
 #define CMD_GET_STATUS 0x20
 //  no param -- just return status!
+#define CMD_SET_GUN_DC 0x21
+//  data is gun duty cycle byte
 #define CMD_GET_REGS 0x23
 //  param is id, reg, count
 #define CMD_NOP 0xf0
@@ -91,8 +97,8 @@ static unsigned short display_time;
 static bool display_blink;
 static unsigned char guns_left = 0;
 static unsigned char guns_right = 0;
-static unsigned char guns_timer = 0;
-static unsigned char guns_lasttime = 0;
+static unsigned short guns_timer = 0;
+static unsigned short guns_lasttime = 0;
 
 static unsigned char servo_stati[32];
 static unsigned short target_pose[32];
@@ -135,19 +141,22 @@ void add_xbuf(unsigned char const *ptr, unsigned char len) {
 
 
 void setup_guns(void) {
-    PORTD = PORTD & ~(0x20 | 0x10);
-    PORTC = PORTC & ~(0x80 | 0x40);
-    DDRC |= 0x80 | 0x40;
-    DDRD |= 0x20 | 0x10;
+    power_timer3_enable();
+    PORTD &= ~(0x20 | 0x10);
+    PORTC &= ~(0x80 | 0x40);
+    DDRC |= (0x80 | 0x40);
+    DDRD |= (0x20 | 0x10);
     //  timer 3, for PC6, which is gun motor left
     TCCR3A = (1 << WGM30);  //  8 bit PWM mode
-    TCCR3B = (1 << WGM32) | (1 << CS32) | (1 << CS30);  //  clock / 1024
+    TCCR3B = (1 << WGM32) | (1 << CS32);    //  fast PWM, clock/256
     TCCR3C = 0;
+    TCNT3H = 0;
+    TCNT3L = 0;
     OCR3AH = 0;
     OCR3AL = GUN_DUTY_CYCLE;
     //  timer 4, for PC7, which is gun motor right
     TCCR4A = (1 << PWM4A);
-    TCCR4B = (1 << CS43) | (1 << CS41) | (1 << CS40);
+    TCCR4B = (1 << CS42) | (1 << CS41) | (1 << CS40);
     TCCR4C = 0;
     TCCR4D = 0;
     TCCR4E = 0;
@@ -207,7 +216,7 @@ void SetupHardware(void) {
     setup_uart(0);
     //  delayms built into setup_uart
     send_sync((unsigned char const *)"\0\0\0\0\0", 6, 0);
-    send_sync(notorque_packet, sizeof(notorque_packet), 1);    //  turn off torque on all servos
+    //send_sync(notorque_packet, sizeof(notorque_packet), 1);    //  turn off torque on all servos
     clear_xbuf();
     set_status(0x1f, 0xff);
 
@@ -512,10 +521,18 @@ void do_get_status(void) {
 }
 
 void fire_guns(unsigned char left, unsigned char right) {
-    guns_left = left;
-    guns_right = right;
+    guns_left = left > guns_left ? left : guns_left;
+    guns_right = right > guns_right ? right : guns_right;
     guns_timer = GUNS_TIMER;
     guns_lasttime = getms();
+    set_status((left ? 0x20 : 0) | (right ? 0x10 : 0), 0x30);
+}
+
+void do_set_gun_dc(unsigned char dc) {
+    GUN_DUTY_CYCLE = dc;
+    OCR3AH = 0;
+    OCR3AL = GUN_DUTY_CYCLE;
+    OCR4A = GUN_DUTY_CYCLE;
 }
 
 void set_guns(void) {
@@ -524,30 +541,24 @@ void set_guns(void) {
     if (guns_left) {
         dreg |= (1 << 4);
         creg |= (1 << 6);
-        /*
-        if (!(TCCR3A & (1 < COM3A1))) {
-            TCCR3A |= (1 << COM3A1);
-        }
-        */
+#if PWM_FIRE
+        TCCR3A = (1 << WGM30) | (1 << COM3A1);
     }
     else {
-        /*
-        TCCR3A = TCCR3A & ~(1 << COM3A1);
-        */
+        TCCR3A = (1 << WGM30);
+#endif
     }
     if (guns_right) {
         dreg |= (1 << 5);
         creg |= (1 << 7);
-        /*
+#if PWM_FIRE
         if (!(TCCR4A & (1 << COM4A1))) {
             TCCR4A |= (1 << COM4A1);
         }
-        */
     }
     else {
-        /*
-        TCCR4A = TCCR4A & ~(1 << COM4A1);
-        */
+        TCCR4A &= ~(1 << COM4A1);
+#endif
     }
     PORTD = (PORTD & ~((1 << 4) | (1 << 5))) | dreg;
     PORTC = (PORTC & ~((1 << 6) | (1 << 7))) | creg;
@@ -611,6 +622,9 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
                 break;
             case CMD_GET_STATUS:
                 do_get_status();
+                break;
+            case CMD_SET_GUN_DC:
+                do_set_gun_dc(sbuf[offset+1]);
                 break;
             case CMD_DELAY:
                 delayms(sbuf[offset+1]);

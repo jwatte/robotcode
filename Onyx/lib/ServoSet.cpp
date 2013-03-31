@@ -276,13 +276,18 @@ Servo &ServoSet::add_servo(unsigned char id, unsigned short neutral) {
             SET_REG2, id, REG_TORQUE_LIMIT, (unsigned char)(torque & 0xff), (unsigned char)((torque >> 8) & 0xff),     //  10% of full torque to start out
             SET_REG2, id, REG_GOAL_POSITION, (unsigned char)(neutral & 0xff), (unsigned char)((neutral >> 8) & 0xff),
             SET_REG2, id, REG_MOVING_SPEED, 0, 0,       //  set speed at max
+        };
+        usb_->raw_send(set_regs_pack, sizeof(set_regs_pack));
+        ++nextSeq_;
+        unsigned char set_regs_pack2[] = {
+            nextSeq_,
             SET_REG1, id, REG_D_GAIN, 2,
             SET_REG1, id, REG_I_GAIN, 4,
             SET_REG1, id, REG_P_GAIN, 16,
             SET_REG1, id, REG_LOCK, 1,
             SET_REG1, id, REG_TORQUE_ENABLE, 1,
         };
-        usb_->raw_send(set_regs_pack, sizeof(set_regs_pack));
+        usb_->raw_send(set_regs_pack2, sizeof(set_regs_pack2));
     }
     ++nextSeq_;
     return *servos_[id];

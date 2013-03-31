@@ -141,10 +141,10 @@ void poselegs(ServoSet &ss, float step, float speed, float turn, float strafe, f
 void do_fire(ServoSet &ss) {
     unsigned char buf[3] = { CMD_FIRE, 0, 0 };
     if (firing_value & 1) {
-        buf[1] = 1;
+        buf[1] = 50;
     }
     if (firing_value & 2) {
-        buf[2] = 1;
+        buf[2] = 50;
     }
     ss.raw_cmd(buf, 3);
 }
@@ -367,9 +367,7 @@ void usb_thread_fn() {
             }
             poselegs(ss, step, i_speed.get(), -i_turn.get(), i_strafe.get(), i_height.get());
             if (ctl_fire || (firing_value != ctl_fire)) {
-                if (firing_value != ctl_fire) {
-                    std::cerr << "firing_value: " << (int)ctl_fire << std::endl;
-                }
+                std::cerr << "firing_value: " << (int)ctl_fire << std::endl;
                 firing_value = ctl_fire;
                 do_fire(ss);
             }

@@ -11,8 +11,8 @@
 #define GUNS_TIMER 200
 
 //  duty cycle of gun PWM
-#define INIT_GUN_DUTY_CYCLE_3 0xF8
-#define INIT_GUN_DUTY_CYCLE_4 0x68
+#define INIT_GUN_DUTY_CYCLE_3 0x58
+#define INIT_GUN_DUTY_CYCLE_4 0x70
 
 unsigned char GUN_DUTY_CYCLE_3 = INIT_GUN_DUTY_CYCLE_3;
 unsigned char GUN_DUTY_CYCLE_4 = INIT_GUN_DUTY_CYCLE_4;
@@ -521,6 +521,9 @@ void do_get_status(void) {
 }
 
 void fire_guns(unsigned char left, unsigned char right) {
+    OCR3AH = 0;
+    OCR3AL = GUN_DUTY_CYCLE_3 - (battery_voltage >> 2);
+    OCR4A = GUN_DUTY_CYCLE_4 - (battery_voltage >> 2);
     guns_left = left > guns_left ? left : guns_left;
     guns_right = right > guns_right ? right : guns_right;
     guns_timer = GUNS_TIMER;

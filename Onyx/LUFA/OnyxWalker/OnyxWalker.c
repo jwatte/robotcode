@@ -11,9 +11,11 @@
 #define GUNS_TIMER 200
 
 //  duty cycle of gun PWM
-#define INIT_GUN_DUTY_CYCLE 0xD0
+#define INIT_GUN_DUTY_CYCLE_3 0xF8
+#define INIT_GUN_DUTY_CYCLE_4 0x68
 
-unsigned char GUN_DUTY_CYCLE = INIT_GUN_DUTY_CYCLE;
+unsigned char GUN_DUTY_CYCLE_3 = INIT_GUN_DUTY_CYCLE_3;
+unsigned char GUN_DUTY_CYCLE_4 = INIT_GUN_DUTY_CYCLE_4;
 
 #define PWM_FIRE 1
 
@@ -34,8 +36,6 @@ unsigned char GUN_DUTY_CYCLE = INIT_GUN_DUTY_CYCLE;
 //  param is id, reg, datal, datah
 #define CMD_GET_STATUS 0x20
 //  no param -- just return status!
-#define CMD_SET_GUN_DC 0x21
-//  data is gun duty cycle byte
 #define CMD_GET_REGS 0x23
 //  param is id, reg, count
 #define CMD_NOP 0xf0
@@ -148,12 +148,12 @@ void setup_guns(void) {
     DDRD |= (0x20 | 0x10);
     //  timer 3, for PC6, which is gun motor left
     TCCR3A = (1 << WGM30);  //  8 bit PWM mode
-    TCCR3B = (1 << WGM32) | (1 << CS32);    //  fast PWM, clock/256
+    TCCR3B = (1 << WGM32) | (1 << CS32);    //  fast PWM, clock
     TCCR3C = 0;
     TCNT3H = 0;
     TCNT3L = 0;
     OCR3AH = 0;
-    OCR3AL = GUN_DUTY_CYCLE;
+    OCR3AL = GUN_DUTY_CYCLE_3;
     //  timer 4, for PC7, which is gun motor right
     TCCR4A = (1 << PWM4A);
     TCCR4B = (1 << CS42) | (1 << CS41) | (1 << CS40);
@@ -161,7 +161,7 @@ void setup_guns(void) {
     TCCR4D = 0;
     TCCR4E = 0;
     TCNT4 = 0;
-    OCR4A = GUN_DUTY_CYCLE;
+    OCR4A = GUN_DUTY_CYCLE_4;
     DT4 = 0;
 }
 
@@ -528,13 +528,6 @@ void fire_guns(unsigned char left, unsigned char right) {
     set_status((left ? 0x20 : 0) | (right ? 0x10 : 0), 0x30);
 }
 
-void do_set_gun_dc(unsigned char dc) {
-    GUN_DUTY_CYCLE = dc;
-    OCR3AH = 0;
-    OCR3AL = GUN_DUTY_CYCLE;
-    OCR4A = GUN_DUTY_CYCLE;
-}
-
 void set_guns(void) {
     unsigned char dreg = 0;
     unsigned char creg = 0;
@@ -622,9 +615,6 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
                 break;
             case CMD_GET_STATUS:
                 do_get_status();
-                break;
-            case CMD_SET_GUN_DC:
-                do_set_gun_dc(sbuf[offset+1]);
                 break;
             case CMD_DELAY:
                 delayms(sbuf[offset+1]);

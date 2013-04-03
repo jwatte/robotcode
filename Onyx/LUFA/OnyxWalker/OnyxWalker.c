@@ -11,7 +11,7 @@
 #define GUNS_TIMER 200
 
 //  duty cycle of gun PWM
-#define INIT_GUN_DUTY_CYCLE_3 0x58
+#define INIT_GUN_DUTY_CYCLE_3 0x60
 #define INIT_GUN_DUTY_CYCLE_4 0x70
 
 unsigned char GUN_DUTY_CYCLE_3 = INIT_GUN_DUTY_CYCLE_3;

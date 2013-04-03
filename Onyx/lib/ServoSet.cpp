@@ -543,7 +543,7 @@ unsigned char ServoSet::do_status_complete(unsigned char const *pack, unsigned c
     }
     //  the last 32 bytes are always servo status
     if (pack[1] > 32) {
-        memcpy(&status_[0], &pack[pack[1]-32], 32);
+        memcpy(&status_[0], &pack[pack[1]-30], 32);
     }
     if (nincomplete > 0) {
         --nincomplete;

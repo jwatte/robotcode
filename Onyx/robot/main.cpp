@@ -31,6 +31,7 @@ static double const LOCK_ADDRESS_TIME = 5.0;
 static unsigned short port = 6969;
 static char my_name[32] = "Onyx";
 static char pilot_name[32] = "";
+unsigned short MAX_TORQUE = 500;
 
 static ITime *itime;
 static IStatus *istatus;
@@ -302,7 +303,7 @@ void usb_thread_fn() {
     for (size_t i = 0; i < sizeof(init)/sizeof(init[0]); ++i) {
         ss.add_servo(init[i].id, init[i].center);
     }
-    ss.set_torque(900); //  not quite top torque
+    ss.set_torque(MAX_TORQUE); //  not quite top torque
 
     double thetime = 0, prevtime = 0, intime = read_clock();
     float step = 0;
@@ -404,8 +405,20 @@ int main(int argc, char const *argv[]) {
         if (!strcmp(argv[i], "--fakeusb")) {
             REAL_USB = false;
         }
+        else if (!strcmp(argv[1], "--maxtorque")) {
+            if (argv[2] == nullptr) {
+                goto usage;
+            }
+            MAX_TORQUE = atoi(argv[2]);
+            if (MAX_TORQUE < 1 || MAX_TORQUE > 1023) {
+                goto usage;
+            }
+            ++argv;
+            --argc;
+        }
         else {
-            fprintf(stderr, "usage: robot [--fakeusb]\n");
+usage:
+            fprintf(stderr, "usage: robot [--fakeusb] [--maxtorque 1023]\n");
             exit(1);
         }
     }
@@ -442,7 +455,8 @@ int main(int argc, char const *argv[]) {
         thetime = read_clock();
         frames = frames + 1;
         if (thetime - intime > (REAL_USB ? 20 : 2)) {
-            fprintf(stderr, "main fps: %.1f\n", frames / (thetime - intime));
+            fprintf(stderr, "main fps: %.1f  battery: %.1f\n", frames / (thetime - intime),
+                (float)battery / 10.0);
             frames = 0;
             intime = thetime;
             if (!REAL_USB) {

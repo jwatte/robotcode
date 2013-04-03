@@ -63,15 +63,38 @@ int main(int argc, char const *argv[]) {
         ss.add_servo((*ptr).first, (*ptr).second);
     }
     int i = 0;
+    int nst = 0;
     while (true) {
         ss.step();
         usleep(50000);
         ++i;
         if (i == 10) {
-            ss.set_torque(900);
+            ss.set_torque(500);
             for (auto ptr(positions.begin()), end(positions.end()); ptr != end; ++ptr) {
                 ss.id((*ptr).first).set_goal_position((*ptr).second);
             }
+        }
+        if (!(i & 31)) {
+            fprintf(stderr, "battery: %.1f\n", ss.battery() / 10.0f);
+        }
+        if (!nst) {
+            unsigned char bb[32] = { 0 };
+            int st = ss.get_status(bb, 32);
+            unsigned char mask = 0;
+            for (int i = 0; i < st; ++i) {
+                mask |= bb[i];
+            }
+            if (mask != 0) {
+                fprintf(stderr, "status=0x%02x\n", mask);
+                for (int i = 0; i < st; ++i) {
+                    fprintf(stderr, " %02x", bb[i]);
+                }
+                fprintf(stderr, "\n");
+                nst = 10;
+            }
+        }
+        else {
+            --nst;
         }
     }
     return 0;

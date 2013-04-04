@@ -69,7 +69,7 @@ int main(int argc, char const *argv[]) {
         usleep(50000);
         ++i;
         if (i == 10) {
-            ss.set_torque(500);
+            ss.set_torque(700);
             for (auto ptr(positions.begin()), end(positions.end()); ptr != end; ++ptr) {
                 ss.id((*ptr).first).set_goal_position((*ptr).second);
             }

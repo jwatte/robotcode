@@ -148,7 +148,7 @@ void setup_guns(void) {
     DDRD |= (0x20 | 0x10);
     //  timer 3, for PC6, which is gun motor left
     TCCR3A = (1 << WGM30);  //  8 bit PWM mode
-    TCCR3B = (1 << WGM32) | (1 << CS32);    //  fast PWM, clock
+    TCCR3B = (1 << WGM32) | (1 << CS32) | (1 << CS30);    //  fast PWM, clock
     TCCR3C = 0;
     TCNT3H = 0;
     TCNT3L = 0;
@@ -156,7 +156,7 @@ void setup_guns(void) {
     OCR3AL = GUN_DUTY_CYCLE_3;
     //  timer 4, for PC7, which is gun motor right
     TCCR4A = (1 << PWM4A);
-    TCCR4B = (1 << CS42) | (1 << CS41) | (1 << CS40);
+    TCCR4B = (1 << CS43) | (1 << CS40);
     TCCR4C = 0;
     TCCR4D = 0;
     TCCR4E = 0;

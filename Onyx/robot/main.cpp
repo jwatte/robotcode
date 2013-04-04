@@ -31,7 +31,7 @@ static double const LOCK_ADDRESS_TIME = 5.0;
 static unsigned short port = 6969;
 static char my_name[32] = "Onyx";
 static char pilot_name[32] = "";
-unsigned short MAX_TORQUE = 500;
+unsigned short MAX_TORQUE = 700;
 
 static ITime *itime;
 static IStatus *istatus;
@@ -67,8 +67,9 @@ static const initinfo init[] = {
 
 static unsigned char nst = 0;
 
-#define SPEED_SLEW 1.0f
-#define HEIGHT_SLEW 100.0f
+//  slew rates are amount of change per second
+#define SPEED_SLEW 2.5f
+#define HEIGHT_SLEW 50.0f
 
 const float stride = 200;
 const float lift = 40;
@@ -174,6 +175,9 @@ static void handle_setinput(P_SetInput const &psi) {
     ctl_elevation = psi.aimElevation;
     ctl_pose = psi.pose;
     ctl_fire = psi.fire;
+    fprintf(stderr, "trot %4.2f  speed %4.2f  turn %4.2f  strafe %4.2f  head %4.2f  elev %4.2f  pose %2d  fire %0x2\r",
+        ctl_trot, ctl_speed, ctl_turn, ctl_strafe, ctl_heading, ctl_elevation, ctl_pose, ctl_fire);
+    fflush(stderr);
 }
 
 double request_video_time;
@@ -317,14 +321,14 @@ void usb_thread_fn() {
         float use_speed = ctl_speed;
         float use_turn = cap(ctl_turn + ctl_heading);
         float use_strafe = ctl_strafe;
-        #if REAL_USB
-        if (ss.torque_pending()) {
-            use_speed = 0;
-            use_trot = 0;
-            use_turn = 0;
-            use_strafe = 0;
+        if (REAL_USB) {
+            if (ss.torque_pending()) {
+                use_speed = 0;
+                use_trot = 0;
+                use_turn = 0;
+                use_strafe = 0;
+            }
         }
-        #endif
 
         thetime = read_clock();
         frames = frames + 1;

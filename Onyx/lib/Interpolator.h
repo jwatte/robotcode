@@ -53,7 +53,8 @@ public:
         value_(t),
         target_(t),
         timeNow_(now),
-        slew_((double)slewRate / (double)slewTime)
+        slew_((double)slewRate / (double)slewTime),
+        slewTime_(slewTime)
     {
     }
     void setTarget(T val) {
@@ -62,7 +63,7 @@ public:
     void setTime(double t) {
         double dt = t - timeNow_;
         timeNow_ = t;
-        if (dt < 0 || dt > 1) {
+        if (dt < 0 || dt > slewTime_) {
             value_ = target_;
         }
         else {
@@ -84,6 +85,7 @@ public:
     T target_;
     double timeNow_;
     double slew_;
+    double slewTime_;
 };
 
 #endif  //  lib_Interpolator_h

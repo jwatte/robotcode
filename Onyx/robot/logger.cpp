@@ -16,17 +16,17 @@ static time_t lastflush;
 
 static time_t lastwrite[NumLogKeys];
 
-static boost::mutex mt;
+static boost::recursive_mutex mt;
 
 static void close_logger() {
-    boost::unique_lock<boost::mutex> l(mt);
+    boost::unique_lock<boost::recursive_mutex> l(mt);
     if (f) {
         fclose(f);
     }
 }
 
 void open_logger() {
-    boost::unique_lock<boost::mutex> l(mt);
+    boost::unique_lock<boost::recursive_mutex> l(mt);
     time_t now;
     time(&now);
     struct tm t = *localtime(&now);
@@ -47,7 +47,7 @@ void open_logger() {
 }
 
 void log(LogKey key, double value) {
-    boost::unique_lock<boost::mutex> l(mt);
+    boost::unique_lock<boost::recursive_mutex> l(mt);
     if (f) {
         time_t t;
         time(&t);
@@ -71,7 +71,7 @@ void log(LogKey key, double value) {
 }
 
 void log(LogKey key, void const *data, unsigned long size) {
-    boost::unique_lock<boost::mutex> l(mt);
+    boost::unique_lock<boost::recursive_mutex> l(mt);
     if (f) {
         time_t t;
         time(&t);
@@ -95,7 +95,7 @@ void log(LogKey key, void const *data, unsigned long size) {
 }
 
 void flush_logger() {
-    boost::unique_lock<boost::mutex> l(mt);
+    boost::unique_lock<boost::recursive_mutex> l(mt);
     if (f) {
         fflush(f);
         nwr = 0;

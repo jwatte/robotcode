@@ -525,9 +525,11 @@ unsigned char ServoSet::do_status_complete(unsigned char const *pack, unsigned c
     status_.resize(32, 0);
     //  nmissed == pack[2]
     battery_ = pack[3];
+/*
     if (pack[4]) {
-        std::cerr << "lost packet from servo 0x" << std::hex << (int)pack[4] << std::dec << std::endl;
+        std::cerr << "Lost packet from servo 0x" << std::hex << pack[4] << std::endl;
     }
+ */
     if (pack[5] != dips_) {
         dips_ = pack[5];
         //  switch 4 is "turn off battery animation and turn on low torque"

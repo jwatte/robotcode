@@ -31,7 +31,7 @@ static double const LOCK_ADDRESS_TIME = 5.0;
 static unsigned short port = 6969;
 static char my_name[32] = "Onyx";
 static char pilot_name[32] = "";
-unsigned short MAX_TORQUE = 700;
+unsigned short MAX_TORQUE = 1000;
 
 static ITime *itime;
 static IStatus *istatus;
@@ -49,18 +49,18 @@ struct initinfo {
     unsigned short center;
 };
 static const initinfo init[] = {
-    { 1, 2048+512 },
-    { 2, 2048+512 },
-    { 3, 2048+512 },
-    { 4, 2048-512 },
-    { 5, 2048-512 },
-    { 6, 2048-512 },
-    { 7, 2048-512 },
-    { 8, 2048-512 },
-    { 9, 2048-512 },
-    { 10, 2048+512 },
-    { 11, 2048+512 },
-    { 12, 2048+512 },
+    { 1, 2048+768 },
+    { 2, 2048-256 },
+    { 3, 2048-256 },
+    { 4, 2048-768 },
+    { 5, 2048+256 },
+    { 6, 2048+256 },
+    { 7, 2048-768 },
+    { 8, 2048+256 },
+    { 9, 2048+256 },
+    { 10, 2048+768 },
+    { 11, 2048-256 },
+    { 12, 2048-256 },
     { 13, 2048 },
     { 14, 2048 },
 };
@@ -307,7 +307,7 @@ void usb_thread_fn() {
     for (size_t i = 0; i < sizeof(init)/sizeof(init[0]); ++i) {
         ss.add_servo(init[i].id, init[i].center);
     }
-    ss.set_torque(MAX_TORQUE); //  not quite top torque
+    ss.set_torque(MAX_TORQUE, 1); //  not quite top torque
 
     double thetime = 0, prevtime = 0, intime = read_clock();
     float step = 0;
@@ -398,8 +398,14 @@ void usb_thread_fn() {
             st = st | status[si];
         }
         if (st != nst) {
-            std::cerr << "status: " << hexnum(st) << std::endl;
+            std::cerr << "status: " << hexnum(st);
             nst = st;
+            for (unsigned char si = 0; si != bst; ++si) {
+                if (status[si]) {
+                    std::cerr << " " << (int)si << ":" << hexnum(status[si]);
+                }
+            }
+            std::cerr << std::endl;
         }
     }
 }

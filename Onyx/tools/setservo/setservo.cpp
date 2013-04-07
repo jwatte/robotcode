@@ -15,7 +15,7 @@
 
 
 void usage() {
-    fprintf(stderr, "usage: setservo [-v] id:position ...\n");
+    fprintf(stderr, "usage: setservo [-v] [-t nnn] id:position ...\n");
     fprintf(stderr, "id = 1 .. 254\n");
     fprintf(stderr, "position = 0 .. 4095\n");
     exit(1);
@@ -39,11 +39,26 @@ public:
 };
 
 int main(int argc, char const *argv[]) {
+    int torque = 700;
     boost::shared_ptr<Logger> logger;
+again:
     if (argv[1] && !strcmp(argv[1], "-v")) {
         logger.reset(new L());
         --argc;
         ++argv;
+        goto again;
+    }
+    else if (argv[1] && !strcmp(argv[1], "-t")) {
+        if (!argv[2]) {
+            usage();
+        }
+        torque = atoi(argv[2]);
+        if (torque < 1 || torque > 1023) {
+            usage();
+        }
+        argc -= 2;
+        argv += 2;
+        goto again;
     }
     if (argc < 2) {
         usage();
@@ -69,7 +84,7 @@ int main(int argc, char const *argv[]) {
         usleep(50000);
         ++i;
         if (i == 10) {
-            ss.set_torque(700);
+            ss.set_torque(torque);
             for (auto ptr(positions.begin()), end(positions.end()); ptr != end; ++ptr) {
                 ss.id((*ptr).first).set_goal_position((*ptr).second);
             }

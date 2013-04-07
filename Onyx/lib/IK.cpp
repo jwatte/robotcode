@@ -3,14 +3,14 @@
 #include <math.h>
 #include <boost/lexical_cast.hpp>
 
-#define CENTER_X 75
+#define CENTER_X 45
 #define CENTER_Y 62
-#define CENTER_Z 26
-#define FIRST_LENGTH 85
+#define CENTER_Z 80
+#define FIRST_LENGTH 60
 #define SECOND_LENGTH 73
-#define THIRD_LENGTH 170
-#define THIRD_LENGTH_A 45
-#define THIRD_LENGTH_B 164
+#define THIRD_LENGTH 151
+#define THIRD_LENGTH_A 15
+#define THIRD_LENGTH_B 150
 
 leginfo legs[] = {
     { CENTER_X, CENTER_Y, CENTER_Z,   FIRST_LENGTH, -1,  SECOND_LENGTH, 1,  THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },

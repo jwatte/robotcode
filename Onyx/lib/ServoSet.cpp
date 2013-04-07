@@ -11,6 +11,9 @@
 #define SEQ_RETRY 0.1
 #define MIN_SEND_PERIOD 0.075
 
+#define D_GAIN 4
+#define I_GAIN 8
+#define P_GAIN 24
 
 #define SET_REG1 0x13
 #define SET_REG2 0x14
@@ -24,6 +27,7 @@
 #define STATUS_COMPLETE  0x51
 
 #define DEFAULT_TORQUE_LIMIT 768    //  3/4 of max power
+#define DEFAULT_TORQUE_STEPS 1    //  3/4 of max power
 
 static const unsigned char read_regs[] = {
     REG_MODEL_NUMBER,
@@ -227,6 +231,7 @@ ServoSet::ServoSet(bool usb, boost::shared_ptr<Logger> const &l) {
     }
     pollIx_ = 0;
     torqueLimit_ = DEFAULT_TORQUE_LIMIT; //  some fraction of max power
+    torqueSteps_ = DEFAULT_TORQUE_STEPS;
     lastServoId_ = 0;
     lastSeq_ = nextSeq_ = 0;
     lastStep_ = 0;
@@ -281,9 +286,9 @@ Servo &ServoSet::add_servo(unsigned char id, unsigned short neutral) {
         ++nextSeq_;
         unsigned char set_regs_pack2[] = {
             nextSeq_,
-            SET_REG1, id, REG_D_GAIN, 2,
-            SET_REG1, id, REG_I_GAIN, 4,
-            SET_REG1, id, REG_P_GAIN, 16,
+            SET_REG1, id, REG_D_GAIN, D_GAIN,
+            SET_REG1, id, REG_I_GAIN, I_GAIN,
+            SET_REG1, id, REG_P_GAIN, P_GAIN,
             SET_REG1, id, REG_LOCK, 1,
             SET_REG1, id, REG_TORQUE_ENABLE, 1,
         };
@@ -369,7 +374,8 @@ void ServoSet::step() {
                     unsigned short torque =
                         (s.nextTorque_ * (s.torqueSteps_ - s.updateTorque_) + s.prevTorque_ * s.updateTorque_) / s.torqueSteps_;
                     s.set_reg2(REG_TORQUE_LIMIT, torque);
-                    std::cerr << "torque for servo " << (int)lastServoId_ << " is " << torque << std::endl;
+                    std::cerr << "torque for servo " << (int)lastServoId_ << " is " << torque << " "
+                        << (int)s.updateTorque_ << "/" << (int)s.torqueSteps_ << std::endl;
                 }
             }
             buf[bufptr++] = GET_REGS;
@@ -451,14 +457,18 @@ void ServoSet::step() {
     }
 }
 
-void ServoSet::set_torque(unsigned short thousandths) {
+void ServoSet::set_torque(unsigned short thousandths, unsigned char steps) {
     if (thousandths >= 1024) {
         throw std::runtime_error("Bad argument to ServoSet::set_torque().");
     }
+    if (steps < 1 || steps > 30) {
+        throw std::runtime_error("Bad step count in ServoSet::set_torque().");
+    }
     torqueLimit_ = thousandths;
+    torqueSteps_ = steps;
     for (auto ptr(servos_.begin()), end(servos_.end()); ptr != end; ++ptr) {
         if (!!*ptr) {
-            (*ptr)->set_torque(thousandths, 1);
+            (*ptr)->set_torque(thousandths, steps);
         }
     }
 }
@@ -535,7 +545,7 @@ unsigned char ServoSet::do_status_complete(unsigned char const *pack, unsigned c
         //  switch 4 is "turn off battery animation and turn on low torque"
         if (dips_ & (1 << 5)) {
             //  once torqueLimit_ has gone to 103, it won't return
-            set_torque(torqueLimit_);
+            set_torque(torqueLimit_, torqueSteps_);
         }
         else {
             set_torque(103);

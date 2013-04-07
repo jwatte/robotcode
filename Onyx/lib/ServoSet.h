@@ -128,7 +128,7 @@ public:
     Servo &id(unsigned char id);
     bool torque_pending();
     void step();
-    void set_torque(unsigned short thousandths);
+    void set_torque(unsigned short thousandths, unsigned char steps = 1);
     unsigned int queue_depth();
     //  byte 0 is the number of detected droped byte events.
     //  byte 1 .. n is status byte for servo 0 .. n-1.
@@ -153,6 +153,7 @@ private:
     USBLink *usb_;
     size_t pollIx_;
     unsigned short torqueLimit_;
+    unsigned short torqueSteps_;
     unsigned char lastServoId_;
     unsigned char lastSeq_;
     unsigned char nextSeq_;

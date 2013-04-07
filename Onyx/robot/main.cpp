@@ -31,7 +31,7 @@ static double const LOCK_ADDRESS_TIME = 5.0;
 static unsigned short port = 6969;
 static char my_name[32] = "Onyx";
 static char pilot_name[32] = "";
-unsigned short MAX_TORQUE = 1000;
+unsigned short MAX_TORQUE = 900;
 
 static ITime *itime;
 static IStatus *istatus;
@@ -73,7 +73,7 @@ static unsigned char nst = 0;
 
 const float stride = 200;
 const float lift = 40;
-const float height_above_ground = 80;
+const float height_above_ground = 75;
 
 float ctl_trot = 1.5f;
 float ctl_speed = 0;
@@ -86,23 +86,30 @@ unsigned char ctl_fire = 0;
 
 legpose last_pose[4];
 
+const float STRAFE_SIZE = 40.0f;
+const float STEP_SIZE = 60.0f;
+const float CENTER_XPOS = 120.0f;
+const float CENTER_YPOS = 115.0f;
+
 void poseleg(ServoSet &ss, int leg, float step, float speed, float strafe, float deltaPose) {
     float dx = 0, dy = 0, dz = 0;
     if (step < 50) {    //  front-to-back
-        dx = (100 - 4 * step) * strafe;
-        dy = (100 - 4 * step) * speed;
+        float dd = 1.0f - step / 25.0f;
+        dx = STRAFE_SIZE * dd * strafe;
+        dy = STEP_SIZE * dd * speed;
         dz = 0;
     }
     else {  //  lifted, back-to-front
-        dx = (step * 4 - 300) * strafe;
-        dy = (step * 4 - 300) * speed;
-        dz = sinf((step - 50) * M_PI / 50) * lift;
+        float dd = (step - 75) / 25.0f;
+        dx = STRAFE_SIZE * dd * strafe;
+        dy = STEP_SIZE * dd * speed;
+        dz = sinf(M_PI * (dd + 1) / 2) * lift;
         if (std::max(fabsf(speed), fabsf(strafe)) < 0.1) {
             dz = dz * 10 * fabsf(speed);
         }
     }
-    float xpos = lparam.center_x + lparam.first_length + lparam.second_length;
-    float ypos = lparam.center_y + lparam.first_length;
+    float xpos = CENTER_XPOS; // lparam.center_x + lparam.first_length + lparam.second_length;
+    float ypos = CENTER_YPOS; // lparam.center_y + lparam.first_length;
     float zpos = -height_above_ground - deltaPose;
     if (leg & 1) {
         xpos = -xpos;
@@ -124,6 +131,7 @@ void poseleg(ServoSet &ss, int leg, float step, float speed, float strafe, float
         istatus->error(mstr[leg].c_str());
     }
     last_pose[leg] = lp;
+    //std::cerr << "leg " << leg << " pose " << lp.a << ", " << lp.b << ", " << lp.c << std::endl;
     ss.id(leg * 3 + 1).set_goal_position(lp.a);
     ss.id(leg * 3 + 2).set_goal_position(lp.b);
     ss.id(leg * 3 + 3).set_goal_position(lp.c);

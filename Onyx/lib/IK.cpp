@@ -13,10 +13,10 @@
 #define THIRD_LENGTH_B 150
 
 leginfo legs[] = {
-    { CENTER_X, CENTER_Y, CENTER_Z,   FIRST_LENGTH, -1,  SECOND_LENGTH, 1,  THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
-    { -CENTER_X, CENTER_Y, CENTER_Z,  FIRST_LENGTH, -1, SECOND_LENGTH, 1, THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
-    { CENTER_X, -CENTER_Y, CENTER_Z,  FIRST_LENGTH, -1, SECOND_LENGTH, 1,  THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
-    { -CENTER_X, -CENTER_Y, CENTER_Z, FIRST_LENGTH, -1,  SECOND_LENGTH, 1, THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
+    { CENTER_X, CENTER_Y, CENTER_Z,   FIRST_LENGTH, -1,  SECOND_LENGTH, -1,  THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
+    { -CENTER_X, CENTER_Y, CENTER_Z,  FIRST_LENGTH, -1, SECOND_LENGTH, -1, THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
+    { CENTER_X, -CENTER_Y, CENTER_Z,  FIRST_LENGTH, -1, SECOND_LENGTH, -1,  THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
+    { -CENTER_X, -CENTER_Y, CENTER_Z, FIRST_LENGTH, -1,  SECOND_LENGTH, -1, THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1 },
 };
 
 
@@ -218,7 +218,7 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     if (flip) {
         dir = -dir;
     }
-    op.b = (unsigned short)(angle1 * 2048 / pi * dir + 2048);
+    op.b = (unsigned short)((angle1 * 2048 / pi + 512) * dir + 2048);
     if (op.b < 0) {
         op.b = 0;
         ret = false;
@@ -234,7 +234,7 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     if (flip) {
         dir = -dir;
     }
-    op.c = (unsigned short)(angle2 * 2048 / pi * dir + 2048);
+    op.c = (unsigned short)((angle2 * 2048 / pi + 512) * dir + 2048);
     if (op.c < 0) {
         op.c = 0;
         ret = false;

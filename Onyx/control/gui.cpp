@@ -8,6 +8,10 @@
 #include <string.h>
 #include <stdio.h>
 
+/* If the error noise actually flickers at frame rate, the image looks 
+   alive even when it isn't! */
+#define STATIC_ERROR_NOISE 1
+
 static ITime *itime;
 static GuiState g_state;
 static int g_win = -1;
@@ -154,8 +158,14 @@ static void do_display() {
             glBindTexture(GL_TEXTURE_2D, g_noise);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             glEnable(GL_BLEND);
-            int left = 1;   //  don't rand -- a static image is more clear about the problem
+#if STATIC_ERROR_NOISE
+   //  don't rand -- a static image is more clear about the problem
+            int left = 1;
             int top = 1;
+#else
+            int left = 1 + (rand() & 0x3ff);
+            int top = 1 + (rand() & 0x3ff);
+#endif
             glBegin(GL_TRIANGLE_STRIP);
                 glTexCoord2f(left / 1024.0f, top / 1024.0f);
                 glVertex2f(0, 720);

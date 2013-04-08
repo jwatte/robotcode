@@ -649,6 +649,23 @@ unsigned char epirwa;
 
 unsigned short clear_received;
 
+typedef struct battery_voltage_map {
+    unsigned char bits;
+    unsigned char voltage;
+} battery_voltage_map;;
+static battery_voltage_map voltages_4S[] = {  //  853 is 16.8 volts; these numbers assume some load
+    { 0xff, 160 },
+    { 0xfe, 155 },
+    { 0xfc, 151 },
+    { 0xf8, 148 },
+    { 0xf0, 145 },
+    { 0xe0, 142 },
+    { 0xc0, 138 },
+    { 0x80, 128 },
+    { 0, 0u },       //  terminator
+};
+
+
 void OnyxWalker_Task(void) {
 
     if (USB_DeviceState != DEVICE_STATE_Configured) {
@@ -739,24 +756,15 @@ void OnyxWalker_Task(void) {
             ADCSRA |= 1 << ADIF;
             unsigned short aval = (unsigned short)ADCL | ((unsigned short)ADCH << 8u);
             //  102 is adjusted for high AREF (measured 5.1V)
-            battery_voltage = (unsigned char)((long)aval * 102 / 508);
+            unsigned short S = 4;   //  meaning there's a 3S battery
+            if (PINF & (1 << PF0)) {
+                S = 3;  //  meaning there's a 4S battery
+            }
+            battery_voltage = (unsigned char)((long)aval * 102 * S / (508 * 3));
             //  LiPo batteries are very nonlinear in voltage -- there is a large 
             //  capacity range where they hover around the 14.5-15.0 volt range.
-            static struct {
-                unsigned char bits;
-                unsigned char voltage;
-            } voltages[] = {  //  853 is 16.8 volts; these numbers assume some load
-                { 0xff, 160 },
-                { 0xfe, 155 },
-                { 0xfc, 151 },
-                { 0xf8, 148 },
-                { 0xf0, 145 },
-                { 0xe0, 142 },
-                { 0xc0, 138 },
-                { 0x80, 128 },
-                { 0, 0u },       //  terminator
-            };
             int i = 0;
+            struct battery_voltage_map const *voltages = voltages_4S;
             do {
                 battery_level = voltages[i].bits;
             } while (voltages[i++].voltage > battery_voltage);

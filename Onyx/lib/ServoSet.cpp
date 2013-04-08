@@ -3,6 +3,7 @@
 #include "ServoSet.h"
 #include "USBLink.h"
 #include "util.h"
+#include "istatus.h"
 #include <stdexcept>
 #include <boost/lexical_cast.hpp>
 
@@ -221,9 +222,30 @@ unsigned int Servo::queue_depth() const {
 }
 
 
+namespace {
+class DummyStatus : public IStatus {
+    void message(std::string const &msg) {
+        std::cerr << msg << std::endl;
+    }
+    void error(std::string const &msg) {
+        std::cerr << msg << std::endl;
+    }
+    size_t n_messages() {
+        return 0;
+    }
+    bool get_message(Message &o_message) {
+        return false;
+    }
+};
+DummyStatus dummy_status;
+}
 
 
-ServoSet::ServoSet(bool usb, boost::shared_ptr<Logger> const &l) {
+ServoSet::ServoSet(bool usb, boost::shared_ptr<Logger> const &l, IStatus *status) {
+    if (!status) {
+        status = &dummy_status;
+    }
+    istatus_ = status;
     boost::shared_ptr<Settings> st(Settings::load("settings.ini"));
     if (usb) {
         usbModule_ = USBLink::open(st, l);
@@ -242,7 +264,7 @@ ServoSet::ServoSet(bool usb, boost::shared_ptr<Logger> const &l) {
     battery_ = 0;
     if (usb) {
         //  Compensate for a bug: first packet doesn't register unless 
-        //  the receiver board is freshly reset.
+        //  the receiver board is freshly reset (?!)
         unsigned char nop[] = { 0, NOP };
         usb_->raw_send(&nop, 2);
         //  broadcast turn off torque
@@ -331,8 +353,10 @@ void ServoSet::step() {
         if (nextSeq_ - lastSeq_ >= 3) {
             //  force out at least one packet per 100 ms
             if (now - lastSend_ > SEQ_TIMEOUT) {
-                std::cerr << "forcing a seq update from " << (int)lastSeq_ << " to "
-                    << (lastSeq_+1) << " with nextSeq_ " << (int)nextSeq_ << std::endl;
+                std::stringstream strstr;
+                strstr << "forcing a seq update from " << (int)lastSeq_ << " to "
+                    << (lastSeq_+1) << " with nextSeq_ " << (int)nextSeq_;
+                istatus_->error(strstr.str());
                 lastSend_ = now - SEQ_TIMEOUT + SEQ_RETRY;
                 lastSeq_++;
             }
@@ -377,8 +401,10 @@ void ServoSet::step() {
                     unsigned short torque =
                         (s.nextTorque_ * (s.torqueSteps_ - s.updateTorque_) + s.prevTorque_ * s.updateTorque_) / s.torqueSteps_;
                     s.set_reg2(REG_TORQUE_LIMIT, torque);
-                    std::cerr << "torque for servo " << (int)lastServoId_ << " is " << torque << " "
-                        << (int)s.updateTorque_ << "/" << (int)s.torqueSteps_ << std::endl;
+                    std::stringstream strstr;
+                    strstr << "torque for servo " << (int)lastServoId_ << " is " << torque << " "
+                        << (int)s.updateTorque_ << "/" << (int)s.torqueSteps_;
+                    istatus_->message(strstr.str());
                 }
             }
             buf[bufptr++] = GET_REGS;
@@ -450,7 +476,7 @@ void ServoSet::step() {
                 cnt = do_status_complete(d, sz);
                 break;
             default:
-                std::cerr << hexnum(*d) << " ";
+                istatus_->error("Unknoen USB message " + hexnum(*d));
                 break;
             }
             d += cnt;
@@ -503,18 +529,24 @@ unsigned char ServoSet::do_read_complete(unsigned char const *pack, unsigned cha
     
     if (sz < 5 || sz < pack[3] + 4) {
         if (nincomplete < 10) {
-            std::cerr << "short read complete packet; got " << (int)sz << " wanted " << 
-                ((sz < 5) ? "min 5" : boost::lexical_cast<std::string>(pack[3] + 4)) << " bytes." << std::endl;
+            std::stringstream strstr;
+            strstr << "short read complete packet; got " << (int)sz << " wanted " << 
+                ((sz < 5) ? "min 5" : boost::lexical_cast<std::string>(pack[3] + 4)) << " bytes.";
+            istatus_->error(strstr.str());
             nincomplete++;
         }
         return sz;
     }
     if (pack[1] >= servos_.size() || !servos_[pack[1]]) {
-        std::cerr << "read complete for non-existent servo " << (int)pack[1] << std::endl;
+        std::stringstream strstr;
+        strstr << "read complete for non-existent servo " << (int)pack[1];
+        istatus_->error(strstr.str());
         return 4 + pack[3];
     }
     if (pack[2] >= NUM_SERVO_REGS || pack[3] > NUM_SERVO_REGS - pack[2]) {
-        std::cerr << "read complete with bad offset " << (int)pack[2] << " size " << (int)pack[3] << std::endl;
+        std::stringstream strstr;
+        strstr << "read complete with bad offset " << (int)pack[2] << " size " << (int)pack[3];
+        istatus_->error(strstr.str());
         return 4 + pack[3];
     }
     Servo &s = id(pack[1]);
@@ -529,8 +561,10 @@ unsigned char ServoSet::do_read_complete(unsigned char const *pack, unsigned cha
 unsigned char ServoSet::do_status_complete(unsigned char const *pack, unsigned char sz) {
     if (sz < 2 || sz < 2 + pack[1]) {
         if (nincomplete < 10) {
-            std::cerr << "short read status packet; got " << (int)sz << "wanted " <<
-                ((sz < 2) ? "min 2" : boost::lexical_cast<std::string>(pack[1] + 2)) << " bytes." << std::endl;
+            std::stringstream strstr;
+            strstr << "short read status packet; got " << (int)sz << "wanted " <<
+                ((sz < 2) ? "min 2" : boost::lexical_cast<std::string>(pack[1] + 2)) << " bytes.";
+            istatus_->error(strstr.str());
             nincomplete++;
         }
         return sz;
@@ -538,11 +572,6 @@ unsigned char ServoSet::do_status_complete(unsigned char const *pack, unsigned c
     status_.resize(32, 0);
     //  nmissed == pack[2]
     battery_ = pack[3];
-/*
-    if (pack[4]) {
-        std::cerr << "Lost packet from servo 0x" << std::hex << pack[4] << std::endl;
-    }
- */
     if (pack[5] != dips_) {
         dips_ = pack[5];
         //  switch 4 is "turn off battery animation and turn on low torque"
@@ -553,8 +582,10 @@ unsigned char ServoSet::do_status_complete(unsigned char const *pack, unsigned c
         else {
             set_torque(103);
         }
-        std::cerr << "dip change: dips 0x" << std::hex << (int)dips_
-            << std::dec << "; torque limit " << torqueLimit_ << std::endl;
+        std::stringstream strstr;
+        strstr << "dip change: dips 0x" << std::hex << (int)dips_
+            << std::dec << "; torque limit " << torqueLimit_;
+        istatus_->message(strstr.str());
     }
     //  the last 32 bytes are always servo status
     if (pack[1] > 32) {

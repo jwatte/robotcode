@@ -6,6 +6,7 @@
 #include "util.h"
 #include "Interpolator.h"
 #include "logger.h"
+#include "logstatus.h"
 
 #include <assert.h>
 
@@ -27,7 +28,7 @@
 bool REAL_USB = true;
 
 static double const LOCK_ADDRESS_TIME = 5.0;
-static double const STEP_DURATION = 0.016;
+static double const STEP_DURATION = 0.008;
 
 static unsigned short port = 6969;
 static char my_name[32] = "Onyx";
@@ -132,7 +133,6 @@ void poseleg(ServoSet &ss, int leg, float step, float speed, float strafe, float
         istatus->error(mstr[leg].c_str());
     }
     last_pose[leg] = lp;
-    //std::cerr << "leg " << leg << " pose " << lp.a << ", " << lp.b << ", " << lp.c << std::endl;
     ss.id(leg * 3 + 1).set_goal_position(lp.a);
     ss.id(leg * 3 + 2).set_goal_position(lp.b);
     ss.id(leg * 3 + 3).set_goal_position(lp.c);
@@ -381,7 +381,6 @@ void usb_thread_fn() {
             }
             poselegs(ss, step, i_speed.get(), -i_turn.get(), i_strafe.get(), i_height.get());
             if (ctl_fire || (firing_value != ctl_fire)) {
-                std::cerr << "firing_value: " << (int)ctl_fire << std::endl;
                 firing_value = ctl_fire;
                 do_fire(ss);
             }
@@ -407,36 +406,37 @@ void usb_thread_fn() {
             st = st | status[si];
         }
         if (st != nst) {
-            std::cerr << "status: " << hexnum(st);
+            std::stringstream strstr;
+            strstr << "status: " << hexnum(st);
             nst = st;
             for (unsigned char si = 0; si != bst; ++si) {
                 if (status[si]) {
-                    std::cerr << " " << (int)si << ":" << hexnum(status[si]);
+                    strstr << " " << (int)si << ":" << hexnum(status[si]);
                 }
             }
-            std::cerr << std::endl;
+            istatus->error(strstr.str());
         }
+
         ss.slice_reg1(REG_PRESENT_TEMPERATURE, status, 32);
         log(LogKeyTemperature, status, 32);
         for (size_t i = 0; i != 32; ++i) {
             if (status[i] > 75) {
-                std::cerr << "Temp for servo " << (int)i << " is " << (int)status[i] << std::endl;
+                std::stringstream strstr;
+                strstr << "Temp for servo " << (int)i << " is " << (int)status[i];
+                istatus->error(strstr.str());
                 system("bld/obj/off");
                 flush_logger();
                 exit(1);
             }
         }
-        static int piter = 0;
-        if ((piter & 63) == 63) {
-            std::cerr << "Temp";
-            for (size_t i = 0; i != 32; ++i) {
-                if (status[i] != 0) {
-                    std::cerr << " " << (int)i << ":" << (int)status[i];
-                }
+        static int preg = 0;
+        ++preg;
+        if (!(preg & 63)) {
+            std::cerr << "\rTemp:";
+            for (size_t i = 1; i != 14; ++i) {
+                std::cerr << " " << (int)status[i];
             }
-            std::cerr << "\r";
         }
-        ++piter;
     }
 }
 
@@ -463,12 +463,14 @@ usage:
         }
     }
     itime = newclock();
-    istatus = mkstatus(itime, true);
+    IStatus *chain = mkstatus(itime, true);
+    istatus = mk_logstatus(chain);
     isocks = mksocks(port, istatus);
     inet = listen(isocks, itime, istatus);
     ipackets = packetize(inet, istatus);
 
     open_logger();
+    log_ratelimit(LogKeyError, false);
 
     set_leg_configuration(lc_long);
 

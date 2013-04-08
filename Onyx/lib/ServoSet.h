@@ -6,6 +6,7 @@
 class USBLink;
 class Module;
 class Logger;
+class IStatus;
 
 struct servo_cmd {
     unsigned char id;
@@ -121,7 +122,7 @@ private:
 
 class ServoSet {
 public:
-    ServoSet(bool usb, boost::shared_ptr<Logger> const &l);
+    ServoSet(bool usb, boost::shared_ptr<Logger> const &l, IStatus *status = 0);
     ~ServoSet();
 
     Servo &add_servo(unsigned char id, unsigned short neutral = 2048);
@@ -154,6 +155,7 @@ private:
     double lastStep_;
     double lastSend_;
     USBLink *usb_;
+    IStatus *istatus_;
     size_t pollIx_;
     unsigned short torqueLimit_;
     unsigned short torqueSteps_;

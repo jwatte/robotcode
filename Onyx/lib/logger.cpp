@@ -15,6 +15,8 @@ static loghdr hdr;
 static time_t lastflush;
 
 static time_t lastwrite[NumLogKeys];
+static bool ratelimit[NumLogKeys];
+static bool installed = false;
 
 static boost::recursive_mutex mt;
 
@@ -43,20 +45,32 @@ void open_logger() {
         for (size_t i = 0; i != NumLogKeys; ++i) {
             lastwrite[i] = hdr.time - 1;
         }
-        atexit(&close_logger);
+        if (!installed) {
+            atexit(&close_logger);
+            installed = true;
+        }
+        memset(ratelimit, 1, sizeof(ratelimit));
     }
 }
 
+void log_ratelimit(LogKey key, bool limit) {
+    if (key >= NumLogKeys) {
+        throw std::runtime_error("key must be defined in log_ratelimit()");
+    }
+    ratelimit[key] = limit;
+}
+
 void log(LogKey key, double value) {
+    if (key >= NumLogKeys) {
+        throw std::runtime_error("key must be defined in log(value)");
+    }
     boost::unique_lock<boost::recursive_mutex> l(mt);
     if (f) {
         time_t t;
         time(&t);
         //  log at most one value per second
-        if (key >= NumLogKeys || lastwrite[key] != t) {
-            if (key < NumLogKeys) {
-                lastwrite[key] = t;
-            }
+        if (lastwrite[key] != t || !ratelimit[key]) {
+            lastwrite[key] = t;
             logrec lr;
             lr.size = sizeof(double);
             lr.time = t;
@@ -72,15 +86,16 @@ void log(LogKey key, double value) {
 }
 
 void log(LogKey key, void const *data, unsigned long size) {
+    if (key >= NumLogKeys) {
+        throw std::runtime_error("key must be defined in log(data)");
+    }
     boost::unique_lock<boost::recursive_mutex> l(mt);
     if (f) {
         time_t t;
         time(&t);
         //  log at most one value per second
-        if (key >= NumLogKeys || lastwrite[key] != t) {
-            if (key < NumLogKeys) {
-                lastwrite[key] = t;
-            }
+        if (lastwrite[key] != t || !ratelimit[key]) {
+            lastwrite[key] = t;
             logrec lr;
             lr.size = (int)size;
             lr.time = t;
@@ -113,11 +128,13 @@ bool logger_open_read(char const *file) {
     logger_close_read();
     FILE *fr = fopen(file, "rb");
     if (!fr) {
+        fprintf(stderr, "%s: not found\n", file);
         return false;
     }
     fseek(fr, 0, 2);
     unsigned long l = ftell(fr);
     if (l < sizeof(loghdr)) {
+        fprintf(stderr, "%s: short file\n", file);
         fclose(fr);
         return false;
     }
@@ -126,8 +143,9 @@ bool logger_open_read(char const *file) {
     fread(&f_read[0], 1, l, fr);
     fclose(fr);
     ptr = &f_read[0];
-    if (strcmp(ptr, "logfile\n") || 
+    if (strncmp(ptr, "logfile\n", 8) || 
         ((loghdr *)ptr)->recsize != sizeof(logrec)) {
+        fprintf(stderr, "%s: unknown file format\n", file);
         logger_close_read();
         return false;
     }

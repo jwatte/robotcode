@@ -136,10 +136,10 @@ int main(int argc, char const *argv[]) {
             if (lr.key == LogKeyUSBOut && (all || usbout)) {
                 ffunc = &format_usbout;
             }
-            if (lr.key == LogKeyUSBIn && (all || usbout)) {
+            if (lr.key == LogKeyUSBIn && (all || usbin)) {
                 ffunc = &format_usbin;
             }
-            if (lr.key == LogKeyTemperature && (all || usbout)) {
+            if (lr.key == LogKeyTemperature && (all || temperature)) {
                 ffunc = &format_temperature;
             }
             if (header && ffunc != 0) {
@@ -154,6 +154,8 @@ int main(int argc, char const *argv[]) {
         }
         logger_close_read();
         ++nfiles;
+        ++argv;
+        --argc;
     }
     return 0;
 }

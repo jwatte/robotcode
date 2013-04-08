@@ -31,6 +31,7 @@ void open_logger();
 void log(LogKey key, double value);
 void log(LogKey key, void const *data, unsigned long size);
 void flush_logger();
+void log_ratelimit(LogKey key, bool limit);
 
 bool logger_open_read(char const *file);
 bool logger_read_next(logrec *header, void const **data, size_t *size);

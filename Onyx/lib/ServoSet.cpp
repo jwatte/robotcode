@@ -124,7 +124,10 @@ void Servo::set_goal_position(unsigned short gp) {
     if (gp > 4095) {
         gp = 4095;
     }
-    set_reg2(REG_GOAL_POSITION, gp);
+    //  don't update the position if it's already updated
+    if (get_reg2(REG_GOAL_POSITION) != gp) {
+        set_reg2(REG_GOAL_POSITION, gp);
+    }
 }
 
 unsigned short Servo::get_goal_position() const {
@@ -275,7 +278,7 @@ Servo &ServoSet::add_servo(unsigned char id, unsigned short neutral) {
             SET_REG1, id, REG_RETURN_DELAY_TIME, 2,
             SET_REG1, id, REG_ALARM_LED, 0x7C,       //  everything except voltage and angle limit
             SET_REG1, id, REG_ALARM_SHUTDOWN, 0x24,  //  temperature, overload
-            SET_REG1, id, REG_HIGHEST_LIMIT_TEMPERATURE, 75,
+            //SET_REG1, id, REG_HIGHEST_LIMIT_TEMPERATURE, 75,
             SET_REG1, id, REG_HIGHEST_LIMIT_VOLTAGE, 170,
             SET_REG1, id, REG_LOWEST_LIMIT_VOLTAGE, 110,
             SET_REG2, id, REG_TORQUE_LIMIT, (unsigned char)(torque & 0xff), (unsigned char)((torque >> 8) & 0xff),     //  10% of full torque to start out
@@ -573,6 +576,24 @@ unsigned char ServoSet::get_status(unsigned char *buf, unsigned char n) {
         return status_.size();
     }
     return 0;
+}
+
+void ServoSet::slice_reg1(unsigned char reg, unsigned char *buf, unsigned char n) {
+    memset(buf, 0, n);
+    for (size_t i = 0, l = std::min(servos_.size(), (size_t)n); i != l; ++i) {
+        if (!!servos_[i]) {
+            buf[i] = servos_[i]->get_reg1(reg);
+        }
+    }
+}
+
+void ServoSet::slice_reg2(unsigned char reg, unsigned short *buf, unsigned char n) {
+    memset(buf, 0, n * 2);
+    for (size_t i = 0, l = std::min(servos_.size(), (size_t)n); i != l; ++i) {
+        if (!!servos_[i]) {
+            buf[i] = servos_[i]->get_reg2(reg);
+        }
+    }
 }
 
 unsigned char ServoSet::battery() {

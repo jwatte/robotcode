@@ -27,6 +27,7 @@
 bool REAL_USB = true;
 
 static double const LOCK_ADDRESS_TIME = 5.0;
+static double const STEP_DURATION = 0.016;
 
 static unsigned short port = 6969;
 static char my_name[32] = "Onyx";
@@ -352,7 +353,7 @@ void usb_thread_fn() {
         i_turn.setTarget(use_turn);
         i_height.setTarget(ctl_pose * 25.0 - 50.0);
 
-        if (dt >= 0.008) {
+        if (dt >= STEP_DURATION) {
             i_speed.setTime(thetime);
             i_strafe.setTime(thetime);
             i_turn.setTime(thetime);
@@ -361,7 +362,7 @@ void usb_thread_fn() {
             //  don't fall more than 0.1 seconds behind, else catch up in one swell foop
             if (dt < 0.1f) {
                 step += dt * 100 * use_trot;
-                prevtime += 0.01;
+                prevtime += dt;
             }
             else {
                 //  and don't update step!
@@ -415,6 +416,27 @@ void usb_thread_fn() {
             }
             std::cerr << std::endl;
         }
+        ss.slice_reg1(REG_PRESENT_TEMPERATURE, status, 32);
+        log(LogKeyTemperature, status, 32);
+        for (size_t i = 0; i != 32; ++i) {
+            if (status[i] > 75) {
+                std::cerr << "Temp for servo " << (int)i << " is " << (int)status[i] << std::endl;
+                system("bld/obj/off");
+                flush_logger();
+                exit(1);
+            }
+        }
+        static int piter = 0;
+        if ((piter & 63) == 63) {
+            std::cerr << "Temp";
+            for (size_t i = 0; i != 32; ++i) {
+                if (status[i] != 0) {
+                    std::cerr << " " << (int)i << ":" << (int)status[i];
+                }
+            }
+            std::cerr << "\r";
+        }
+        ++piter;
     }
 }
 

@@ -134,6 +134,9 @@ public:
     //  byte 1 .. n is status byte for servo 0 .. n-1.
     //  return value is OR of servo status bytes.
     unsigned char get_status(unsigned char *bytes, unsigned char cnt);
+    //  get a particular register across all servos
+    void slice_reg1(unsigned char reg, unsigned char *bytes, unsigned char cnt);
+    void slice_reg2(unsigned char reg, unsigned short *bytes, unsigned char cnt);
     //  set many poses over some future amount of time
     void lerp_pose(unsigned short ms, cmd_pose const *pose, unsigned char npose);
     unsigned char battery();

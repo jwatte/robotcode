@@ -25,6 +25,8 @@
 #define CMD_FIRE 0x12
 
 
+#define MAX_SERVO_COUNT 16
+
 bool REAL_USB = true;
 
 static double const LOCK_ADDRESS_TIME = 5.0;
@@ -75,7 +77,7 @@ static unsigned char nst = 0;
 
 const float stride = 200;
 const float lift = 40;
-const float height_above_ground = 75;
+const float height_above_ground = 55;
 
 float ctl_trot = 1.5f;
 float ctl_speed = 0;
@@ -399,8 +401,8 @@ void usb_thread_fn() {
                 ss.step();
             }
         }
-        unsigned char status[32];
-        unsigned char bst = ss.get_status(status, 32);
+        unsigned char status[MAX_SERVO_COUNT];
+        unsigned char bst = ss.get_status(status, MAX_SERVO_COUNT);
         unsigned char st = 0;
         for (unsigned char si = 0; si != bst; ++si) {
             st = st | status[si];
@@ -417,9 +419,9 @@ void usb_thread_fn() {
             istatus->error(strstr.str());
         }
 
-        ss.slice_reg1(REG_PRESENT_TEMPERATURE, status, 32);
-        log(LogKeyTemperature, status, 32);
-        for (size_t i = 0; i != 32; ++i) {
+        ss.slice_reg1(REG_PRESENT_TEMPERATURE, status, MAX_SERVO_COUNT);
+        log(LogKeyTemperature, status, MAX_SERVO_COUNT);
+        for (size_t i = 0; i != MAX_SERVO_COUNT; ++i) {
             if (status[i] > 75) {
                 std::stringstream strstr;
                 strstr << "Temp for servo " << (int)i << " is " << (int)status[i];
@@ -429,6 +431,7 @@ void usb_thread_fn() {
                 exit(1);
             }
         }
+
         static int preg = 0;
         ++preg;
         if (!(preg & 63)) {
@@ -437,6 +440,10 @@ void usb_thread_fn() {
                 std::cerr << " " << (int)status[i];
             }
         }
+
+        unsigned short status2[MAX_SERVO_COUNT] = { 0 };
+        ss.slice_reg2(REG_CURRENT, status2, MAX_SERVO_COUNT);
+        log(LogKeyCurrent, status2, MAX_SERVO_COUNT * sizeof(unsigned short));
     }
 }
 
@@ -471,8 +478,6 @@ usage:
 
     open_logger();
     log_ratelimit(LogKeyError, false);
-
-    set_leg_configuration(lc_long);
 
     boost::shared_ptr<boost::thread> usb_thread(new boost::thread(boost::bind(usb_thread_fn)));
 

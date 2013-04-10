@@ -249,8 +249,6 @@ usage:
     itime = newclock();
     istatus = mkstatus(itime, true);
 
-    set_leg_configuration(lc_long);
-
     boost::shared_ptr<boost::thread> usb_thread(new boost::thread(boost::bind(usb_thread_fn)));
 
     boost::shared_ptr<Settings> settings(Settings::load("onyx.json"));

@@ -117,7 +117,8 @@ int main(int argc, char const *argv[]) {
     }
 
     while (argv[1]) {
-        if (!logger_open_read(argv[1])) {
+        loghdr lh;
+        if (!logger_open_read(argv[1], &lh)) {
             fprintf(stderr, "logger: could not open: %s\n", argv[1]);
             exit(1);
         }
@@ -146,7 +147,7 @@ int main(int argc, char const *argv[]) {
                 fprintf(stdout, "%ld, %ld, %ld, ", nfiles, nitems, fileitem);
             }
             if (ffunc != 0) {
-                fprintf(stdout, "%lld, ", lr.time);
+                fprintf(stdout, "%lld, ", lr.time - lh.time);
                 (*ffunc)(&lr, data, size);
             }
             ++nitems;

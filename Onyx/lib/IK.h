@@ -16,18 +16,25 @@ struct legparams {
     float third_length_z;
 };
 
+enum legori {
+    legori_forward, legori_45_out, legori_90_out, legori_90_up, legori_90_down
+};
+
 struct leginfo {
-    float cx;          //  center x in body space
-    float cy;          //  center y in body space
-    float cz;          //  center z in body space
-    float x0;          //  what x extent at center for 1st joint
-    float direction0;  //  positive (counterclockwise) or negative
-    float x1;          //  x extent at center for 2nd joint
-    float direction1;  //  positive (counterclockwise) or negative
-    float x2;          //  x extent at center for 3rd joint
-    float z2;          //  z extent at center for 3rd joint
-    float l2;          //  length of x2/z2
-    float direction2;  //  positive (counterclockwise) or negative
+    float cx;           //  center x in body space
+    float cy;           //  center y in body space
+    float cz;           //  center z in body space
+    float x0;           //  what x extent at center for 1st joint
+    float direction0;   //  positive (counterclockwise, inward) or negative
+    float x1;           //  x extent at center for 2nd joint
+    float direction1;   //  positive (counterclockwise, up) or negative
+    float x2;           //  x extent at center for 3rd joint
+    float z2;           //  z extent at center for 3rd joint
+    float l2;           //  length of x2/z2
+    float direction2;   //  positive (counterclockwise, up/out) or negative
+    legori servo0;      //  orientation of "center" of first servo
+    legori servo1;      //  orientation of "center" of second servo
+    legori servo2;      //  orientation of "center" of third servo
 };
 
 struct legpose {
@@ -36,17 +43,10 @@ struct legpose {
     unsigned short c;
 };
 
-enum LegConfiguration {
-    lc_wide = 0,    //  servos point outwards (default)
-    lc_long = 1,    //  servos point front/back
-    lc_x = 2        //  servos point in an X
-};
-
 
 extern leginfo legs[];
 extern std::string solve_error;
 
-extern void set_leg_configuration(LegConfiguration lc);
 extern bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op);
 extern void get_leg_params(legparams &op);
 

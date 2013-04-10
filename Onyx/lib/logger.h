@@ -11,6 +11,7 @@ enum LogKey {
     LogKeyUSBOut = 3,
     LogKeyUSBIn = 4,
     LogKeyTemperature = 5,
+    LogKeyCurrent = 6,
     NumLogKeys
 };
 
@@ -33,7 +34,7 @@ void log(LogKey key, void const *data, unsigned long size);
 void flush_logger();
 void log_ratelimit(LogKey key, bool limit);
 
-bool logger_open_read(char const *file);
+bool logger_open_read(char const *file, loghdr *fh);
 bool logger_read_next(logrec *header, void const **data, size_t *size);
 bool logger_close_read();
 

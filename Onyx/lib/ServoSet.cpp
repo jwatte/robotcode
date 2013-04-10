@@ -12,9 +12,9 @@
 #define SEQ_RETRY 0.1
 #define MIN_SEND_PERIOD 0.075
 
-#define D_GAIN 4
-#define I_GAIN 8
-#define P_GAIN 24
+#define D_GAIN 0
+#define I_GAIN 0
+#define P_GAIN 36
 
 #define SET_REG1 0x13
 #define SET_REG2 0x14

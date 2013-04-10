@@ -124,7 +124,8 @@ static std::vector<char> f_read;
 static char const *ptr;
 static char const *end;
 
-bool logger_open_read(char const *file) {
+bool logger_open_read(char const *file, loghdr *lh) {
+    memset(lh, 0, sizeof(*lh));
     logger_close_read();
     FILE *fr = fopen(file, "rb");
     if (!fr) {
@@ -143,6 +144,7 @@ bool logger_open_read(char const *file) {
     fread(&f_read[0], 1, l, fr);
     fclose(fr);
     ptr = &f_read[0];
+    memcpy(lh, ptr, sizeof(*lh));
     if (strncmp(ptr, "logfile\n", 8) || 
         ((loghdr *)ptr)->recsize != sizeof(logrec)) {
         fprintf(stderr, "%s: unknown file format\n", file);

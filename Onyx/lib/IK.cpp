@@ -53,6 +53,7 @@ std::string solve_error;
 //  If there is no acceptable solution, false is returned, 
 //  and some pose approximating the general direction intended 
 //  is returned as the "solution."
+//  Coordinates are in absolute body-relative coordinates.
 //  X -> right
 //  Y -> forward
 //  Z -> up
@@ -95,17 +96,17 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     if (fabsf(dx) < 1e-3 && fabsf(dy) < 1e-3) {
         dx = 1e-3;
     }
-    fprintf(stderr, "dx %.1f dy %.1f dz %.1f\n", dx, dy, dz);
+    fprintf(stderr, "  dx %.1f dy %.1f dz %.1f\n", dx, dy, dz);
     //  orient the thigh in the direction of the target point
     float xylen = sqrtf(dx*dx + dy*dy);
     float xynorm = 1.0f / xylen;
     float ang0 = atan2f(dy, dx);
-    fprintf(stderr, "ang0 %.1f xynorm %.1f\n", ang0, xynorm);
+    fprintf(stderr, "  ang0 %.2f xynorm %.1f\n", ang0, xynorm);
     //  Calculate distance from the oriented point.
     //  The fixed-length thigh bone points in the direction of the desired point
     float hdx = dx - dx * xynorm * leg.x0;
     float hdy = dy - dy * xynorm * leg.x0;
-    fprintf(stderr, "hdx %.1f hdy %.1f\n", hdx, hdy);
+    fprintf(stderr, "  hdx %.1f hdy %.1f\n", hdx, hdy);
     float maxreach = leg.x1 + leg.l2;
     float minreach = fabsf(leg.x1 - leg.l2);
     float distance = sqrtf(hdx*hdx + hdy*hdy + dz*dz);
@@ -134,7 +135,7 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
         distance = sqrtf(hdx*hdx + hdy*hdy + dz*dz);
     }
     assert(distance >= minreach && distance <= maxreach);
-    fprintf(stderr, "distance %.1f\n", distance);
+    fprintf(stderr, "  distance %.1f\n", distance);
 
     //  Now I have a triangle, from knee joint, to ankle joint, to foot contact point.
     //  I know the length of each of the sides; now I want to know the coordinates of 
@@ -149,6 +150,7 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     assert(cosC <= 1.0f);
     float angC = acosf(cosC);
     //  Now, I actually know the right triangle from point of contact, to below knee, to knee
+    fprintf(stderr, "  cosA %.2f ang2 %.1f cosC %.1f angC %.2f\n", cosA, ang2, cosC, angC);
     float xydist = sqrtf(hdx*hdx + hdy+hdy);
     float Bprime = atan2f(xydist, -dz);
     float ang1 = angC - Bprime;
@@ -157,11 +159,14 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
         ang1 += (angC - M_PI) * 2;
         assert(ang1 <= hpi);
     }
+    fprintf(stderr, "  xydist %.1f Bprime %.2f ang1 %.2f\n", xydist, Bprime, ang1);
 
     //  Now, orient the output solution based on the orientation of the servos
     op.a = 2048 + ang0 * 2048 / M_PI;  //  assume ori right/outwards
     op.b = 2048 + ang1 * 2048 / M_PI;  //  assume ori right/outwards
     op.c = 2048 + ang2 * 2048 / M_PI;  //  assume ori down/outwards
+
+    fprintf(stderr, "  pre oris: %d,%d,%d\n", op.a, op.b, op.c);
 
     switch (leg.servo0) {
     case legori_forward:
@@ -214,6 +219,8 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
         throw std::runtime_error("Resulting pose out of range for servo A.");
     }
 
+    fprintf(stderr, "  pre negates: %d,%d,%d\n", op.a, op.b, op.c);
+
     if ((leg.direction0 < 0) != flip) {
         op.a = 4096 - op.a;
     }
@@ -223,6 +230,8 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     if ((leg.direction2 < 0) != flip) {
         op.c = 4096 - op.c;
     }
+
+    fprintf(stderr, "  return: %d,%d,%d\n", op.a, op.b, op.c);
 
     return ret;
 }

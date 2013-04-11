@@ -73,11 +73,9 @@ static unsigned char nst = 0;
 
 //  slew rates are amount of change per second
 #define SPEED_SLEW 2.5f
-#define HEIGHT_SLEW 50.0f
+#define HEIGHT_SLEW 25.0f
 
-const float stride = 200;
 const float lift = 40;
-const float height_above_ground = 55;
 
 float ctl_trot = 1.5f;
 float ctl_speed = 0;
@@ -91,9 +89,10 @@ unsigned char ctl_fire = 0;
 legpose last_pose[4];
 
 const float STRAFE_SIZE = 40.0f;
-const float STEP_SIZE = 60.0f;
-const float CENTER_XPOS = 170.0f;
-const float CENTER_YPOS = 185.0f;
+const float STEP_SIZE = 80.0f;
+const float CENTER_XPOS = 140.0f;
+const float CENTER_YPOS = 135.0f;
+const float CENTER_ZPOS = -0.0f;
 
 void poseleg(ServoSet &ss, int leg, float step, float speed, float strafe, float deltaPose) {
     float dx = 0, dy = 0, dz = 0;
@@ -109,12 +108,13 @@ void poseleg(ServoSet &ss, int leg, float step, float speed, float strafe, float
         dy = STEP_SIZE * dd * speed;
         dz = sinf(M_PI * (dd + 1) / 2) * lift;
         if (std::max(fabsf(speed), fabsf(strafe)) < 0.1) {
+            //lift less if almost standing still
             dz = dz * 10 * fabsf(speed);
         }
     }
     float xpos = CENTER_XPOS; // lparam.center_x + lparam.first_length + lparam.second_length;
     float ypos = CENTER_YPOS; // lparam.center_y + lparam.first_length;
-    float zpos = -height_above_ground - deltaPose;
+    float zpos = CENTER_ZPOS - deltaPose;
     if (leg & 1) {
         xpos = -xpos;
     }
@@ -353,7 +353,7 @@ void usb_thread_fn() {
         i_speed.setTarget(use_speed);
         i_strafe.setTarget(use_strafe);
         i_turn.setTarget(use_turn);
-        i_height.setTarget(ctl_pose * 25.0 - 50.0);
+        i_height.setTarget(ctl_pose * 10.0);
 
         if (dt >= STEP_DURATION) {
             i_speed.setTime(thetime);
@@ -378,7 +378,8 @@ void usb_thread_fn() {
             while (step < 0) {
                 step += 100;
             }
-            if (i_height.get() == 0 && i_speed.get() == 0 && i_turn.get() == 0 && i_strafe.get() == 0) {
+            if (i_speed.get() == 0 && i_turn.get() == 0 && i_strafe.get() == 0) {
+                //  when standing still, start at a known pos
                 step = 0;
             }
             poselegs(ss, step, i_speed.get(), -i_turn.get(), i_strafe.get(), i_height.get());

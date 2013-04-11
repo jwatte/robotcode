@@ -24,12 +24,12 @@ struct leginfo {
     float cx;           //  center x in body space
     float cy;           //  center y in body space
     float cz;           //  center z in body space
-    float x0;           //  what x extent at center for 1st joint
+    float x0;           //  what extent at center for 1st joint
     float direction0;   //  positive (counterclockwise, inward) or negative
-    float x1;           //  x extent at center for 2nd joint
+    float x1;           //  extent at center for 2nd joint
     float direction1;   //  positive (counterclockwise, up) or negative
-    float x2;           //  x extent at center for 3rd joint
-    float z2;           //  z extent at center for 3rd joint
+    float x2;           //  horizontal extent at center for 3rd joint
+    float z2;           //  vertical extent at center for 3rd joint
     float l2;           //  length of x2/z2
     float direction2;   //  positive (counterclockwise, up/out) or negative
     legori servo0;      //  orientation of "center" of first servo

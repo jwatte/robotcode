@@ -92,8 +92,8 @@ legpose last_pose[4];
 
 const float STRAFE_SIZE = 40.0f;
 const float STEP_SIZE = 60.0f;
-const float CENTER_XPOS = 120.0f;
-const float CENTER_YPOS = 115.0f;
+const float CENTER_XPOS = 170.0f;
+const float CENTER_YPOS = 185.0f;
 
 void poseleg(ServoSet &ss, int leg, float step, float speed, float strafe, float deltaPose) {
     float dx = 0, dy = 0, dz = 0;

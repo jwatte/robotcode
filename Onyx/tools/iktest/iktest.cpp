@@ -45,16 +45,16 @@ struct initinfo {
     unsigned short center;
 };
 static const initinfo init[] = {
-    { 1, 2048-256 },
+    { 1, 2048+256 },
     { 2, 2048-256 },
     { 3, 2048-256 },
-    { 4, 2048+256 },
-    { 5, 2048-256 },
-    { 6, 2048-256 },
-    { 7, 2048+256 },
-    { 8, 2048-256 },
-    { 9, 2048-256 },
-    { 10, 2048-256 },
+    { 4, 2048-256 },
+    { 5, 2048+256 },
+    { 6, 2048+256 },
+    { 7, 2048-256 },
+    { 8, 2048+256 },
+    { 9, 2048+256 },
+    { 10, 2048+256 },
     { 11, 2048-256 },
     { 12, 2048-256 },
     { 13, 2048 },
@@ -69,12 +69,13 @@ static unsigned char nst = 0;
 
 const float stride = 200;
 const float lift = 40;
-const float height_above_ground = 55;
 
 legpose last_pose[4];
 
-const float CENTER_XPOS = 170.0f;
-const float CENTER_YPOS = 185.0f;
+//  center of a "standing" pose is where?
+const float CENTER_XPOS = 140.0f;
+const float CENTER_YPOS = 155.0f;
+const float CENTER_ZPOS = -0.0f;
 
 struct legposition {
     float dx;
@@ -86,7 +87,7 @@ legposition legpos[4];
 void poseleg(int leg, float dx, float dy, float dz) {
     float xpos = CENTER_XPOS;
     float ypos = CENTER_YPOS;
-    float zpos = -height_above_ground;
+    float zpos = CENTER_ZPOS;
     if (leg & 1) {
         xpos = -xpos;
     }
@@ -129,8 +130,9 @@ void usb_thread_fn() {
         ss.add_servo(init[i].id, init[i].center);
     }
     ss.set_torque(MAX_TORQUE, 1); //  not quite top torque
+    unsigned short mt = MAX_TORQUE;
 
-    double thetime = 0, prevtime = 0, intime = read_clock(), rdtime = read_clock();
+    double thetime = 0, prevtime = 0, intime = read_clock();
     SlewRateInterpolator<float> i_speed(0, SPEED_SLEW, 1, intime);
     SlewRateInterpolator<float> i_strafe(0, SPEED_SLEW, 1, intime);
     SlewRateInterpolator<float> i_turn(0, SPEED_SLEW, 1, intime);
@@ -160,6 +162,7 @@ void usb_thread_fn() {
             setlegpose(ss, 1, last_pose[1]);
             setlegpose(ss, 2, last_pose[2]);
             setlegpose(ss, 3, last_pose[3]);
+            prevtime = thetime;
         }
         else {
             usleep(3000);
@@ -209,11 +212,11 @@ void usb_thread_fn() {
         unsigned short status2[MAX_SERVO_COUNT] = { 0 };
         ss.slice_reg2(REG_CURRENT, status2, MAX_SERVO_COUNT);
 
-        if (thetime - rdtime > (REAL_USB ? 20 : 2)) {
-            frames = 0;
-            intime = thetime;
+        unsigned short rd = MAX_TORQUE;
+        if (rd != mt) {
+            ss.set_torque(rd, 1);
+            mt = rd;
         }
-
         usleep(1000);
     }
 }
@@ -228,7 +231,7 @@ int main(int argc, char const *argv[]) {
                 goto usage;
             }
             MAX_TORQUE = atoi(argv[2]);
-            if (MAX_TORQUE < 1 || MAX_TORQUE > 1023) {
+            if (MAX_TORQUE < 0 || MAX_TORQUE > 1023) {
                 goto usage;
             }
             ++argv;
@@ -245,6 +248,18 @@ usage:
     istatus = chain;
     boost::shared_ptr<boost::thread> usb_thread(new boost::thread(boost::bind(usb_thread_fn)));
     boost::shared_ptr<Settings> settings(Settings::load("onyx.json"));
+    last_pose[0].a = init[0].center;
+    last_pose[0].b = init[1].center;
+    last_pose[0].c = init[2].center;
+    last_pose[1].a = init[3].center;
+    last_pose[1].b = init[4].center;
+    last_pose[1].c = init[5].center;
+    last_pose[2].a = init[6].center;
+    last_pose[2].b = init[7].center;
+    last_pose[2].c = init[8].center;
+    last_pose[3].a = init[9].center;
+    last_pose[3].b = init[10].center;
+    last_pose[3].c = init[11].center;
 
     while (true) {
         fprintf(stderr, "cmd> ");
@@ -264,9 +279,11 @@ usage:
         }
         if (!strcmp(line, "help") || !strcmp(line, "?")) {
             fprintf(stderr, "commands:\n");
-            fprintf(stderr, "help | ?          print this text.\n");
-            fprintf(stderr, "quit              exit this program.\n");
-            fprintf(stderr, "leg # dx dy dz    pose a particular leg\n");
+            fprintf(stderr, "help | ?               print this text.\n");
+            fprintf(stderr, "quit                   exit this program.\n");
+            fprintf(stderr, "off                    turn off all torque.\n");
+            fprintf(stderr, "torque val             turn on all torque.\n");
+            fprintf(stderr, "leg # dx dy dz         pose a particular leg\n");
             continue;
         }
         std::stringstream sst;
@@ -287,6 +304,20 @@ usage:
             legpos[lnum].dy = dy;
             legpos[lnum].dz = dz;
             poseleg(lnum, dx, dy, dz);
+            continue;
+        }
+        if (cmd == "off") {
+            MAX_TORQUE = 0;
+            continue;
+        }
+        if (cmd == "torque") {
+            int t = 0;
+            sst >> t;
+            if (t < 0 || t > 1023) {
+                fprintf(stderr, "Bad torque value: %d\n", t);
+                continue;
+            }
+            MAX_TORQUE = t;
             continue;
         }
         fprintf(stderr, "Command not recognized: '%s'\n", line);

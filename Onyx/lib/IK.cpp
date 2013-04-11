@@ -14,24 +14,24 @@
 
 leginfo legs[] = {
     { CENTER_X, CENTER_Y, CENTER_Z,
-        FIRST_LENGTH, 1,
-        SECOND_LENGTH, -1,
-        THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, 1,
+        FIRST_LENGTH, -1,
+        SECOND_LENGTH, 1,
+        THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1,
         legori_forward, legori_90_up, legori_90_down  },
     { -CENTER_X, CENTER_Y, CENTER_Z,
-        FIRST_LENGTH, 1,
-        SECOND_LENGTH, -1,
-        THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, 1,
+        FIRST_LENGTH, -1,
+        SECOND_LENGTH, 1,
+        THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1,
         legori_forward, legori_90_up, legori_90_down  },
     { CENTER_X, -CENTER_Y, CENTER_Z, 
-        FIRST_LENGTH, 1,
-        SECOND_LENGTH, -1, 
-        THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, 1,
+        FIRST_LENGTH, -1,
+        SECOND_LENGTH, 1, 
+        THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1,
         legori_forward, legori_90_up, legori_90_down  },
     { -CENTER_X, -CENTER_Y, CENTER_Z,
-        FIRST_LENGTH, 1, 
-        SECOND_LENGTH, -1,
-        THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, 1,
+        FIRST_LENGTH, -1, 
+        SECOND_LENGTH, 1,
+        THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1,
         legori_forward, legori_90_up, legori_90_down  },
 };
 
@@ -62,6 +62,8 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     //const float qpi = M_PI * 0.25;
     //const float pi = M_PI;
 
+    //fprintf(stderr, "  xpos %.1f ypos %.1f zpos %.1f\n", x, y, z);
+
     float dx = x - leg.cx;
     float dy = y - leg.cy;
     float dz = z - leg.cz;
@@ -88,30 +90,43 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     if (dx < 0) {
         //  don't allow poses that turn the legs inside the body
         dx = 0;
+        ret = false;
+        solve_error = "pose cannot go inside body sideways";
     }
     if (dz > 0) {
         //  don't allow poses that lift legs above the hips
         dz = 0;
+        ret = false;
+        solve_error = "pose cannot lift legs above hips";
     }
     if (fabsf(dx) < 1e-3 && fabsf(dy) < 1e-3) {
         dx = 1e-3;
     }
-    fprintf(stderr, "  dx %.1f dy %.1f dz %.1f\n", dx, dy, dz);
+    //  dx, dy, dz, are relative to the hip joint
+    //fprintf(stderr, "  dx %.1f dy %.1f dz %.1f\n", dx, dy, dz);
     //  orient the thigh in the direction of the target point
     float xylen = sqrtf(dx*dx + dy*dy);
     float xynorm = 1.0f / xylen;
     float ang0 = atan2f(dy, dx);
-    fprintf(stderr, "  ang0 %.2f xynorm %.1f\n", ang0, xynorm);
+    //fprintf(stderr, "  ang0 %.2f xynorm %.3f\n", ang0, xynorm);
     //  Calculate distance from the oriented point.
     //  The fixed-length thigh bone points in the direction of the desired point
     float hdx = dx - dx * xynorm * leg.x0;
     float hdy = dy - dy * xynorm * leg.x0;
-    fprintf(stderr, "  hdx %.1f hdy %.1f\n", hdx, hdy);
+    //  hdx, hdy are relative to the knee joint
+    //fprintf(stderr, "  hdx %.1f hdy %.1f\n", hdx, hdy);
     float maxreach = leg.x1 + leg.l2;
     float minreach = fabsf(leg.x1 - leg.l2);
     float distance = sqrtf(hdx*hdx + hdy*hdy + dz*dz);
     if (distance < 1e-3) {
         dz = -1e-3;
+    }
+    if (distance < minreach) {
+        ret = false;
+        solve_error = "Leg cannot reach close to knee.";
+        //  fix up by moving leg downwards
+        dz = -minreach;
+        distance = sqrtf(hdx*hdx + hdy*hdy + dz*dz);
     }
     if (distance > maxreach) {
         ret = false;
@@ -122,20 +137,8 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
         dz *= maxreach / distance * 0.9999;
         distance = sqrtf(hdx*hdx + hdy*hdy + dz*dz);
     }
-    if (distance < minreach) {
-        ret = false;
-        solve_error = "Leg cannot reach close to knee.";
-        //  fix up by moving leg downwards
-        if (dz > 0) {
-            dz = minreach;
-        }
-        else {
-            dz = -minreach;
-        }
-        distance = sqrtf(hdx*hdx + hdy*hdy + dz*dz);
-    }
     assert(distance >= minreach && distance <= maxreach);
-    fprintf(stderr, "  distance %.1f\n", distance);
+    //fprintf(stderr, "  distance %.1f\n", distance);
 
     //  Now I have a triangle, from knee joint, to ankle joint, to foot contact point.
     //  I know the length of each of the sides; now I want to know the coordinates of 
@@ -145,28 +148,29 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     //  Cosine rule: a2 = b2 + c2 - 2bc cos A.
     float cosA = (leg.x1*leg.x1 + leg.l2*leg.l2 - distance*distance) / (2 * leg.x1 * leg.l2);
     assert(cosA <= 1.0f);
-    float ang2 = acosf(cosA);
+    float ang2 = acosf(cosA) - hpi;
     float cosC = (leg.x1*leg.x1 + distance*distance - leg.l2*leg.l2) / (2 * leg.x1 * distance);
     assert(cosC <= 1.0f);
     float angC = acosf(cosC);
     //  Now, I actually know the right triangle from point of contact, to below knee, to knee
-    fprintf(stderr, "  cosA %.2f ang2 %.1f cosC %.1f angC %.2f\n", cosA, ang2, cosC, angC);
-    float xydist = sqrtf(hdx*hdx + hdy+hdy);
-    float Bprime = atan2f(xydist, -dz);
+    //fprintf(stderr, "  cosA %.2f ang2 %.2f cosC %.2f angC %.2f\n", cosA, ang2, cosC, angC);
+    float xydist = sqrtf(hdx*hdx + hdy*hdy);
+    float Bprime = hpi - atan2f(xydist, -dz);
     float ang1 = angC - Bprime;
+    //fprintf(stderr, "  xydist %.1f Bprime %.2f ang1 %.2f\n", xydist, Bprime, ang1);
     if (ang1 > hpi) {
         assert(angC < M_PI);
         ang1 += (angC - M_PI) * 2;
         assert(ang1 <= hpi);
     }
-    fprintf(stderr, "  xydist %.1f Bprime %.2f ang1 %.2f\n", xydist, Bprime, ang1);
+    assert(ang1 > -hpi && ang1 < hpi);
 
     //  Now, orient the output solution based on the orientation of the servos
     op.a = 2048 + ang0 * 2048 / M_PI;  //  assume ori right/outwards
     op.b = 2048 + ang1 * 2048 / M_PI;  //  assume ori right/outwards
-    op.c = 2048 + ang2 * 2048 / M_PI;  //  assume ori down/outwards
+    op.c = 2048 + ang2 * 2048 / M_PI;  //  assume ori down/outwards (perpendicular to thigh bone)
 
-    fprintf(stderr, "  pre oris: %d,%d,%d\n", op.a, op.b, op.c);
+    //fprintf(stderr, "  pre oris: %d,%d,%d\n", op.a, op.b, op.c);
 
     switch (leg.servo0) {
     case legori_forward:
@@ -198,13 +202,13 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     
     switch (leg.servo2) {
     case legori_90_out:
-        op.c -= 1024;
+        //  do nothing
         break;
     case legori_90_up:
-        op.c -= 2048;
+        op.c -= 1024;
         break;
     case legori_90_down:
-        //  do nothing
+        op.c += 1024;
         break;
     default:
         throw std::runtime_error("Bad legori for knee servo");
@@ -219,7 +223,7 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
         throw std::runtime_error("Resulting pose out of range for servo A.");
     }
 
-    fprintf(stderr, "  pre negates: %d,%d,%d\n", op.a, op.b, op.c);
+    //fprintf(stderr, "  pre negates: %d,%d,%d\n", op.a, op.b, op.c);
 
     if ((leg.direction0 < 0) != flip) {
         op.a = 4096 - op.a;
@@ -231,7 +235,7 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
         op.c = 4096 - op.c;
     }
 
-    fprintf(stderr, "  return: %d,%d,%d\n", op.a, op.b, op.c);
+    //fprintf(stderr, "  return: %d,%d,%d\n", op.a, op.b, op.c);
 
     return ret;
 }

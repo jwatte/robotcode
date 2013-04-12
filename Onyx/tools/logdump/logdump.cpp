@@ -30,11 +30,11 @@ void format_battery(logrec const *rec, void const *data, size_t size) {
 }
 
 void format_error(logrec const *rec, void const *data, size_t size) {
-    fprintf(stdout, "error, \"%.*s\"\n", size, (char const *)data);
+    fprintf(stdout, "error, \"%.*s\"\n", (int)size, (char const *)data);
 }
 
 void format_usbout(logrec const *rec, void const *data, size_t size) {
-    fprintf(stdout, "usbout, %d: ", size);
+    fprintf(stdout, "usbout, %d: ", (int)size);
     for (size_t i = 0; i != size; ++i) {
         fprintf(stdout, "0x%02x ", ((unsigned char *)data)[i]);
     }
@@ -42,7 +42,7 @@ void format_usbout(logrec const *rec, void const *data, size_t size) {
 }
 
 void format_usbin(logrec const *rec, void const *data, size_t size) {
-    fprintf(stdout, "usbin, %d: ", size);
+    fprintf(stdout, "usbin, %d: ", (int)size);
     for (size_t i = 0; i != size; ++i) {
         fprintf(stdout, "0x%02x ", ((unsigned char *)data)[i]);
     }

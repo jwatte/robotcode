@@ -158,12 +158,12 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     float Bprime = hpi - atan2f(xydist, -dz);
     float ang1 = angC - Bprime;
     //fprintf(stderr, "  xydist %.1f Bprime %.2f ang1 %.2f\n", xydist, Bprime, ang1);
-    if (ang1 > hpi) {
+    if (ang1 > hpi && z < 0) {
         assert(angC < M_PI);
         ang1 += (angC - M_PI) * 2;
         assert(ang1 <= hpi);
     }
-    assert(ang1 > -hpi && ang1 < hpi);
+    assert(ang1 >= -hpi && ang1 <= hpi * 5 / 3);
 
     //  Now, orient the output solution based on the orientation of the servos
     op.a = 2048 + ang0 * 2048 / M_PI;  //  assume ori right/outwards

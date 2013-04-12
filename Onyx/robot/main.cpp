@@ -53,16 +53,16 @@ struct initinfo {
     unsigned short center;
 };
 static const initinfo init[] = {
-    { 1, 2048+768 },
+    { 1, 2048+512 },
     { 2, 2048-256 },
     { 3, 2048-256 },
-    { 4, 2048-768 },
+    { 4, 2048-512 },
     { 5, 2048+256 },
     { 6, 2048+256 },
-    { 7, 2048-768 },
+    { 7, 2048-512 },
     { 8, 2048+256 },
     { 9, 2048+256 },
-    { 10, 2048+768 },
+    { 10, 2048+512 },
     { 11, 2048-256 },
     { 12, 2048-256 },
     { 13, 2048 },
@@ -88,7 +88,9 @@ unsigned char ctl_fire = 0;
 
 legpose last_pose[4];
 
+//  STRAFE_SIZE is stroke each direction -- so stride is 2*STRAFE_SIZE
 const float STRAFE_SIZE = 40.0f;
+//  STEP_SIZE is stroke each direction -- so stride is 2*STEP_SIZE
 const float STEP_SIZE = 80.0f;
 const float CENTER_XPOS = 140.0f;
 const float CENTER_YPOS = 135.0f;
@@ -186,9 +188,9 @@ static void handle_setinput(P_SetInput const &psi) {
     ctl_elevation = psi.aimElevation;
     ctl_pose = psi.pose;
     ctl_fire = psi.fire;
-    fprintf(stderr, "trot %4.2f  speed %4.2f  turn %4.2f  strafe %4.2f  head %4.2f  elev %4.2f  pose %2d  fire %0x2\r",
-        ctl_trot, ctl_speed, ctl_turn, ctl_strafe, ctl_heading, ctl_elevation, ctl_pose, ctl_fire);
-    fflush(stderr);
+    //fprintf(stderr, "trot %4.2f  speed %4.2f  turn %4.2f  strafe %4.2f  head %4.2f  elev %4.2f  pose %2d  fire %0x2\r",
+    //    ctl_trot, ctl_speed, ctl_turn, ctl_strafe, ctl_heading, ctl_elevation, ctl_pose, ctl_fire);
+    //fflush(stderr);
 }
 
 double request_video_time;

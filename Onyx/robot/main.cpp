@@ -188,9 +188,11 @@ static void handle_setinput(P_SetInput const &psi) {
     ctl_elevation = psi.aimElevation;
     ctl_pose = psi.pose;
     ctl_fire = psi.fire;
-    //fprintf(stderr, "trot %4.2f  speed %4.2f  turn %4.2f  strafe %4.2f  head %4.2f  elev %4.2f  pose %2d  fire %0x2\r",
-    //    ctl_trot, ctl_speed, ctl_turn, ctl_strafe, ctl_heading, ctl_elevation, ctl_pose, ctl_fire);
-    //fflush(stderr);
+    /*
+    fprintf(stderr, "\rtrot %4.2f  speed %4.2f  turn %4.2f  strafe %4.2f  head %4.2f  elev %4.2f  pose %2d  fire %0x2 ",
+        ctl_trot, ctl_speed, ctl_turn, ctl_strafe, ctl_heading, ctl_elevation, ctl_pose, ctl_fire);
+    fflush(stderr);
+    */
 }
 
 double request_video_time;

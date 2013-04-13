@@ -226,10 +226,10 @@ static void do_display() {
     else if (bat > 137) {
         //  yellow warning
         if ((int)(fmod(now, 4.0) * 2) % 4) {
-            glColor4ub(192, 192, 128, 192);
+            glColor4ub(32, 128, 96, 128);
         }
         else {
-            glColor4ub(192, 192, 128, 255);
+            glColor4ub(96, 128, 96, 192);
         }
     }
     else {

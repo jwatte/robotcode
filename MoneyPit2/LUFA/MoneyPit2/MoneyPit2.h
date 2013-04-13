@@ -13,7 +13,7 @@
 		#include "Descriptors.h"
 
 		void SetupHardware(void);
-		void OnyxWalker_Task(void);
+		void MoneyPit2_Task(void);
 
 		void EVENT_USB_Device_Connect(void);
 		void EVENT_USB_Device_Disconnect(void);

@@ -1,7 +1,7 @@
 
 #include "Config.h"
 #include <LUFA/Drivers/USB/USB.h>
-#include "OnyxWalker.h"
+#include "MoneyPit2.h"
 #include <avr/io.h>
 #include <util/atomic.h>
 
@@ -84,7 +84,7 @@ int main(void) {
     while (1) {
         wdt_reset();
         USB_USBTask();
-        OnyxWalker_Task();
+        MoneyPit2_Task();
     }
 }
 
@@ -666,7 +666,7 @@ static battery_voltage_map voltages_4S[] = {  //  853 is 16.8 volts; these numbe
 };
 
 
-void OnyxWalker_Task(void) {
+void MoneyPit2_Task(void) {
 
     if (USB_DeviceState != DEVICE_STATE_Configured) {
         return;

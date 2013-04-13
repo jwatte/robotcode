@@ -96,7 +96,7 @@ const USB_Descriptor_String_t PROGMEM ProductString = {
         .Size = USB_STRING_LEN(10),
         .Type = DTYPE_String
     },
-    .UnicodeString          = L"OnyxWalker"
+    .UnicodeString          = L"MoneyPit2"
 };
 
 uint16_t CALLBACK_USB_GetDescriptor(const uint16_t wValue,

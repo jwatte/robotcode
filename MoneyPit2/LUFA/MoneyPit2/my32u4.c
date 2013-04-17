@@ -15,7 +15,7 @@ static volatile unsigned char status;
 static volatile unsigned char status_override;
 static volatile unsigned char status_override_mask;
 
-void setup_status() {
+void setup_status(void) {
     DDRF = DDRF | 0x80;
     DDRE = DDRE | 0x40 | 0x4;
     DDRD = DDRD | 0x80 | 0x40 | 0x2 | 0x1;
@@ -45,116 +45,7 @@ void set_status_override(unsigned char value, unsigned char mask) {
 }
 
 
-ISR(USART1_RX_vect) {
-    while ((UCSR1A & (1 << RXC1)) != 0) {
-        unsigned char d = UDR1;
-        if (rptr < sizeof(rbuf)) {
-            rbuf[rptr] = d;
-            ++rptr;
-        }
-        else {
-            ++nmissed;
-        }
-    }
-}
 
-static unsigned char old_ubrr = 0xff;
-
-void setup_uart(unsigned char rate) {
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-        power_usart1_enable();
-        PORTD |= (1 << PD3) | (1 << PD2);   //  TXD, RXD pull-up
-        DDRD &= ~((1 << PD2) | (1 << PD3));//  RXD
-        rptr = 0;
-        UCSR1C = (1 << USBS1) | (1 << UCSZ11) | (1 << UCSZ10);   //  async mode, 8N2
-        UCSR1A = (1 << U2X1);       //  double speed (also, more accurate!)
-        unsigned char new_ubrr = rate;
-        switch (rate) {
-            case BRATE_9600:
-                new_ubrr = 207;
-                break;
-            case BRATE_57600:
-                new_ubrr = 34;
-                break;
-            case BRATE_1000000:
-                new_ubrr = 1;
-                break;
-            case BRATE_2000000:
-                new_ubrr = 0;
-                break;
-            default:
-                // 'rate' is a divider value
-                new_ubrr = rate;
-                break;
-        }
-        if (old_ubrr != new_ubrr || old_ubrr == 0xff) {
-            UBRR1H = 0;
-            UBRR1L = new_ubrr;
-            UCSR1B = (1 << RXCIE1) | (1 << RXEN1) | (1 << TXEN1);   //  transmitter and receiver enable
-            old_ubrr = new_ubrr;
-            delayms(100);
-        }
-        nmissed = 0;
-    }
-}
-
-extern unsigned short clear_received;   //  ugh! hack!
-
-void send_sync(unsigned char const *data, unsigned char size, unsigned char enable_rx_intr) {
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-        //  enable transmitter, disable receiver and interrupt
-        UCSR1B = (1 << TXEN1);
-        clear_received = getms() + 10;
-        set_status(SENDING_LED, SENDING_LED);
-        //  send data
-        while (size > 0) {
-            while ((UCSR1A & (1 << UDRE1)) == 0) {
-                //  wait for send to drain
-            }
-            UDR1 = *data;
-            UCSR1A |= (1 << TXC1);
-            ++data;
-            --size;
-        }
-        //  wait for last byte to be pushed out
-        while ((UCSR1A & (1 << TXC1)) == 0) {
-            //  wait for transmit to complete
-        }
-        rptr = 0;
-        //  enable interrupt
-        UCSR1B = (enable_rx_intr ? (1 << RXCIE1) : 0) | (1 << RXEN1) | (1 << TXEN1);
-    }
-}
-
-unsigned char recv_avail(void) {
-    return rptr;
-}
-
-unsigned char const *recv_buf(void) {
-    return (unsigned char const *)(rbuf);
-}
-
-void recv_eat(unsigned char cnt) {
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-        if (cnt >= rptr) {
-            rptr = 0;
-        }
-        else {
-            unsigned char left = rptr - cnt;
-            memmove((unsigned char *)rbuf, (unsigned char const *)&rbuf[cnt], left);
-            rptr = left;
-        }
-    }
-}
-
-unsigned char get_nmissed(void) {
-    unsigned char ret = 0;
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-        ret = nmissed;
-        nmissed = 0;
-    }
-    return ret;
-}
 
 volatile unsigned short timer = 0;
 
@@ -235,8 +126,6 @@ void setup_delay(void) {
     TCCR0B = (1 << CS01) | (1 << CS00); //  Clock / 64 == 250000 pulses per second
 }
 
-extern unsigned char sbuf[];
-extern unsigned char sbuflen;
 extern unsigned char epic;
 extern unsigned char epiir;
 extern unsigned char epirwa;
@@ -250,13 +139,15 @@ void show_error(unsigned char errkind, unsigned char errdata) {
         set_status(0xff, 0xff);
         delayms(50);
         set_status(0, 0xff);
-        delayms(50);
+        delayms(100);
         set_status(errkind, 0xff);
-        delayms(300);
+        delayms(400);
         set_status(0, 0xff);
-        delayms(50);
+        delayms(100);
         set_status(errdata, 0xff);
-        delayms(300);
+        delayms(400);
+        set_status(0, 0xff);
+        /*
         unsigned char buf[8] = {
             0xee, 0xee, errkind, errdata, 
             epic, epiir, epirwa,
@@ -264,6 +155,25 @@ void show_error(unsigned char errkind, unsigned char errdata) {
         };
         send_sync(buf, 8, 0);
         send_sync(sbuf, sbuflen, 0);
+        */
+        delayms(100);
     }
 }
+
+void setup_adc(void) {
+    power_adc_enable();
+    ADMUX = (1 << REFS0)    //  AVcc
+        | 6                 //  channel 6 (PF6, where the battery is)
+        ;
+    ADCSRA = (1 << ADEN)    //  enable
+        | (1 << ADIF)       //  clear complete flag
+        | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0)    //  clock divide by 128
+        ;
+    ADCSRB = 0;
+    DIDR0 = (1 << ADC6D)    //  disable digital buffer pin F6
+        ;
+    DIDR2 = 0;
+    ADCSRA |= (1 << ADSC);  //  read once, to bootstrap the system
+}
+
 

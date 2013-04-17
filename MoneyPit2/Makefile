@@ -85,10 +85,12 @@ bld/%.o:	%.cpp
 PART_blink:=atmega328p
 PART_mp2_motor:=atmega328p
 PART_mp2_counters:=atmega328p
+PART_mp2_servos:=atmega328p
 
 fuses_blink:	fuses_20
 fuses_mp2_motor:	fuses_20
 fuses_mp2_counters:	fuses_20
+fuses_mp2_servos:	fuses_20
 
 define mkavrbin
 bld/avrbin/$(1):	$$(filter bld/avrobj/$(1)/%,$(AVR_OBJS)) bld/avrbin/libavr_$$(PART_$(1)).a

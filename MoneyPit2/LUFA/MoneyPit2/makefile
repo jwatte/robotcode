@@ -17,7 +17,7 @@ F_USB        = $(F_CPU)
 OPTIMIZATION = s
 TARGET       = MoneyPit2
 SRC          = Descriptors.c MoneyPit2.c my32u4.c \
-               $(LUFA_SRC_USB) $(LUFA_SRC_USBCLASS) $(LUFA_SRC_PLATFORM)
+               $(LUFA_SRC_USB) $(LUFA_SRC_USBCLASS) $(LUFA_SRC_PLATFORM) $(LUFA_SRC_TWI)
 LUFA_PATH    = ../../../../LUFA-130303/LUFA
 CC_FLAGS     = -DUSE_LUFA_CONFIG_HEADER -IConfig/
 LD_FLAGS     =

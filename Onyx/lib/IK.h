@@ -12,8 +12,6 @@ struct legparams {
     float first_length;
     float second_length;
     float third_length;
-    float third_length_x;
-    float third_length_z;
 };
 
 enum legori {
@@ -28,8 +26,6 @@ struct leginfo {
     float direction0;   //  positive (counterclockwise, inward) or negative
     float x1;           //  extent at center for 2nd joint
     float direction1;   //  positive (counterclockwise, up) or negative
-    float x2;           //  horizontal extent at center for 3rd joint
-    float z2;           //  vertical extent at center for 3rd joint
     float l2;           //  length of x2/z2
     float direction2;   //  positive (counterclockwise, up/out) or negative
     legori servo0;      //  orientation of "center" of first servo

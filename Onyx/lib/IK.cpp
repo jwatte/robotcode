@@ -7,32 +7,30 @@
 #define CENTER_Y 62
 #define CENTER_Z 80
 #define FIRST_LENGTH 60
-#define SECOND_LENGTH 73
-#define THIRD_LENGTH 151
-#define THIRD_LENGTH_A 15
-#define THIRD_LENGTH_B 150
+#define SECOND_LENGTH 80
+#define THIRD_LENGTH 186
 
 leginfo legs[] = {
     { CENTER_X, CENTER_Y, CENTER_Z,
         FIRST_LENGTH, -1,
         SECOND_LENGTH, 1,
-        THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1,
-        legori_forward, legori_90_up, legori_90_down  },
+        THIRD_LENGTH, -1,
+        legori_forward, legori_90_up, legori_90_up  },
     { -CENTER_X, CENTER_Y, CENTER_Z,
         FIRST_LENGTH, -1,
         SECOND_LENGTH, 1,
-        THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1,
-        legori_forward, legori_90_up, legori_90_down  },
+        THIRD_LENGTH, -1,
+        legori_forward, legori_90_up, legori_90_up  },
     { CENTER_X, -CENTER_Y, CENTER_Z, 
         FIRST_LENGTH, -1,
         SECOND_LENGTH, 1, 
-        THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1,
-        legori_forward, legori_90_up, legori_90_down  },
+        THIRD_LENGTH, -1,
+        legori_forward, legori_90_up, legori_90_up  },
     { -CENTER_X, -CENTER_Y, CENTER_Z,
         FIRST_LENGTH, -1, 
         SECOND_LENGTH, 1,
-        THIRD_LENGTH_A, THIRD_LENGTH_B, THIRD_LENGTH, -1,
-        legori_forward, legori_90_up, legori_90_down  },
+        THIRD_LENGTH, -1,
+        legori_forward, legori_90_up, legori_90_up  },
 };
 
 
@@ -43,8 +41,6 @@ void get_leg_params(legparams &op) {
     op.first_length = FIRST_LENGTH;
     op.second_length = SECOND_LENGTH;
     op.third_length = THIRD_LENGTH;
-    op.third_length_x = THIRD_LENGTH_A;
-    op.third_length_z = THIRD_LENGTH_B;
 }
 
 std::string solve_error;

@@ -24,6 +24,11 @@
 
 
 
+//  center of a "standing" pose is where?
+const float CENTER_XPOS = 145.0f;
+const float CENTER_YPOS = 135.0f;
+const float CENTER_ZPOS = -20.0f;
+
 #define MAX_SERVO_COUNT 16
 
 bool REAL_USB = true;
@@ -71,11 +76,6 @@ const float stride = 200;
 const float lift = 40;
 
 legpose last_pose[4];
-
-//  center of a "standing" pose is where?
-const float CENTER_XPOS = 140.0f;
-const float CENTER_YPOS = 155.0f;
-const float CENTER_ZPOS = -0.0f;
 
 struct legposition {
     float dx;

@@ -25,6 +25,10 @@
 #define CMD_FIRE 0x12
 
 
+const float CENTER_XPOS = 145.0f;
+const float CENTER_YPOS = 135.0f;
+const float CENTER_ZPOS = -20.0f;
+
 #define MAX_SERVO_COUNT 16
 
 bool REAL_USB = true;
@@ -92,9 +96,6 @@ legpose last_pose[4];
 const float STRAFE_SIZE = 40.0f;
 //  STEP_SIZE is stroke each direction -- so stride is 2*STEP_SIZE
 const float STEP_SIZE = 80.0f;
-const float CENTER_XPOS = 140.0f;
-const float CENTER_YPOS = 135.0f;
-const float CENTER_ZPOS = -0.0f;
 
 void poseleg(ServoSet &ss, int leg, float step, float speed, float strafe, float deltaPose) {
     float dx = 0, dy = 0, dz = 0;

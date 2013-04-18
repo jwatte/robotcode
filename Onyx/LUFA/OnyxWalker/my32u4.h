@@ -7,7 +7,8 @@
 #define BRATE_9600 3    //  really, 1/2 Mbps
 #define BRATE_57600 2   //  really, 2/3 Mbps
 #define BRATE_1000000 1
-#define BRATE_2000000 0
+//  I don't use 2 Mbit because of signal issues
+// #define BRATE_2000000 0
 
 #define CONNECTED_LED 0x1
 #define RECEIVED_LED 0x2

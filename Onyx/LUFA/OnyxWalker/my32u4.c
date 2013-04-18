@@ -61,6 +61,10 @@ ISR(USART1_RX_vect) {
 static unsigned char old_ubrr = 0xff;
 
 void setup_uart(unsigned char rate) {
+    if (rate == 0) {
+        //  run all servos at 1 Mbit to make sure I don't miss anything
+        rate = 1;
+    }
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         power_usart1_enable();
         PORTD |= (1 << PD3) | (1 << PD2);   //  TXD, RXD pull-up
@@ -78,9 +82,6 @@ void setup_uart(unsigned char rate) {
                 break;
             case BRATE_1000000:
                 new_ubrr = 1;
-                break;
-            case BRATE_2000000:
-                new_ubrr = 0;
                 break;
             default:
                 // 'rate' is a divider value

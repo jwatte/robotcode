@@ -12,6 +12,7 @@
 #define BLINK_CNT 10
 #define EMPTY_IN_TIMEOUT 20
 
+#define CMD_BEEP (0x10 | 0x01)          //  cmd 1, sizeix 1
 #define CMD_MOTOR_SPEEDS (0x10 | 0x02)  //  cmd 1, sizeix 2
 #define CMD_SERVO_TIMES (0x10 | 0x05)   //  cmd 1, sizeix 5
 
@@ -40,12 +41,19 @@ int main(void) {
 
 
 unsigned char last_seq = 0;
+unsigned short nbeep = 0;
 
+
+void setup_twi() {
+    TWI_Init(TWI_BIT_PRESCALE_1, TWI_BITLENGTH_FROM_FREQ(1, 400000));
+}
 
 void SetupHardware(void) {
     wdt_disable();
     setup_status();
     set_status(0xff, 0xff);
+    PORTE = 0;
+    DDRE |= (1 << 6);
 
     clock_prescale_set(clock_div_1);
     set_status(0x7f, 0xff);
@@ -53,7 +61,7 @@ void SetupHardware(void) {
     set_status(0x3f, 0xff);
     setup_adc();
     set_status(0x1f, 0xff);
-    TWI_Init(TWI_BIT_PRESCALE_1, TWI_BITLENGTH_FROM_FREQ(1, 400000));
+    setup_twi();
     set_status(0xf, 0xff);
 
     USB_Init();
@@ -66,6 +74,8 @@ void EVENT_USB_Device_Connect(void) {
 
 void EVENT_USB_Device_Disconnect(void) {
     set_status(0x0, CONNECTED_LED);
+    PORTE |= (1 << 6);
+    nbeep = getms() + 200;
 }
 
 void EVENT_USB_Device_ConfigurationChanged(void) {
@@ -120,6 +130,15 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
             break;
         }
         switch (cmd) {
+            case CMD_BEEP:
+                if (sbuf[0]) {
+                    PORTE |= (1 << 6);
+                    nbeep = getms() + sbuf[0];
+                }
+                else {
+                    PORTE &= ~(1 << 6);
+                }
+                break;
             case CMD_MOTOR_SPEEDS:
                 memcpy(motorpower, &sbuf[offset], sizeof(motorpower));
                 break;
@@ -150,6 +169,8 @@ enum TWIState twi_state = tsIdle;
 unsigned char twibuf[16];
 unsigned char sndcnt = 0;
 unsigned char sndend = 0;
+unsigned short clear_twi = 0;
+unsigned char twi_has_error = 0;
 
 #define TWI_ID_MOTOR 0x1
 #define TWI_ID_COUNTERS 0x2
@@ -157,11 +178,18 @@ unsigned char sndend = 0;
 #define TWI_BIT_WRITE 0x0
 #define TWI_BIT_READ 0x1
 
+
+void twi_error(void) {
+    twi_has_error = true;
+    set_status(TWI_ERROR_LED, TWI_ERROR_LED);
+    clear_twi = getms() + 1000;
+}
+
 void service_twi(void) {
     switch (twi_state) {
     case tsIdle:
         if (TWI_StartTransmission((TWI_ID_MOTOR << 1) | TWI_BIT_WRITE, 2) != TWI_ERROR_NoError) {
-            set_status(TWI_ERROR_LED, TWI_ERROR_LED);
+            twi_error();
             twi_state = tsEndedMotor;
             break;
         }
@@ -178,7 +206,7 @@ void service_twi(void) {
         }
         else {
             if (!TWI_SendByte(twibuf[sndcnt])) {
-                set_status(TWI_ERROR_LED, TWI_ERROR_LED);
+                twi_error();
                 twi_state = tsEndedMotor;
                 break;
             }
@@ -187,7 +215,7 @@ void service_twi(void) {
         break;
     case tsEndedMotor:
         if (TWI_StartTransmission((TWI_ID_COUNTERS << 1) | TWI_BIT_READ, 2) != TWI_ERROR_NoError) {
-            set_status(TWI_ERROR_LED, TWI_ERROR_LED);
+            twi_error();
             twi_state = tsEndedCounters;
             break;
         }
@@ -203,7 +231,7 @@ void service_twi(void) {
             break;
         }
         if (!TWI_ReceiveByte(&twibuf[sndcnt], (sndcnt == sndend-1))) {
-            set_status(TWI_ERROR_LED, TWI_ERROR_LED);
+            twi_error();
             twi_state = tsEndedCounters;
             break;
         }
@@ -211,8 +239,8 @@ void service_twi(void) {
         break;
     case tsEndedCounters:
         if (TWI_StartTransmission((TWI_ID_SERVOS << 1) | TWI_BIT_WRITE, 5) != TWI_ERROR_NoError) {
+            twi_error();
             twi_state = tsEndedServos;
-            set_status(TWI_ERROR_LED, TWI_ERROR_LED);
             break;
         }
         memcpy(twibuf, servotimes, sizeof(servotimes));
@@ -227,7 +255,7 @@ void service_twi(void) {
             break;
         }
         if (!TWI_SendByte(twibuf[sndcnt])) {
-            set_status(TWI_ERROR_LED, TWI_ERROR_LED);
+            twi_error();
             twi_state = tsEndedServos;
             break;
         }
@@ -304,7 +332,21 @@ void MoneyPit2_Task(void) {
     /* remove received status */
     if ((short)(now - clear_received) > 0) {
         set_status(0, RECEIVED_LED | POLLING_LED);
-        clear_received = now;
+        clear_received = now + 1000;
+    }
+
+    if ((short)(now - nbeep) > 0) {
+        PORTE &= ~(1 << 6);
+        nbeep = now + 1000;
+    }
+
+    if ((short)(now - clear_twi) > 0) {
+        set_status(0, TWI_ERROR_LED);
+        clear_twi = now + 1000;
+        if (twi_has_error) {
+            twi_has_error = false;
+            setup_twi();
+        }
     }
 }
 

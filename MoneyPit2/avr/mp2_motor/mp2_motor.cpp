@@ -108,11 +108,13 @@ class ImSlave : public ITWISlave {
             }
             driveL = ((unsigned char *)data)[0];
             driveR = ((unsigned char *)data)[1];
+            PORTB |= B_BLINK;
         }
         virtual void request_from_master(void *o_buf, unsigned char &o_size) {
             o_size = 2;
             ((unsigned char *)o_buf)[0] = currentL;
             ((unsigned char *)o_buf)[1] = currentR;
+            PORTB |= B_BLINK;
         }
 };
 

@@ -15,27 +15,52 @@ static volatile unsigned char status;
 static volatile unsigned char status_override;
 static volatile unsigned char status_override_mask;
 
+inline void ledon(unsigned char mask) {
+    switch (mask) {
+    case CONNECTED_LED: PORTD |= 0x10; return;
+    case RECEIVED_LED: PORTD |= 0x20; return;
+    case POLLING_LED: PORTD |= 0x40; return;
+    case TWI_ERROR_LED: PORTD |= 0x80; return;
+    default: show_error(7, mask); return;
+    }
+}
+inline void ledoff(unsigned char mask) {
+    switch (mask) {
+    case CONNECTED_LED: PORTD &= ~0x10; return;
+    case RECEIVED_LED: PORTD &= ~0x20; return;
+    case POLLING_LED: PORTD &= ~0x40; return;
+    case TWI_ERROR_LED: PORTD &= ~0x80; return;
+    default: show_error(7, mask); return;
+    }
+}
+inline void ddron(unsigned char mask) {
+    switch (mask) {
+    case CONNECTED_LED: DDRD |= 0x10; return;
+    case RECEIVED_LED: DDRD |= 0x20; return;
+    case POLLING_LED: DDRD |= 0x40; return;
+    case TWI_ERROR_LED: DDRD |= 0x80; return;
+    default: show_error(7, mask); return;
+    }
+}
+
 void setup_status(void) {
-    DDRF = DDRF | 0x80;
-    DDRE = DDRE | 0x40 | 0x4;
-    DDRD = DDRD | 0x80 | 0x40 | 0x2 | 0x1;
-    DDRB = DDRB | 0x8;
+    for (unsigned char i = 0; i < NUMLEDS; ++i) {
+        ddron(1 << i);
+    }
 }
 
 void set_status(unsigned char value, unsigned char mask) {
     status = (status & ~mask) | (value & mask);
     unsigned char show_status = (status & ~status_override_mask) | status_override;
-    PORTF = (PORTF & ~0x80) |
-        ((show_status & 1) ? 0x80 : 0);
-    PORTE = (PORTE & ~(0x40 | 0x4)) |
-        ((show_status & 2) ? 0x40 : 0) |
-        ((show_status & 4) ? 0x4 : 0);
-    PORTD = (PORTD & ~(0x80 | 0x40 | 0x2 | 0x1)) |
-        ((show_status & 8) ? 0x80 : 0) |
-        ((show_status & 0x10) ? 0x40 : 0) |
-        ((show_status & 0x20) ? 0x2 : 0) |
-        ((show_status & 0x40) ? 0x1 : 0);
-    PORTB = (PORTB & ~0x8) | ((show_status & 0x80) ? 0x8 : 0);
+    for (unsigned char ch = 0; ch < NUMLEDS; ++ch) {
+        unsigned char m = (1 << ch);
+        if (show_status & m) {
+            ledon(m);
+        }
+        else {
+            ledoff(m);
+        }
+    }
 }
 
 void set_status_override(unsigned char value, unsigned char mask) {

@@ -7,10 +7,10 @@
 #define B_BLINK (1<<0)
 #define B_POSITIONING (1<<1)
 
-#define D_SERVO_0 0x40
-#define D_SERVO_1 0x20
-#define D_SERVO_2 0x10
-#define D_SERVO_3 0x08
+#define D_SERVO_0 0x80
+#define D_SERVO_1 0x40
+#define D_SERVO_2 0x20
+#define D_SERVO_3 0x10
 
 //  how many 30-millisecond intervals to time out driving the servos?
 #define RECV_POSCOUNT 40
@@ -18,6 +18,7 @@
 //  this is purposefully not right
 unsigned short positions[4] = { 2000, 1000, 1250, 1750 };
 unsigned char poscount = 0;
+extern unsigned long actual_f_cpu_1000;
 
 void fatal_blink_func(bool on)
 {
@@ -49,17 +50,17 @@ table[5] = {};
 
 void set_servos(void *) {
     after(30, set_servos, 0);
-    if (poscount == 0) {
+    if (poscount != 0) {
         poscount--;
         PORTB |= B_POSITIONING;
 
-        table[0].time = positions[0];
+        table[0].time = (unsigned long)positions[0] * actual_f_cpu_1000 / 8000;
         table[0].value = D_SERVO_0;
-        table[1].time = positions[1];
+        table[1].time = (unsigned long)positions[1] * actual_f_cpu_1000 / 8000;
         table[1].value = D_SERVO_1;
-        table[2].time = positions[2];
+        table[2].time = (unsigned long)positions[2] * actual_f_cpu_1000 / 8000;
         table[2].value = D_SERVO_2;
-        table[3].time = positions[3];
+        table[3].time = (unsigned long)positions[3] * actual_f_cpu_1000 / 8000;
         table[3].value = D_SERVO_3;
 
         for (unsigned char a = 0; a < 3; ++a) {
@@ -123,6 +124,7 @@ class ImSlave : public ITWISlave {
         virtual void data_from_master(unsigned char n, void const *data) {
             memcpy(positions, data, n > 8 ? 8 : n);
             poscount = RECV_POSCOUNT;
+            PORTB |= B_BLINK;
         }
         virtual void request_from_master(void *o_buf, unsigned char &o_size) {
         }
@@ -134,7 +136,7 @@ ImSlave slave;
 
 void setup() {
     PORTD = 0;
-    DDRD = 0;
+    DDRD = D_SERVO_0 | D_SERVO_1 | D_SERVO_2 | D_SERVO_3;
 
     PORTB |= B_BLINK | B_POSITIONING;
     DDRB |= B_BLINK | B_POSITIONING;

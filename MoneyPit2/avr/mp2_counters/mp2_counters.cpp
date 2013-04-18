@@ -125,6 +125,7 @@ class ImSlave : public ITWISlave {
         virtual void request_from_master(void *o_buf, unsigned char &o_size) {
             o_size = 8;
             memcpy(o_buf, counters, 8);
+            PORTB |= B_BLINK;
         }
 };
 

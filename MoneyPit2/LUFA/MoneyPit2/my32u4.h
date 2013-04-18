@@ -8,7 +8,8 @@
 #define CONNECTED_LED 0x1
 #define RECEIVED_LED 0x2
 #define POLLING_LED 0x4
-#define TWI_ERROR_LED 0x40
+#define TWI_ERROR_LED 0x8
+#define NUMLEDS 4
 
 
 //  delay uses TIMER0

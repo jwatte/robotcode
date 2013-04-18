@@ -1,3 +1,3 @@
 
 all clean:
-	make -C OnyxWalker $@
+	make -C MoneyPit2 $@

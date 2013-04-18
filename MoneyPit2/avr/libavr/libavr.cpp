@@ -113,7 +113,7 @@ ISR(TIMER1_COMPA_vect)
 unsigned short uread_timer()
 {
     IntDisable idi;
-    return (unsigned long)read_timer1_inner() * actual_f_cpu_1000 / 8000;
+    return (unsigned long)read_timer1_inner() * 8000 / actual_f_cpu_1000;
 }
 
 unsigned short read_timer()
@@ -128,10 +128,24 @@ unsigned short read_timer_fast() {
 }
 
 
+//  between 2 and 5 us pre-calculated
+static unsigned short amt_table[4] = {
+    3, 4, 5, 6
+};
+
+static void setup_amt_table()
+{
+    for (unsigned char i = 0; i != 4; ++i) {
+        //  start at 1, not 3, assuming the udelay setup takes a microsecond
+        amt_table[i] = ((unsigned long)(i + 1)) * (unsigned long)actual_f_cpu_1000 / 8000ul;
+    }
+}
+
 void setup_timers(unsigned long f_cpu)
 {
     actual_f_cpu = f_cpu;
     actual_f_cpu_1000 = f_cpu / 1000;
+    setup_amt_table();
     power_timer1_enable();
     //  make sure to not run out of bits in the math...
     phaseScale = (unsigned short)(16777UL * (8000000 >> 8) / (f_cpu >> 8));
@@ -149,17 +163,23 @@ void udelay(unsigned short amt)
     if (amt > 8000) {
         fatal(FATAL_TOO_LONG_DELAY);
     }
-    if (amt < 2) {
+    if (amt < 3) {
+        //  less than two, the function call overhead has you got
         return;
     }
-    amt -= 1; /* for the setup work */
-    amt = (unsigned long)amt * actual_f_cpu_1000 / 8000;
+    amt -= 3; /* for table index */
+    if (amt < 4) {
+        amt = amt_table[amt];
+    }
+    else {
+        amt = (unsigned long)amt * actual_f_cpu_1000 / 8000;
+    }
     unsigned short start = TCNT1L;
-    start |= (TCNT1H << 8u);
+    start |= ((unsigned short)TCNT1H << 8u);
     while (true) {
         unsigned short val = TCNT1L;
-        val |= (TCNT1H << 8u);
-        if (val - start >= amt) {
+        val |= ((unsigned short)TCNT1H << 8u);
+        if ((unsigned short)(val - start) >= amt) {
             break;
         }
     }

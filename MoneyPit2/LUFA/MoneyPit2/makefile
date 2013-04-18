@@ -25,9 +25,6 @@ LD_FLAGS     =
 # Default target
 all:
 
-clean:
-	rm -f *.lst
-
 # Include LUFA build script makefiles
 include $(LUFA_PATH)/Build/lufa_core.mk
 include $(LUFA_PATH)/Build/lufa_sources.mk

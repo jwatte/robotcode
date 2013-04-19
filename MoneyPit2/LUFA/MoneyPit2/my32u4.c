@@ -143,6 +143,7 @@ void delayus(unsigned short us) {
 
 void setup_delay(void) {
     power_timer0_enable();
+    // Set timer 0 to four microseconds per count.
     TCNT0 = 0;
     OCR0A = 250;    //  exactly a millisecond per interrupt
     OCR0B = 0;

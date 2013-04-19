@@ -13,12 +13,14 @@
 #define EMPTY_IN_TIMEOUT 20
 
 #define CMD_BEEP (0x10 | 0x01)          //  cmd 1, sizeix 1
-#define CMD_MOTOR_SPEEDS (0x10 | 0x02)  //  cmd 1, sizeix 2
-#define CMD_SERVO_TIMES (0x10 | 0x05)   //  cmd 1, sizeix 5
+#define CMD_MOTOR_SPEEDS (0x20 | 0x02)  //  cmd 2, sizeix 2
+#define CMD_SERVO_TIMES (0x30 | 0x05)   //  cmd 3, sizeix 5
 
-#define RET_COUNTER_VALUES (0x10 | 0x08 | 0x05) //  ret 1, RET, sizeix 5
+#define RET_CURRENT_VALUES (0x40 | 0x08 | 0x02) //  ret 4, RET, sizeix 2
+#define RET_COUNTER_VALUES (0x50 | 0x08 | 0x05) //  ret 5, RET, sizeix 5
 
 unsigned char motorpower[2] = { 0x80, 0x80 };
+unsigned char currents[2] = { 0x80, 0x80 };
 unsigned short countervalues[4] = { 0 };
 unsigned short servotimes[4] = { 0 };
 
@@ -45,7 +47,14 @@ unsigned short nbeep = 0;
 
 
 void setup_twi() {
+    set_status(TWI_ERROR_LED, TWI_ERROR_LED);
+    TWI_Disable();
+    PORTD &= ~0x3;
+    delayms(2);
+    PORTD |= 0x3;
+    DDRD |= 0x3;
     TWI_Init(TWI_BIT_PRESCALE_1, TWI_BITLENGTH_FROM_FREQ(1, 400000));
+    set_status(0, TWI_ERROR_LED);
 }
 
 void SetupHardware(void) {
@@ -162,7 +171,9 @@ enum TWIState {
     tsStartedCounters,
     tsEndedCounters,
     tsStartedServos,
-    tsEndedServos
+    tsEndedServos,
+    tsStartedCurrents,
+    tsEndedCurrents
 };
 
 enum TWIState twi_state = tsIdle;
@@ -180,9 +191,11 @@ unsigned char twi_has_error = 0;
 
 
 void twi_error(void) {
+    TWI_StopTransmission();
     twi_has_error = true;
     set_status(TWI_ERROR_LED, TWI_ERROR_LED);
     clear_twi = getms() + 1000;
+    delayus(100);
 }
 
 void service_twi(void) {
@@ -262,6 +275,30 @@ void service_twi(void) {
         ++sndcnt;
         break;
     case tsEndedServos:
+        if (TWI_StartTransmission((TWI_ID_MOTOR << 1) | TWI_BIT_READ, 5) != TWI_ERROR_NoError) {
+            twi_error();
+            twi_state = tsEndedCurrents;
+            break;
+        }
+        sndcnt = 0;
+        sndend = sizeof(currents);
+        twi_state = tsStartedCurrents;
+        break;
+    case tsStartedCurrents:
+        if (sndcnt == sndend) {
+            TWI_StopTransmission();
+            twi_state = tsEndedCurrents;
+            memcpy(currents, twibuf, sizeof(currents));
+            break;
+        }
+        if (!TWI_ReceiveByte(&twibuf[sndcnt], (sndcnt == sndend-1))) {
+            twi_error();
+            twi_state = tsEndedCurrents;
+            break;
+        }
+        ++sndcnt;
+        break;
+    case tsEndedCurrents:
         twi_state = tsIdle;
         break;
     }
@@ -299,6 +336,9 @@ void MoneyPit2_Task(void) {
             for (unsigned char i = 0; i != sizeof(countervalues); ++i) {
                 Endpoint_Write_8(((unsigned char *)countervalues)[i]);
             }
+            Endpoint_Write_8(RET_CURRENT_VALUES);
+            Endpoint_Write_8(currents[0]);
+            Endpoint_Write_8(currents[1]);
             Endpoint_ClearIN();
         }
     }
@@ -341,7 +381,6 @@ void MoneyPit2_Task(void) {
     }
 
     if ((short)(now - clear_twi) > 0) {
-        set_status(0, TWI_ERROR_LED);
         clear_twi = now + 1000;
         if (twi_has_error) {
             twi_has_error = false;

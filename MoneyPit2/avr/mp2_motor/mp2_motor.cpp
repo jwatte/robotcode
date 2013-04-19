@@ -93,11 +93,17 @@ void idle(void *p) {
         after(1900, &idle, (void *)1);
     }
 }
+
+unsigned short last_twi = 0;
+void check_twi(void *);
+
 void onboot(void*) {
     PORTB &= ~B_BLINK;
     TCCR0A = WGM_0 | (1 << COM0A1) | (1 << COM0B1);
     after(20, set_motor_pwm, 0);
     after(800, idle, (void *)1);
+    after(100, check_twi, 0);
+    last_twi = read_timer();
 }
 
 class ImSlave : public ITWISlave {
@@ -109,17 +115,29 @@ class ImSlave : public ITWISlave {
             driveL = ((unsigned char *)data)[0];
             driveR = ((unsigned char *)data)[1];
             PORTB |= B_BLINK;
+            last_twi = read_timer();
         }
         virtual void request_from_master(void *o_buf, unsigned char &o_size) {
             o_size = 2;
             ((unsigned char *)o_buf)[0] = currentL;
             ((unsigned char *)o_buf)[1] = currentR;
             PORTB |= B_BLINK;
+            last_twi = read_timer();
         }
 };
 
 ImSlave slave;
 
+void check_twi(void *) {
+    unsigned short now = read_timer();
+    if (now - last_twi > 1000) {
+        stop_twi();
+        delay(2);
+        start_twi_slave(&slave, 0x01);
+        last_twi = read_timer();
+    }
+    after(100, check_twi, 0);
+}
 
 
 void setup() {

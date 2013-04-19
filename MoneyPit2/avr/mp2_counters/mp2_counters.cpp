@@ -8,6 +8,7 @@
 #define B_SLIPPED (1<<1)
 
 unsigned short counters[4] = { 0 };
+unsigned short last_twi = 0;
 
 void fatal_blink_func(bool on)
 {
@@ -112,10 +113,14 @@ void read_counters(void *) {
     old3 = (c3 >> 2);
 }
 
+void check_twi(void *);
+
 void onboot(void*) {
     PORTB &= ~B_BLINK;
     after(0, read_counters, 0);
     after(800, idle, (void *)1);
+    after(100, check_twi, 0);
+    last_twi = read_timer();
 }
 
 class ImSlave : public ITWISlave {
@@ -126,10 +131,22 @@ class ImSlave : public ITWISlave {
             o_size = 8;
             memcpy(o_buf, counters, 8);
             PORTB |= B_BLINK;
+            last_twi = read_timer();
         }
 };
 
 ImSlave slave;
+
+void check_twi(void *) {
+    unsigned short now = read_timer();
+    if (now - last_twi > 1000) {
+        stop_twi();
+        delay(2);
+        start_twi_slave(&slave, 0x02);
+        last_twi = read_timer();
+    }
+    after(100, check_twi, 0);
+}
 
 
 

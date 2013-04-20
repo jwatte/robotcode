@@ -17,7 +17,7 @@
         "atdl":"40990E3D",
         "atmy":"0"
     },
-    "safety":1,
+    "safety":0,
     "camera":{
         "device":"/dev/video0",
         "width":432,

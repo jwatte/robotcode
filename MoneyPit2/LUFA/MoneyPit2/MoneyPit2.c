@@ -6,15 +6,20 @@
 #include <avr/io.h>
 #include <util/atomic.h>
 
+#define MOTOR_TIMEOUT 200
+
 #define MAX_IN_SIZE 32
+
+#define E_BEEP (1 << 6)
 
 //  how many ticks to blink a LED
 #define BLINK_CNT 10
-#define EMPTY_IN_TIMEOUT 20
+#define EMPTY_IN_TIMEOUT 5
 
 #define CMD_BEEP (0x10 | 0x01)          //  cmd 1, sizeix 1
 #define CMD_MOTOR_SPEEDS (0x20 | 0x02)  //  cmd 2, sizeix 2
 #define CMD_SERVO_TIMES (0x30 | 0x05)   //  cmd 3, sizeix 5
+#define CMD_WRITE_SERVOS (0x30 | 0x00)  //  cmd 3, sizeix 0
 
 #define RET_CURRENT_VALUES (0x40 | 0x08 | 0x02) //  ret 4, RET, sizeix 2
 #define RET_COUNTER_VALUES (0x50 | 0x08 | 0x05) //  ret 5, RET, sizeix 5
@@ -22,7 +27,9 @@
 unsigned char motorpower[2] = { 0x80, 0x80 };
 unsigned char currents[2] = { 0x80, 0x80 };
 unsigned short countervalues[4] = { 0 };
-unsigned short servotimes[4] = { 0 };
+unsigned short servotimes[4] = { 1500, 1500, 1500, 1500 };
+bool write_servos = false;;
+unsigned short motorend = 0;
 
 
 
@@ -46,7 +53,7 @@ unsigned char last_seq = 0;
 unsigned short nbeep = 0;
 
 
-void setup_twi() {
+void setup_twi(void) {
     set_status(TWI_ERROR_LED, TWI_ERROR_LED);
     TWI_Disable();
     PORTD &= ~0x3;
@@ -62,7 +69,7 @@ void SetupHardware(void) {
     setup_status();
     set_status(0xff, 0xff);
     PORTE = 0;
-    DDRE |= (1 << 6);
+    DDRE |= E_BEEP;
 
     clock_prescale_set(clock_div_1);
     set_status(0x7f, 0xff);
@@ -83,8 +90,6 @@ void EVENT_USB_Device_Connect(void) {
 
 void EVENT_USB_Device_Disconnect(void) {
     set_status(0x0, CONNECTED_LED);
-    PORTE |= (1 << 6);
-    nbeep = getms() + 200;
 }
 
 void EVENT_USB_Device_ConfigurationChanged(void) {
@@ -141,19 +146,23 @@ void dispatch(unsigned char const *sbuf, unsigned char offset, unsigned char end
         switch (cmd) {
             case CMD_BEEP:
                 if (sbuf[0]) {
-                    PORTE |= (1 << 6);
+                    PORTE |= E_BEEP;
                     nbeep = getms() + sbuf[0];
                 }
                 else {
-                    PORTE &= ~(1 << 6);
+                    PORTE &= ~E_BEEP;
                 }
                 break;
             case CMD_MOTOR_SPEEDS:
                 memcpy(motorpower, &sbuf[offset], sizeof(motorpower));
+                motorend = getms() + MOTOR_TIMEOUT;
                 break;
-            case CMD_SERVO_TIMES:
-                memcpy(servotimes, &sbuf[offset], sizeof(servotimes));
-                break;
+//            case CMD_SERVO_TIMES:
+//                memcpy(servotimes, &sbuf[offset], sizeof(servotimes));
+//                break;
+//            case CMD_WRITE_SERVOS:
+//                write_servos = true;
+//                break;
             default:
                 //  unknown command
                 show_error(2, cmd);
@@ -251,6 +260,7 @@ void service_twi(void) {
         ++sndcnt;
         break;
     case tsEndedCounters:
+/*
         if (TWI_StartTransmission((TWI_ID_SERVOS << 1) | TWI_BIT_WRITE, 5) != TWI_ERROR_NoError) {
             twi_error();
             twi_state = tsEndedServos;
@@ -259,9 +269,17 @@ void service_twi(void) {
         memcpy(twibuf, servotimes, sizeof(servotimes));
         sndcnt = 0;
         sndend = sizeof(servotimes);
+        if (write_servos) {
+            write_servos = false;
+            twibuf[sizeof(servotimes)] = 1;
+            ++sndend;
+        }
         twi_state = tsStartedServos;
+ */
+        twi_state = tsEndedServos;
         break;
     case tsStartedServos:
+/*
         if (sndcnt == sndend) {
             TWI_StopTransmission();
             twi_state = tsEndedServos;
@@ -273,6 +291,8 @@ void service_twi(void) {
             break;
         }
         ++sndcnt;
+ */
+        twi_state = tsEndedServos;
         break;
     case tsEndedServos:
         if (TWI_StartTransmission((TWI_ID_MOTOR << 1) | TWI_BIT_READ, 5) != TWI_ERROR_NoError) {
@@ -376,7 +396,7 @@ void MoneyPit2_Task(void) {
     }
 
     if ((short)(now - nbeep) > 0) {
-        PORTE &= ~(1 << 6);
+        PORTE &= ~E_BEEP;
         nbeep = now + 1000;
     }
 
@@ -386,6 +406,12 @@ void MoneyPit2_Task(void) {
             twi_has_error = false;
             setup_twi();
         }
+    }
+
+    if ((short)(now - motorend) > 0) {
+        motorpower[0] = 0x80;
+        motorpower[1] = 0x80;
+        motorend = now + MOTOR_TIMEOUT;
     }
 }
 

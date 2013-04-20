@@ -45,6 +45,7 @@ void fatal_blink_func(bool on)
 void idle(void *p) {
     if (p) {
         PORTB |= B_BLINK;
+        PORTB &= B_POSITIONING;
         after(100, idle, 0);
         if (tuningdirty) {
             ++eeprom_gen;
@@ -148,14 +149,21 @@ void onboot(void*) {
 class ImSlave : public ITWISlave {
     public:
         virtual void data_from_master(unsigned char n, void const *data) {
-            memcpy(positions, data, n > 8 ? 8 : n);
+            for (unsigned char ch = 0; ch != 4; ++ch) {
+                if (n >= ch * 2 + 2) {
+                    unsigned short pos = ((unsigned short const *)data)[ch];
+                    if (pos >= 1000 && pos <= 2000) {
+                        positions[ch] = pos;
+                    }
+                }
+            }
             poscount = RECV_POSCOUNT;
             PORTB |= B_BLINK;
             if (n > 8) {
                 //  write tuning?
                 if (((unsigned char *)data)[8] == 1) {
                     for (unsigned char i = 0; i != 4; ++i) {
-                        tuning[i] = positions[i] - 1500;
+                        tuning[i] = positions[i] - 1500 + tuning[i];
                         positions[i] = 1500;
                     }
                 }
@@ -168,6 +176,19 @@ class ImSlave : public ITWISlave {
 
 ImSlave slave;
 
+void rapid_flash(void *p) {
+    int i = (int)p;
+    if (i & 1) {
+        PORTB |= B_BLINK;
+    }
+    else {
+        PORTB &= ~B_BLINK;
+    }
+    if (i) {
+        after(50, rapid_flash, (void *)(i - 1));
+    }
+}
+
 void check_twi(void *) {
     unsigned short now = read_timer();
     if (now - last_twi > 1000) {
@@ -175,6 +196,8 @@ void check_twi(void *) {
         stop_twi();
         delay(2);
         start_twi_slave(&slave, 0x03);
+        last_twi = now;
+        after(50, rapid_flash, (void *)10);
     }
     after(100, check_twi, 0);
 }

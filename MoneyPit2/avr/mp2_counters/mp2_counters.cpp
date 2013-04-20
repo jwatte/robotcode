@@ -3,12 +3,24 @@
 #include <pins_avr.h>
 
 
+#define TWI_ADDR_COUNTERS 0x02
+
 //  port B
 #define B_BLINK (1<<0)
 #define B_SLIPPED (1<<1)
 
 unsigned short counters[4] = { 0 };
 unsigned short last_twi = 0;
+
+
+/*
+void debug_out(unsigned char b) {
+    while (!(UCSR0A & (1 << UDRE0))) {
+        //  wait
+    }
+    UDR0 = b;
+}
+*/
 
 void fatal_blink_func(bool on)
 {
@@ -47,33 +59,35 @@ unsigned char old3 = 0;
 static const char delta[16] = {
         //  new is high bits
         //  old new
-    0,  //  0   0
-    -1, //  1   0
-    2,  //  2   0
-    1,  //  3   0
-    1,  //  0   1
-    0,  //  1   1
-    -1, //  2   1
-    2,  //  3   1
-    2,  //  0   2
-    1,  //  1   2
-    0,  //  2   2
-    -1, //  3   2
-    -1, //  0   3
-    2,  //  1   3
-    1,  //  2   3
-    0,  //  3   3
+     0, //  00   00
+    -1, //  01   00
+     1, //  10   00
+     2, //  11   00
+     1, //  00   01
+     0, //  01   01
+     2, //  10   01
+    -1, //  11   01
+    -1, //  00   10
+     2, //  01   10
+     0, //  10   10
+     1, //  11   10
+     2, //  00   11
+     1, //  01   11
+    -1, //  10   11
+     0, //  11   11
 
 };
 
 void read_counters(void *) {
 
+    PORTB &= ~(B_SLIPPED);
+
     after(0, read_counters, 0);
 
     unsigned char d = PIND;
 
-    unsigned char c0 = ((d & 0x03) >> 2) | old0;
-    short d0 = delta[c0];
+    unsigned char c0 = ((d & 0x03) << 2) | old0;
+    char d0 = delta[c0];
     if (d0 == 2) {
         PORTB |= B_SLIPPED;
     }
@@ -83,7 +97,7 @@ void read_counters(void *) {
     old0 = (c0 >> 2);
 
     unsigned char c1 = (d & 0x0c) | old1;
-    short d1 = delta[c1];
+    char d1 = delta[c1];
     if (d1 == 2) {
         PORTB |= B_SLIPPED;
     }
@@ -92,8 +106,8 @@ void read_counters(void *) {
     }
     old1 = (c1 >> 2);
 
-    unsigned char c2 = ((d & 0x30) << 2) | old2;
-    short d2 = delta[c2];
+    unsigned char c2 = ((d & 0x30) >> 2) | old2;
+    char d2 = delta[c2];
     if (d2 == 2) {
         PORTB |= B_SLIPPED;
     }
@@ -102,8 +116,8 @@ void read_counters(void *) {
     }
     old2 = (c2 >> 2);
 
-    unsigned char c3 = ((d & 0xc0) << 4) | old3;
-    short d3 = delta[c3];
+    unsigned char c3 = ((d & 0xc0) >> 4) | old3;
+    char d3 = delta[c3];
     if (d3 == 2) {
         PORTB |= B_SLIPPED;
     }
@@ -137,6 +151,19 @@ class ImSlave : public ITWISlave {
 
 ImSlave slave;
 
+void rapid_flash(void *p) {
+    int i = (int)p;
+    if (i & 1) {
+        PORTB |= B_BLINK;
+    }
+    else {
+        PORTB &= ~B_BLINK;
+    }
+    if (i) {
+        after(50, rapid_flash, (void *)(i - 1));
+    }
+}
+
 void check_twi(void *) {
     unsigned short now = read_timer();
     if (now - last_twi > 1000) {
@@ -144,6 +171,7 @@ void check_twi(void *) {
         delay(2);
         start_twi_slave(&slave, 0x02);
         last_twi = read_timer();
+        after(50, rapid_flash, (void *)10);
     }
     after(100, check_twi, 0);
 }
@@ -161,7 +189,22 @@ void setup() {
 
     setup_timers(F_CPU);
 
-    start_twi_slave(&slave, 0x02);
+    start_twi_slave(&slave, TWI_ADDR_COUNTERS);
+
+/*
+    //  setup debug uart without interrupts
+    power_usart0_enable();
+    UCSR0A = (1 << U2X0);  //  2X speed
+    UBRR0H = 0;
+    UBRR0L = 1; //  1.25 Mbit -- just dump what's there!
+    UCSR0B = (1 << RXEN0) | (1 << TXEN0);  //  tx enable
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); //  8 bits, N, 1
+
+    debug_out(0);
+    debug_out(0);
+    debug_out(0xff);
+    debug_out(0xff);
+ */
 
     after(400, onboot, 0);
 }

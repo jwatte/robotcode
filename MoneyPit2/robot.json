@@ -1,2 +1,26 @@
 {
+    "vid":"f000",
+    "pid":"0003",
+    "servos":"/dev/ttyACM0",
+    "centers":{
+        "0": 6550,
+        "1": 5940,
+        "2": 6350,
+        "3": 6000
+    },
+    "xbee":{
+        "device":"/dev/ttyUSB0",
+        "atsh":"13A200",
+        "atsl":"40990E64",
+        "atid":"0F00",
+        "atdh":"13A200",
+        "atdl":"40990E3D",
+        "atmy":"0"
+    },
+    "safety":1,
+    "camera":{
+        "device":"/dev/video0",
+        "width":432,
+        "height":240
+    }
 }

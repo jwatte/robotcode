@@ -34,6 +34,7 @@ public:
         outQueueDepth_(0),
         outRetrying_(false),
         complained_(false),
+        lastStatusOk_(true),
         logger_(l)
     {
 
@@ -58,6 +59,8 @@ public:
             p->destroy();
         }
     }
+
+    bool status_ok() { return lastStatusOk_; }
 
     void log_output_data(void const *data, size_t size)
     {
@@ -234,11 +237,18 @@ private:
         double t = read_clock();
         t -= dd_in[dm_in++ & 0xf];
         if (t > 0.1) {
-            fprintf(stderr, "in %.4f\n", t);
+            std::cerr << "USB in delay: " << t << " seconds" << std::endl;
         }
 
         if (inXfer_->status != LIBUSB_TRANSFER_COMPLETED) {
             std::cerr << "in transfer status: " << inXfer_->status << std::endl;
+            if (inXfer_->status == 4) {
+                usleep(50000);
+            }
+            lastStatusOk_ = false;
+        }
+        else {
+            lastStatusOk_ = true;
         }
         boost::unique_lock<boost::mutex> lock(lock_);
         inPack_->set_size(inXfer_->actual_length);
@@ -265,6 +275,7 @@ private:
     size_t outQueueDepth_;
     bool outRetrying_;
     bool complained_;
+    bool lastStatusOk_;
 
     boost::shared_ptr<Logger> logger_;
 };
@@ -397,6 +408,7 @@ USBLink::USBLink(std::string const &vid, std::string const &pid, std::string con
     oep_ = (unsigned short)strtol(ep_output_.c_str(), &o, 16);
     dh_ = libusb_open_device_with_vid_pid(ctx_, ivid_, ipid_);
     if (!dh_ ) {
+        std::cerr << hexnum(ivid_) << ":" << hexnum(ipid_) << std::endl;
         throw std::runtime_error("Could not find USB device " + name_);
     }
     int er;

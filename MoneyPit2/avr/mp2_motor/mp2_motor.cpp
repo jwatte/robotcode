@@ -128,6 +128,20 @@ class ImSlave : public ITWISlave {
 
 ImSlave slave;
 
+void rapid_flash(void *p) {
+    int i = (int)p;
+    if (i & 1) {
+        PORTB |= B_BLINK;
+    }
+    else {
+        PORTB &= ~B_BLINK;
+    }
+    if (i) {
+        after(50, rapid_flash, (void *)(i - 1));
+    }
+}
+
+
 void check_twi(void *) {
     unsigned short now = read_timer();
     if (now - last_twi > 1000) {
@@ -135,6 +149,7 @@ void check_twi(void *) {
         delay(2);
         start_twi_slave(&slave, 0x01);
         last_twi = read_timer();
+        after(50, rapid_flash, (void *)10);
     }
     after(100, check_twi, 0);
 }

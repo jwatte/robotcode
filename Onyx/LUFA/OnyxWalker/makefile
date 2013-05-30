@@ -16,7 +16,7 @@ F_CPU        = 16000000
 F_USB        = $(F_CPU)
 OPTIMIZATION = s
 TARGET       = OnyxWalker
-SRC          = Descriptors.c OnyxWalker.c my32u4.c \
+SRC          = Descriptors.c OnyxWalker.c \
                $(LUFA_SRC_USB) $(LUFA_SRC_USBCLASS) $(LUFA_SRC_PLATFORM)
 LUFA_PATH    = ../../../../LUFA-130303/LUFA
 CC_FLAGS     = -DUSE_LUFA_CONFIG_HEADER -IConfig/

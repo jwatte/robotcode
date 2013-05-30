@@ -24,7 +24,7 @@ delbld:
 	rm -rf bld
 
 all clean:
-	make -C LUFA $@
+	make -C LUFA $@ && make -C powerboard $@
 
 define mk_tool
 SRCS_$(1):=$$(wildcard tools/$(1)/*.cpp)

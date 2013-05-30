@@ -9,7 +9,6 @@
 		#include <LUFA/Version.h>
 		#include <LUFA/Drivers/USB/USB.h>
 
-		#include "my32u4.h"
 		#include "Descriptors.h"
 
 		void SetupHardware(void);

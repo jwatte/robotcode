@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <USBLink.h>
 #include <Settings.h>
@@ -55,6 +54,8 @@ float conesteer = 0;
 std::string capturePath_;
 
 UscServo * uscServo_;
+
+char textmsg[64] = { 0 };
 
 short servosteer[4] = { 0, 0, 0, 0 };
 unsigned short servocenters[4] = { 6000, 6000, 6000, 6000 };
@@ -394,6 +395,8 @@ Fl_RGB_Image *flImage_;
 Fl_Box *flImageBox_;
 
 
+std::list<Behavior *> plan_;
+
 Behavior *behave_;
 
 void idle_func() {
@@ -438,14 +441,25 @@ void idle_func() {
             sprintf(name, "%s/image_%04d.jpg", capturePath_.c_str(), numimages);
             pm.save_jpg(name);
             lastImage_ = now;
+            strcat(name, "\n");
+            strncpy(textmsg, name, 63);
         }
     }
     //  think here
     if (behave_) {
         behave_->step();
         if (behave_->complete()) {
-            std::cerr << "complete" << std::endl;
-            exit(1);
+            delete behave_;
+            behave_ = nullptr;
+        }
+    }
+    else {
+        if (plan_.size()) {
+            behave_ = plan_.front();
+            plan_.pop_front();
+        }
+        else {
+            strcpy(textmsg, "Plan Complete\n");
         }
     }
 }
@@ -479,6 +493,8 @@ static void run_safety() {
     char line[1024];
     int ptr = 0;
     lastSafety_ = read_clock();
+    char buf[64] = { 0 };
+    char obuf[64] = { 0 };
     while (!safetyThread_->interruption_requested()) {
         int i = read(safetyid, &line[ptr], sizeof(line)-1-ptr);
         if (i < 1) {
@@ -496,6 +512,12 @@ static void run_safety() {
             line[ptr] = 0;
             safety_incoming_line(line);
             ptr = 0;
+        }
+        memcpy(buf, textmsg, 64);
+        buf[63] = 0;
+        if (strcmp(buf, obuf)) {
+            memcpy(obuf, buf, 64);
+            write(safetyid, buf, strlen(buf));
         }
     }
     ::close(safetyid);
@@ -567,8 +589,23 @@ int main() {
     w->end();
     w->show();
 
-    //behave_ = new StraightBehavior(-10, -30);
-    behave_ = new ConeBehavior(5, 1000);
+/*
+    plan_.push_back(new StraightBehavior(20, 1000);
+    plan_.push_back(new StraightBehavior(20, 1000);
+    plan_.push_back(new ConeBehavior(10, 1000);
+    plan_.push_back(new StraightBehavior(-20, 100);
+    plan_.push_back(new TurnBehavior(20, 0.9, 100));
+    plan_.push)back(new StraightBehavior(20, 1000));
+    plan_.push)back(new StraightBehavior(20, 1000));
+    plan_.push_back(new ConeBehavior(10, 2000);
+ */
+    plan_.push_back(new StraightBehavior(10, 1000));
+    plan_.push_back(new ConeBehavior(10, 500));
+    plan_.push_back(new ConeBehavior(10, 500));
+    plan_.push_back(new TurnBehavior(10, 0.8, 100));
+    plan_.push_back(new StraightBehavior(10, 500));
+    plan_.push_back(new ConeBehavior(10, 500));
+    plan_.push_back(new ConeBehavior(10, 500));
 
     Fl::set_idle(idle_func);
     Fl::run();

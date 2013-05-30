@@ -3,7 +3,7 @@
     "pid":"0003",
     "servos":"/dev/ttyACM0",
     "centers":{
-        "0": 6550,
+        "0": 5000,
         "1": 5940,
         "2": 6350,
         "3": 6000
@@ -17,10 +17,10 @@
         "atdl":"40990E3D",
         "atmy":"0"
     },
-    "safety":0,
+    "safety":1,
     "camera":{
         "device":"/dev/video0",
-        "width":432,
-        "height":240
+        "width":640,
+        "height":360
     }
 }

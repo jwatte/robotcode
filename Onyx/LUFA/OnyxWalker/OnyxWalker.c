@@ -1,5 +1,6 @@
 
 #include "Config.h"
+#include "Ada1306.h"
 #include <LUFA/Drivers/USB/USB.h>
 #include "OnyxWalker.h"
 #include <avr/io.h>
@@ -26,6 +27,7 @@ void SetupHardware(void) {
     MCUSR &= ~(1 << WDRF);
     wdt_disable();
 
+    LCD_Setup();
     USB_Init();
 }
 

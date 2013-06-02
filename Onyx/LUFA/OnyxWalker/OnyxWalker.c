@@ -29,6 +29,17 @@ void SetupHardware(void) {
 
     LCD_Setup();
     USB_Init();
+    int ch = 32;
+    for (int j = 0; j < 4; ++j) {
+        for (int i = 0; i < 21; ++i) {
+            LCD_DrawChar(ch, i, j);
+            ch += 1;
+            if (ch > 127) {
+                ch = 32;
+            }
+        }
+    }
+    LCD_Flush();
 }
 
 void EVENT_USB_Device_Connect(void) {

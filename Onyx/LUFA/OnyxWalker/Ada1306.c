@@ -4,12 +4,6 @@
 #include "font.h"
 #include <LUFA/Drivers/Peripheral/TWI.h>
 
-#define I2C_WRITE 0x7a
-#define I2C_READ 0x7b
-
-#define WIDTH 21
-#define HEIGHT 4
-
 enum {
     SSD1306_DISPLAYOFF = 0xae,
     SSD1306_SETDISPLAYCLOCKDIV = 0xd5,
@@ -31,7 +25,7 @@ enum {
     SSD1306_SETHIGHCOLUMN = 0x10,
 };
 
-static unsigned char display[WIDTH*HEIGHT/8];
+static unsigned char display[WIDTH*HEIGHT];
 //  nil clipping rect
 static unsigned char d_left = WIDTH;
 static unsigned char d_top = HEIGHT;
@@ -47,6 +41,10 @@ static void _Reset(void) {
     MY_DelayUs(10);
     PORTF |= (1 << 1);
     MY_DelayUs(10);
+    PORTF &= ~(1 << 1);
+    MY_DelayUs(10);
+    PORTF |= (1 << 1);
+    MY_DelayUs(200);
 }
 
 static void _Begin(void) {
@@ -70,6 +68,15 @@ static void _Cmd(unsigned char cmd) {
     TWI_SendByte(cmd);
 }
 
+static void _Cmd2(unsigned char cmd, unsigned char arg) {
+    if (!begun) {
+        return;
+    }
+    TWI_SendByte(0);
+    TWI_SendByte(cmd);
+    TWI_SendByte(arg);
+}
+
 static void _Write(unsigned char cmd) {
     if (!begun) {
         return;
@@ -85,27 +92,18 @@ void LCD_Setup(void) {
 
     _Begin();
     _Cmd(SSD1306_DISPLAYOFF);
-    _Cmd(SSD1306_SETDISPLAYCLOCKDIV);
-    _Cmd(0x80);
-    _Cmd(SSD1306_SETMULTIPLEX);
-    _Cmd(0x1f);
-    _Cmd(SSD1306_SETDISPLAYOFFSET);
-    _Cmd(0x0);
+    _Cmd2(SSD1306_SETDISPLAYCLOCKDIV, 0x80);
+    _Cmd2(SSD1306_SETMULTIPLEX, 0x1f);
+    _Cmd2(SSD1306_SETDISPLAYOFFSET, 0x0);
     _Cmd(SSD1306_SETSTARTLINE | 0);
-    _Cmd(SSD1306_SETCHARGEPUMP);
-    _Cmd(0x14);
-    _Cmd(SSD1306_MEMORYMODE);
-    _Cmd(0);
+    _Cmd2(SSD1306_SETCHARGEPUMP, 0x14);
+    _Cmd2(SSD1306_MEMORYMODE, 0);
     _Cmd(SSD1306_SEGREMAP | 1);
     _Cmd(SSD1306_COMSCANDEC);
-    _Cmd(SSD1306_SETCOMPINS);
-    _Cmd(0x02);
-    _Cmd(SSD1306_SETCONTRAST);
-    _Cmd(0x8f);
-    _Cmd(SSD1306_SETPRECHARGE);
-    _Cmd(0xf1);
-    _Cmd(SSD1306_SETVCOMDETECT);
-    _Cmd(0x40);
+    _Cmd2(SSD1306_SETCOMPINS, 0x02);
+    _Cmd2(SSD1306_SETCONTRAST, 0x8f);
+    _Cmd2(SSD1306_SETPRECHARGE, 0xf1);
+    _Cmd2(SSD1306_SETVCOMDETECT, 0x40);
     _Cmd(SSD1306_DISPLAYALLONRESUME);
     _Cmd(SSD1306_NORMALDISPLAY);
     _Cmd(SSD1306_DISPLAYON);
@@ -134,7 +132,7 @@ void LCD_Flush(void) {
             _Write(0x40);
             //  write a line
             for (unsigned char x = d_left; x < d_right; ++x) {
-                _Write(0);
+                _Write(0xff);
                 unsigned char ch = display[x + y * WIDTH];
                 if (ch < 32 || ch > 126) {
                     ch = '?';
@@ -154,5 +152,33 @@ void LCD_Flush(void) {
     d_top = HEIGHT;
     d_right = 0;
     d_bottom = 0;
+}
+
+void LCD_DrawChar(unsigned char ch, unsigned char x, unsigned char y) {
+    if (x >= WIDTH || y >= HEIGHT) {
+        return;
+    }
+    display[x + y*WIDTH] = ch;
+    if (x < d_left) d_left = x;
+    if (x >> d_right) d_right = x+1;
+    if (y < d_top) d_top = y;
+    if (y >= d_bottom) d_bottom = y+1;
+}
+
+void LCD_DrawString(char const *str, unsigned char x, unsigned char y, unsigned char wrap) {
+    while (*str) {
+        if (wrap) {
+            if (x >= WIDTH) {
+                x = 0;
+                y += 1;
+            }
+            if (y >= HEIGHT) {
+                y = 0;
+            }
+        }
+        LCD_DrawChar((unsigned char)*str, x, y);
+        x += 1;
+        ++str;
+    }
 }
 

@@ -3,6 +3,7 @@
 #include "Ada1306.h"
 #include <LUFA/Drivers/USB/USB.h>
 #include "OnyxWalker.h"
+#include "my32u4.h"
 #include <avr/io.h>
 #include <util/atomic.h>
 
@@ -29,17 +30,6 @@ void SetupHardware(void) {
 
     LCD_Setup();
     USB_Init();
-    int ch = 32;
-    for (int j = 0; j < 4; ++j) {
-        for (int i = 0; i < 21; ++i) {
-            LCD_DrawChar(ch, i, j);
-            ch += 1;
-            if (ch > 127) {
-                ch = 32;
-            }
-        }
-    }
-    LCD_Flush();
 }
 
 void EVENT_USB_Device_Connect(void) {
@@ -82,6 +72,8 @@ unsigned char epiir;
 unsigned char epirwa;
 
 void OnyxWalker_Task(void) {
+
+    LCD_Flush();
 
     if (USB_DeviceState != DEVICE_STATE_Configured) {
         return;

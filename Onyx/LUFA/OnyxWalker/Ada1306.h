@@ -5,7 +5,7 @@
 #define I2C_WRITE 0x78
 #define I2C_READ 0x79
 
-#define WIDTH 21
+#define WIDTH 22    //  actually goes across end
 #define HEIGHT 4
 
 void LCD_Setup(void);

@@ -23,6 +23,7 @@ enum {
     SSD1306_DISPLAYON = 0xaf,
     SSD1306_SETLOWCOLUMN = 0x00,
     SSD1306_SETHIGHCOLUMN = 0x10,
+    SSD1306_SETPAGE = 0xB0,
 };
 
 static unsigned char display[WIDTH*HEIGHT];
@@ -35,6 +36,8 @@ static unsigned char d_bottom = 0;
 static unsigned char begun = 0;
 
 static void _Reset(void) {
+    //  The data sheet talks about bringing reset down and up and down again.
+    //  This may just be poor grammar, but do it nevertheless.
     PORTF |= (1 << 1);
     MY_DelayUs(10);
     PORTF &= ~(1 << 1);
@@ -44,7 +47,7 @@ static void _Reset(void) {
     PORTF &= ~(1 << 1);
     MY_DelayUs(10);
     PORTF |= (1 << 1);
-    MY_DelayUs(200);
+    MY_DelayUs(10);
 }
 
 static void _Begin(void) {
@@ -64,7 +67,7 @@ static void _Cmd(unsigned char cmd) {
     if (!begun) {
         return;
     }
-    TWI_SendByte(0);
+    TWI_SendByte(0x80);
     TWI_SendByte(cmd);
 }
 
@@ -72,7 +75,7 @@ static void _Cmd2(unsigned char cmd, unsigned char arg) {
     if (!begun) {
         return;
     }
-    TWI_SendByte(0);
+    TWI_SendByte(0x80);
     TWI_SendByte(cmd);
     TWI_SendByte(arg);
 }
@@ -82,6 +85,32 @@ static void _Write(unsigned char cmd) {
         return;
     }
     TWI_SendByte(cmd);
+}
+
+static unsigned char buf[5];
+
+static void LCD_Flush_Row(unsigned char y, unsigned char const *display) {
+    _Begin();
+    _Cmd(SSD1306_SETPAGE | ((y + 4) & 0x7));
+    _Cmd(SSD1306_SETLOWCOLUMN | ((d_left * 6) & 0xf));
+    _Cmd(SSD1306_SETHIGHCOLUMN | (((d_left * 6) >> 4) & 0xf));
+    _Write(0x40);   //  all that follows is data
+    //  write a line
+    for (unsigned char x = d_left; x < d_right; ++x) {
+        unsigned char ch = display[x];
+        if (ch < 32 || ch > 127) {
+            ch = '?';
+        }
+        unsigned char const *cp = &font[(ch - 32) * 5];
+        _Write(0);
+        memcpy_P(buf, cp, 5);
+        _Write(buf[0]);
+        _Write(buf[1]);
+        _Write(buf[2]);
+        _Write(buf[3]);
+        _Write(buf[4]);
+    }
+    _End();
 }
 
 void LCD_Setup(void) {
@@ -97,7 +126,7 @@ void LCD_Setup(void) {
     _Cmd2(SSD1306_SETDISPLAYOFFSET, 0x0);
     _Cmd(SSD1306_SETSTARTLINE | 0);
     _Cmd2(SSD1306_SETCHARGEPUMP, 0x14);
-    _Cmd2(SSD1306_MEMORYMODE, 0);
+    _Cmd2(SSD1306_MEMORYMODE, 2);
     _Cmd(SSD1306_SEGREMAP | 1);
     _Cmd(SSD1306_COMSCANDEC);
     _Cmd2(SSD1306_SETCOMPINS, 0x02);
@@ -110,7 +139,13 @@ void LCD_Setup(void) {
     _End();
 
     LCD_Clear();
+    /*
+    LCD_Flush_Row(4, display);
+    LCD_Flush_Row(5, display);
+    LCD_Flush_Row(6, display);
+    LCD_Flush_Row(7, display);
     LCD_Flush();
+    */
 }
 
 void LCD_Clear(void) {
@@ -118,36 +153,18 @@ void LCD_Clear(void) {
     d_right = WIDTH;
     d_top = 0;
     d_bottom = HEIGHT;
-    memset(display, 0, sizeof(display));
+    memset(display, 32, sizeof(display));
 }
 
 void LCD_Flush(void) {
-    unsigned char buf[5];
     if (d_top < d_bottom && d_left < d_right) {
         for (unsigned char y = d_top; y < d_bottom; ++y) {
-            _Begin();
-            _Cmd(SSD1306_SETLOWCOLUMN | ((d_left * 6) & 0xf));
-            _Cmd(SSD1306_SETHIGHCOLUMN | (((d_left * 6) >> 4) & 0xf));
-            _Cmd(SSD1306_SETSTARTLINE | y);
-            _Write(0x40);
-            //  write a line
-            for (unsigned char x = d_left; x < d_right; ++x) {
-                _Write(0xff);
-                unsigned char ch = display[x + y * WIDTH];
-                if (ch < 32 || ch > 126) {
-                    ch = '?';
-                }
-                unsigned char const *cp = &font[(ch-32)*5];
-                memcpy_P(buf, cp, 5);
-                _Write(buf[0]);
-                _Write(buf[1]);
-                _Write(buf[2]);
-                _Write(buf[3]);
-                _Write(buf[4]);
-            }
-            _End();
+            LCD_Flush_Row(y, &display[WIDTH * y]);
         }
     }
+    _Begin();
+    _Cmd(SSD1306_DISPLAYALLONRESUME);
+    _End();
     d_left = WIDTH;
     d_top = HEIGHT;
     d_right = 0;
@@ -160,7 +177,7 @@ void LCD_DrawChar(unsigned char ch, unsigned char x, unsigned char y) {
     }
     display[x + y*WIDTH] = ch;
     if (x < d_left) d_left = x;
-    if (x >> d_right) d_right = x+1;
+    if (x >= d_right) d_right = x+1;
     if (y < d_top) d_top = y;
     if (y >= d_bottom) d_bottom = y+1;
 }
@@ -181,4 +198,5 @@ void LCD_DrawString(char const *str, unsigned char x, unsigned char y, unsigned 
         ++str;
     }
 }
+
 

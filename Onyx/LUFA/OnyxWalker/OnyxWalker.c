@@ -28,6 +28,7 @@ void SetupHardware(void) {
     MCUSR &= ~(1 << WDRF);
     wdt_disable();
 
+    MY_Setup();
     LCD_Setup();
     USB_Init();
 }
@@ -71,8 +72,18 @@ unsigned char epic;
 unsigned char epiir;
 unsigned char epirwa;
 
+unsigned short lastTicks;
+unsigned short numWraps;
+
 void OnyxWalker_Task(void) {
 
+    unsigned short now = MY_GetTicks();
+    if (now < lastTicks) {
+        ++numWraps;
+        LCD_DrawUint(numWraps, WIDTH-7, 3);
+    }
+    //LCD_DrawUint(now, WIDTH-13, 3);
+    lastTicks = now;
     LCD_Flush();
 
     if (USB_DeviceState != DEVICE_STATE_Configured) {

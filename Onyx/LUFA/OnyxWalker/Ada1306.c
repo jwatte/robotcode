@@ -139,13 +139,6 @@ void LCD_Setup(void) {
     _End();
 
     LCD_Clear();
-    /*
-    LCD_Flush_Row(4, display);
-    LCD_Flush_Row(5, display);
-    LCD_Flush_Row(6, display);
-    LCD_Flush_Row(7, display);
-    LCD_Flush();
-    */
 }
 
 void LCD_Clear(void) {
@@ -162,9 +155,6 @@ void LCD_Flush(void) {
             LCD_Flush_Row(y, &display[WIDTH * y]);
         }
     }
-    _Begin();
-    _Cmd(SSD1306_DISPLAYALLONRESUME);
-    _End();
     d_left = WIDTH;
     d_top = HEIGHT;
     d_right = 0;
@@ -199,4 +189,17 @@ void LCD_DrawString(char const *str, unsigned char x, unsigned char y, unsigned 
     }
 }
 
+void LCD_DrawUint(unsigned short w, unsigned char x, unsigned char y) {
+    for (int i = 0; i < 5; ++i) {
+        unsigned char val;
+        if (w == 0 && i != 0) {
+            val = ' ';
+        }
+        else {
+            val = '0' + (w % 10);
+            w = w / 10;
+        }
+        LCD_DrawChar(val, x+4-i, y);
+    }
+}
 

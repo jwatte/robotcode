@@ -7,10 +7,10 @@
 #include "LUFAConfig.h"
 
 //  IN direction
-#define DATA_RX_EPNUM        1
-#define DATA_RX_EPSIZE     128
+#define DATA_RX_EPNUM      0x1
+#define DATA_RX_EPSIZE      64
 //  OUT direction
-#define DATA_TX_EPNUM        2
+#define DATA_TX_EPNUM      0x2
 #define DATA_TX_EPSIZE      64
 
 typedef struct {

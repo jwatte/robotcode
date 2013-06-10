@@ -23,41 +23,31 @@ const USB_Descriptor_Device_t PROGMEM DeviceDescriptor =
 
 const USB_Descriptor_Configuration_t PROGMEM ConfigurationDescriptor =
 {
-	.Config = {
+    .Config = {
         .Header                 = {
             .Size = sizeof(USB_Descriptor_Configuration_Header_t),
-            .Type = DTYPE_Configuration},
-			.TotalConfigurationSize = sizeof(USB_Descriptor_Configuration_t),
-			.TotalInterfaces        = 1,
-			.ConfigurationNumber    = 1,
-			.ConfigurationStrIndex  = NO_DESCRIPTOR,
-			.ConfigAttributes       = (USB_CONFIG_ATTR_RESERVED | USB_CONFIG_ATTR_SELFPOWERED),
-			.MaxPowerConsumption    = USB_CONFIG_POWER_MA(100)
-		},
-
-	.DATA_Interface = {
-			.Header                 = {
-                .Size = sizeof(USB_Descriptor_Interface_t),
-                .Type = DTYPE_Interface
-            },
-			.InterfaceNumber        = 0,
-			.AlternateSetting       = 0,
-			.TotalEndpoints         = 2,
-			.Class                  = USB_CSCP_VendorSpecificClass,
-			.SubClass               = USB_CSCP_NoDeviceSubclass,
-			.Protocol               = USB_CSCP_NoDeviceProtocol,
-			.InterfaceStrIndex      = NO_DESCRIPTOR
-		},
-
-    .DATA_DataOutEndpoint = {
-        .Header                 = {
-            .Size = sizeof(USB_Descriptor_Endpoint_t),
-            .Type = DTYPE_Endpoint
+            .Type = DTYPE_Configuration
         },
-        .EndpointAddress        = (ENDPOINT_DIR_OUT | DATA_TX_EPNUM),
-        .Attributes             = (EP_TYPE_BULK | ENDPOINT_ATTR_NO_SYNC | ENDPOINT_USAGE_DATA),
-        .EndpointSize           = DATA_TX_EPSIZE,
-        .PollingIntervalMS      = 0x0
+        .TotalConfigurationSize = sizeof(USB_Descriptor_Configuration_t),
+        .TotalInterfaces        = 1,
+        .ConfigurationNumber    = 1,
+        .ConfigurationStrIndex  = NO_DESCRIPTOR,
+        .ConfigAttributes       = USB_CONFIG_ATTR_RESERVED,
+        .MaxPowerConsumption    = USB_CONFIG_POWER_MA(200)
+    },
+
+    .DATA_Interface = {
+        .Header                 = {
+            .Size = sizeof(USB_Descriptor_Interface_t),
+            .Type = DTYPE_Interface
+        },
+        .InterfaceNumber        = 0,
+        .AlternateSetting       = 0,
+        .TotalEndpoints         = 2,
+        .Class                  = USB_CSCP_VendorSpecificClass,
+        .SubClass               = USB_CSCP_NoDeviceSubclass,
+        .Protocol               = USB_CSCP_NoDeviceProtocol,
+        .InterfaceStrIndex      = NO_DESCRIPTOR
     },
 
     .DATA_DataInEndpoint = {
@@ -68,6 +58,18 @@ const USB_Descriptor_Configuration_t PROGMEM ConfigurationDescriptor =
         .EndpointAddress        = (ENDPOINT_DIR_IN | DATA_RX_EPNUM),
         .Attributes             = (EP_TYPE_BULK | ENDPOINT_ATTR_NO_SYNC | ENDPOINT_USAGE_DATA),
         .EndpointSize           = DATA_RX_EPSIZE,
+        .PollingIntervalMS      = 0x0
+    },
+
+
+    .DATA_DataOutEndpoint = {
+        .Header                 = {
+            .Size = sizeof(USB_Descriptor_Endpoint_t),
+            .Type = DTYPE_Endpoint
+        },
+        .EndpointAddress        = (ENDPOINT_DIR_OUT | DATA_TX_EPNUM),
+        .Attributes             = (EP_TYPE_BULK | ENDPOINT_ATTR_NO_SYNC | ENDPOINT_USAGE_DATA),
+        .EndpointSize           = DATA_TX_EPSIZE,
         .PollingIntervalMS      = 0x0
     },
 

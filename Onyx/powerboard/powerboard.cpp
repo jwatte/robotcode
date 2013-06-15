@@ -2,24 +2,26 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/power.h>
+#include <avr/cpufunc.h>
 #include <util/atomic.h>
 
 #include "powerboard.h"
+#include "usiTwiSlave.h"
 
+#define AOUT_INDICATOR 0x0
+#define AOUT_DEBUG (0x4^AOUT_INDICATOR)
 #define AOUT_ARMED 0x8
 #define AOUT_GUNSON 0x80
 #define MUX_VSENSE 0
 #define AIN_VSENSE (1 << MUX_VSENSE)
+#define AOUT_SCL 0x10
+#define AOUT_SDA 0x40
 
 #define BOUT_PWRON 0x1
 #define BOUT_SERVOSON 0x2
 #define BOUT_FANSON 0x4
 
-#define VOLT_ADJUST 4
-#define VOLT_DIVIDE 1
-
-#define TWI_ADDR_READ 0x13
-#define TWI_ADDR_WRITE 0x12
+#define TWI_ADDR_7BIT 0x09
 
 
 #define STATE_PWR 0x1
@@ -42,9 +44,19 @@ unsigned short get_jiffies() {
 }
 
 
+static void _delay(unsigned short s) {
+    while (s > 0) {
+        _NOP();
+        _NOP();
+        _NOP();
+        --s;
+    }
+}
+
 
 unsigned short armed_out_jiffies = 0;
 unsigned short armed_out_wait = 0;
+unsigned short indicator_jiffies = 0;
 
 void blink_armed(unsigned short duration_j) {
     armed_out_jiffies = (get_jiffies() + duration_j) | 1;
@@ -69,12 +81,14 @@ void init_time() {
     TIMSK1 = (1 << TOIE1);  //  interrupt on overflow
 }
 
+#define INITIAL_ARMED_BLINK 110
+
 void init_ports() {
-    DDRA = (AOUT_ARMED | AOUT_GUNSON);
-    PORTA = AOUT_ARMED;
-    DDRB = (BOUT_PWRON | BOUT_SERVOSON | BOUT_FANSON);
+    DDRA = AOUT_ARMED | AOUT_GUNSON | AOUT_INDICATOR | AOUT_DEBUG;
+    PORTA = AOUT_ARMED | AOUT_INDICATOR;
+    DDRB = BOUT_PWRON | BOUT_SERVOSON | BOUT_FANSON;
     PORTB = BOUT_PWRON | BOUT_FANSON;
-    blink_armed(300);
+    blink_armed(INITIAL_ARMED_BLINK);
 }
 
 unsigned short _last_adc = 0x3ff;
@@ -101,98 +115,15 @@ void init_adc() {
 }
 
 
-enum {
-    TWIStateWaiting = 0,
-    TWIStateRecvAddress = 1,
-    TWIStateReceiving = 2,
-    TWIStateSending = 3
-};
-unsigned char twi_state = TWIStateWaiting;
-unsigned char twi_ptr = 0;
-unsigned short twi_last_state_time = 0;
-
 unsigned char write_state = STATE_FANS | STATE_PWR;
 unsigned short read_state;
-
-void twi_recv_address(unsigned short jifs, unsigned char sr) {
-    if (sr & (1 << USIOIF)) {
-        twi_last_state_time = jifs;
-        unsigned char br = USIBR;
-        if (br == TWI_ADDR_READ) {
-            USIDR = 0;
-            sr = (1 << USISIF) | (1 << USIOIF) | 14;    //  ack
-            twi_state = TWIStateSending;
-            twi_ptr = 0;
-            read_state = get_adc() * VOLT_ADJUST / VOLT_DIVIDE;
-        }
-        else if (br == TWI_ADDR_WRITE) {
-            USIDR = 0;
-            sr = (1 << USISIF) | (1 << USIOIF) | 14;    //  ack
-            twi_state = TWIStateReceiving;
-            twi_ptr = 0;
-        }
-        else {
-            twi_state = TWIStateWaiting;
-        }
-        USISR = sr;
-    }
-}
-
-void twi_receiving(unsigned short jifs, unsigned char sr) {
-    if (sr & (1 << USIOIF)) {
-        twi_last_state_time = jifs;
-        //  
-        write_state = USIBR;
-        USISR = sr;
-    }
-}
-
-void twi_sending(unsigned short jifs, unsigned char sr) {
-    if (sr & (1 << USIOIF)) {
-        twi_last_state_time = jifs;
-        //  
-        USIDR = (twi_ptr) ? (read_state & 0xff) : ((read_state >> 8) & 0xff);
-        USISR = sr;
-        twi_ptr = !twi_ptr;
-    }
-}
-
-void check_twi(unsigned short jifs) {
-    unsigned char sr = USISR;
-    if ((short)(jifs - twi_last_state_time) > 100) {
-        twi_state = TWIStateWaiting;
-        twi_last_state_time = jifs;
-    }
-    if (sr & (1 << USISIF)) {
-        twi_state = TWIStateRecvAddress;
-        twi_ptr = 0;
-    }
-    switch (twi_state) {
-    case TWIStateWaiting:       /* do nothing */ break;
-    case TWIStateRecvAddress:   twi_recv_address(jifs, sr); break;
-    case TWIStateReceiving:     twi_receiving(jifs, sr); break;
-    case TWIStateSending:       twi_sending(jifs, sr); break;
-    }
-    //  stop condition?
-    if (sr & (1 << USIPF)) {
-        twi_state = TWIStateWaiting;
-    }
-}
-
-void init_twi() {
-    power_usi_enable();
-    //  TWI mode, hold SCL low when receiving
-    //  clock on negative edge
-    USICR = (1 << USIWM1) | (1 << USIWM0) | (1 << USICS1) | (1 << USICS0);
-}
-
 
 
 void initialize() {
     init_time();
     init_ports();
     init_adc();
-    init_twi();
+    usiTwiSlaveInit( TWI_ADDR_7BIT );
 }
 
 
@@ -223,22 +154,49 @@ void update_state(unsigned short jifs) {
     }
 }
 
+#define ARMED_OUT_WAIT 200
+#define ARMED_OUT_BLINK 80
+#define INDICATOR_OUT_WAIT 30
+#define INDICATOR_OUT_BLINK 170
+
 void update_blink(unsigned short jifs) {
     if (write_state & STATE_GUNS) {
         if (!armed_out_jiffies && !armed_out_wait) {
-            armed_out_wait = (get_jiffies() + 300) | 1;
+            armed_out_wait = (get_jiffies() + ARMED_OUT_WAIT) | 1;
         }
         else if (armed_out_wait) {
             if ((short)(jifs - armed_out_wait) > 0) {
                 armed_out_wait = 0;
-                blink_armed(100);
+                blink_armed(ARMED_OUT_BLINK);
             }
         }
     }
     else {
         armed_out_wait = 0;
     }
+    unsigned short delay = INDICATOR_OUT_WAIT;
+    if (PORTA & AOUT_INDICATOR) {
+        delay = INDICATOR_OUT_BLINK;
+    }
+    if (jifs - indicator_jiffies >= delay) {
+        PORTA = PORTA ^ AOUT_INDICATOR;
+        indicator_jiffies += delay;
+    }
 }   
+
+
+void check_twi(unsigned short jifs) {
+    if (usiTwiDataInReceiveBuffer()) {
+        write_state = usiTwiReceiveByte();
+    }
+    if (usiTwiTransmitBufferEmpty()) {
+        read_state = get_adc();
+        ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+            usiTwiTransmitByte(read_state & 0xff);
+            usiTwiTransmitByte((read_state >> 8) & 0xff);
+        }
+    }
+}
 
 
 void loop() {

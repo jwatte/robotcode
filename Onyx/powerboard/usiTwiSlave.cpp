@@ -121,12 +121,10 @@ static void SET_USI_TO_READ_ACK( void )
 
 static void SET_USI_TO_TWI_START_CONDITION_MODE( void )
 {
-  /* set SDA as input */
-  DDR_USI &= ~( 1 << PORT_USI_SDA );
   USICR =
        /* enable Start Condition Interrupt, disable Overflow Interrupt */
        ( 1 << USISIE ) | ( 0 << USIOIE ) |
-       /* set USI in Two-wire mode, use USI Counter overflow hold */
+       /* set USI in Two-wire mode, no USI Counter overflow hold */
        ( 1 << USIWM1 ) | ( 0 << USIWM0 ) |
        /* Shift Register Clock Source = External, positive edge */
        /* 4-Bit Counter Source = external, both edges */
@@ -137,7 +135,6 @@ static void SET_USI_TO_TWI_START_CONDITION_MODE( void )
         /* clear all interrupt flags, except Start Cond */
         ( 0 << USI_START_COND_INT ) | ( 1 << USIOIF ) | ( 1 << USIPF ) |
         ( 1 << USIDC ) | ( 0x0 << USICNT0 );
-  overflowState = USI_SLAVE_CHECK_ADDRESS;
 }
 
 static void SET_USI_TO_SEND_DATA( void )
@@ -388,23 +385,33 @@ ISR( USI_START_VECTOR )
          // no toggle clock-port pin
          ( 0 << USITC );
 
-      USISR =
-           // clear interrupt flags - resetting the Start Condition Flag will
-           // release SCL
-           ( 1 << USI_START_COND_INT ) | ( 1 << USIOIF ) |
-           ( 1 << USIPF ) |( 1 << USIDC ) |
-           // set USI to sample 8 bits (count 16 external SCL pin toggles)
-           ( 0x0 << USICNT0);
-
   }
   else
   {
 stop_condition:
 
-    // a Stop Condition or timeout did occur
-    SET_USI_TO_TWI_START_CONDITION_MODE();
+    USICR =
+         // enable Start Condition Interrupt
+         ( 1 << USISIE ) |
+         // disable Overflow Interrupt
+         ( 0 << USIOIE ) |
+         // set USI in Two-wire mode, no USI Counter overflow hold
+         ( 1 << USIWM1 ) | ( 0 << USIWM0 ) |
+         // Shift Register Clock Source = external, positive edge
+         // 4-Bit Counter Source = external, both edges
+         ( 1 << USICS1 ) | ( 0 << USICS0 ) | ( 0 << USICLK ) |
+         // no toggle clock-port pin
+         ( 0 << USITC );
 
   } // end if
+
+  USISR =
+      // clear interrupt flags - resetting the Start Condition Flag will
+      // release SCL
+      ( 1 << USI_START_COND_INT ) | ( 1 << USIOIF ) |
+      ( 1 << USIPF ) |( 1 << USIDC ) |
+      // set USI to sample 8 bits (count 16 external SCL pin toggles)
+      ( 0x0 << USICNT0);
 
 } // end ISR( USI_START_VECTOR )
 

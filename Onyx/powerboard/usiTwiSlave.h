@@ -76,7 +76,7 @@ bool    usiTwiTransmitBufferEmpty( void );
 // permitted RX buffer sizes: 2, 4, 8, 16, 32, 64, 128 or 256
 //  Buffer size of 1 would cause constant stall
 
-#define TWI_RX_BUFFER_SIZE  ( 2 ) // jjg was 16
+#define TWI_RX_BUFFER_SIZE  ( 8 ) // jjg was 16
 #define TWI_RX_BUFFER_MASK  ( TWI_RX_BUFFER_SIZE - 1 )
 
 #if ( TWI_RX_BUFFER_SIZE & TWI_RX_BUFFER_MASK )
@@ -86,7 +86,7 @@ bool    usiTwiTransmitBufferEmpty( void );
 // permitted TX buffer sizes: 2, 4, 8, 16, 32, 64, 128 or 256
 //  Buffer size of 1 would cause constant stall
 
-#define TWI_TX_BUFFER_SIZE ( 2 ) // jjg was 16
+#define TWI_TX_BUFFER_SIZE ( 8 ) // jjg was 16
 #define TWI_TX_BUFFER_MASK ( TWI_TX_BUFFER_SIZE - 1 )
 
 #if ( TWI_TX_BUFFER_SIZE & TWI_TX_BUFFER_MASK )

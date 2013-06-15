@@ -8,7 +8,7 @@
 #include "powerboard.h"
 #include "usiTwiSlave.h"
 
-#define AOUT_INDICATOR 0x0
+#define AOUT_INDICATOR 0x4
 #define AOUT_DEBUG (0x4^AOUT_INDICATOR)
 #define AOUT_ARMED 0x8
 #define AOUT_GUNSON 0x80
@@ -69,8 +69,7 @@ void check_armed(unsigned short jifs) {
             armed_out_jiffies = 0;
             PORTA &= ~(AOUT_ARMED);
         }
-    }
-}
+    } }
 
 
 void init_time() {
@@ -115,6 +114,7 @@ void init_adc() {
 }
 
 
+unsigned char force_off = 0;
 unsigned char write_state = STATE_FANS | STATE_PWR;
 unsigned short read_state;
 
@@ -127,35 +127,27 @@ void initialize() {
 }
 
 
-void update_state(unsigned short jifs) {
-    if (write_state & STATE_FANS) {
-        PORTB |= BOUT_FANSON;
+void check_bit(unsigned char state, unsigned char check, unsigned char volatile &reg, unsigned char action) {
+    if (state & check) {
+        reg |= action;
     }
     else {
-        PORTB &= ~BOUT_FANSON;
-    }
-    if (write_state & STATE_SERVOS) {
-        PORTB |= BOUT_SERVOSON;
-    }
-    else {
-        PORTB &= ~BOUT_SERVOSON;
-    }
-    if (write_state & STATE_FANS) {
-        PORTB |= BOUT_FANSON;
-    }
-    else {
-        PORTB &= ~BOUT_FANSON;
-    }
-    if (write_state & STATE_GUNS) {
-        PORTA |= AOUT_GUNSON;
-    }
-    else {
-        PORTA &= ~AOUT_GUNSON;
+        reg &= ~action;
     }
 }
 
+void update_state(unsigned short jifs) {
+
+    unsigned char use_state = write_state & ~force_off;
+
+    check_bit(use_state, STATE_PWR, PORTB, BOUT_PWRON);
+    check_bit(use_state, STATE_SERVOS, PORTB, BOUT_SERVOSON);
+    check_bit(use_state, STATE_FANS, PORTB, BOUT_FANSON);
+    check_bit(use_state, STATE_GUNS, PORTA, AOUT_GUNSON);
+}
+
 #define ARMED_OUT_WAIT 200
-#define ARMED_OUT_BLINK 80
+#define ARMED_OUT_BLINK 50
 #define INDICATOR_OUT_WAIT 30
 #define INDICATOR_OUT_BLINK 170
 
@@ -191,13 +183,69 @@ void check_twi(unsigned short jifs) {
     }
     if (usiTwiTransmitBufferEmpty()) {
         read_state = get_adc();
-        ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-            usiTwiTransmitByte(read_state & 0xff);
-            usiTwiTransmitByte((read_state >> 8) & 0xff);
-        }
+        //  this is a race!
+        usiTwiTransmitByte(read_state & 0xff);
+        usiTwiTransmitByte((read_state >> 8) & 0xff);
     }
 }
 
+unsigned char indicator_state = -1;
+unsigned short last_indicator = 0;
+
+void update_indicator(unsigned short jifs) {
+    if (jifs - last_indicator > 40) {
+        bool bit = false;
+        ++indicator_state;
+        switch (indicator_state) {
+        case 0:
+            bit = false;
+            break;
+        case 1: case 2: case 3: case 4: case 5:
+            bit = (write_state & (1 << (indicator_state - 1))) != 0;
+            break;
+        default:
+            bit = true;
+            if (indicator_state >= 15) {
+                indicator_state = -1;
+            }
+            break;
+        }
+        if (bit) {
+            PORTA |= AOUT_INDICATOR;
+        }
+        else {
+            PORTA &= ~AOUT_INDICATOR;
+        }
+        last_indicator = jifs;
+    }
+}
+
+unsigned short last_reading_jifs;
+unsigned short last_reading;
+
+void check_voltage(unsigned short jifs) {
+    if (jifs - last_reading_jifs < 50) {
+        return;
+    }
+    unsigned short reading = get_adc();
+    unsigned short use_reading = reading;
+    if (reading < last_reading) {
+        use_reading = last_reading;
+    }
+    last_reading = reading;
+    last_reading_jifs = jifs;
+
+    //  0x34c == 16.8 Volts
+    //  voltage conversion factor is between 0.0199 and 0.02
+    if (use_reading < 0x283) {  //  12.8 Volts
+        force_off |= STATE_PWR | STATE_SERVOS;
+        PORTA |= AOUT_ARMED;
+        PORTA &= ~AOUT_INDICATOR;
+    }
+    else if (use_reading < 0x298) { //  13.0 Volts
+        force_off |= STATE_SERVOS;
+    }
+}
 
 void loop() {
     unsigned short jifs = get_jiffies();
@@ -205,6 +253,8 @@ void loop() {
     check_twi(jifs);
     update_state(jifs);
     update_blink(jifs);
+    update_indicator(jifs);
+    check_voltage(jifs);
 }
 
 

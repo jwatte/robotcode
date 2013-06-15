@@ -57,7 +57,7 @@ extern "C" {
 #endif
 
 void    usiTwiSlaveInit( uint8_t );
-void    usiTwiTransmitByte( uint8_t );
+bool    usiTwiTransmitByte( uint8_t );
 uint8_t usiTwiReceiveByte( void );
 bool    usiTwiDataInReceiveBuffer( void );
 bool    usiTwiTransmitBufferEmpty( void );

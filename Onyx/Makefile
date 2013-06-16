@@ -31,7 +31,7 @@ SRCS_$(1):=$$(wildcard tools/$(1)/*.cpp)
 OBJS_$(1):=$$(patsubst %.cpp,bld/%.o,$$(SRCS_$(1)))
 TOOL_OBJS+=$$(OBJS_$(1))
 bld/obj/$(1):	$$(OBJS_$(1)) $(LIB)
-	g++ -o $$@ $$(OBJS_$(1)) $$(LFLAGS)
+	g++ -o $$@ $$(OBJS_$(1)) $$(LFLAGS) -Wall -Werror
 endef
 
 $(foreach tool,$(TOOLS),$(eval $(call mk_tool,$(tool))))
@@ -41,7 +41,7 @@ SRCS_$(1):=$$(wildcard $(1)/*.cpp)
 OBJS_$(1):=$$(patsubst %.cpp,bld/%.o,$$(SRCS_$(1)))
 APP_OBJS+=$$(OBJS_$(1))
 bld/obj/$(1):	$$(OBJS_$(1)) $(LIB)
-	g++ -o $$@ $$(OBJS_$(1)) $$(LFLAGS)
+	g++ -o $$@ $$(OBJS_$(1)) $$(LFLAGS) -Wall -Werror
 endef
 
 $(foreach app,$(APPS),$(eval $(call mk_app,$(app))))
@@ -56,6 +56,6 @@ $(LIB):	$(OBJS_lib)
 
 bld/%.o:	%.cpp
 	@mkdir -p $(dir $@)
-	g++ -c -o $@ $< $(CFLAGS) -MMD
+	g++ -c -o $@ $< $(CFLAGS) -MMD -Wall -Werror -I.
 
 -include $(patsubst %.o,%.d,$(OBJS_lib) $(TOOL_OBJS) $(APP_OBJS))

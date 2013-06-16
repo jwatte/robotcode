@@ -7,11 +7,14 @@
 
 
 void MY_SetLed(unsigned char led, unsigned char state) {
+    if (led > 2) {
+        MY_Failure("Bad LED", led, 2);
+    }
     if (state) {
-        PORTF |= (1 << (5 + led));
+        PORTF |= (0x80 >> led);
     }
     else {
-        PORTF &= ~(1 << (5 + led));
+        PORTF &= ~(0x80 >> led);
     }
 }
 

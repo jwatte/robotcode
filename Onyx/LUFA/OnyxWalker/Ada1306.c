@@ -38,15 +38,15 @@ static unsigned char begun = 0;
 static void _Reset(void) {
     //  The data sheet talks about bringing reset down and up and down again.
     //  This may just be poor grammar, but do it nevertheless.
-    PORTF |= (1 << 1);
+    PORTD |= (1 << 5);
     MY_DelayUs(10);
-    PORTF &= ~(1 << 1);
+    PORTD &= ~(1 << 5);
     MY_DelayUs(10);
-    PORTF |= (1 << 1);
+    PORTD |= (1 << 5);
     MY_DelayUs(10);
-    PORTF &= ~(1 << 1);
+    PORTD &= ~(1 << 5);
     MY_DelayUs(10);
-    PORTF |= (1 << 1);
+    PORTD |= (1 << 5);
     MY_DelayUs(10);
 }
 
@@ -116,7 +116,7 @@ static void LCD_Flush_Row(unsigned char y, unsigned char const *display) {
 void LCD_Setup(void) {
     TWI_Init(TWI_BIT_PRESCALE_1, TWI_BITLENGTH_FROM_FREQ(1, 400000));
 
-    DDRF |= (1 << 1);   //  reset pin
+    DDRD |= (1 << 5);   //  reset pin
     _Reset();
 
     _Begin();
@@ -138,6 +138,12 @@ void LCD_Setup(void) {
     _Cmd(SSD1306_DISPLAYON);
     _End();
 
+    memset(display, 32, sizeof(display));
+    d_left = 0;
+    d_right = WIDTH;
+    for (unsigned char r = 0; r != 8; ++r) {
+        LCD_Flush_Row(r, display);
+    }
     LCD_Clear();
 }
 
@@ -189,8 +195,28 @@ void LCD_DrawString(char const *str, unsigned char x, unsigned char y, unsigned 
     }
 }
 
+void LCD_DrawFrac(unsigned short w, unsigned char ndig, unsigned char x, unsigned char y) {
+    int n = x+5;
+    for (unsigned char i = 0; i < 5; ++i) {
+        if (i == ndig) {
+            LCD_DrawChar('.', n, y);
+            --n;
+        }
+        unsigned char val;
+        if (w == 0 && i != 0) {
+            val = ' ';
+        }
+        else {
+            val = '0' + (w % 10);
+            w = w / 10;
+        }
+        LCD_DrawChar(val, n, y);
+        --n;
+    }
+}
+
 void LCD_DrawUint(unsigned short w, unsigned char x, unsigned char y) {
-    for (int i = 0; i < 5; ++i) {
+    for (unsigned char i = 0; i < 5; ++i) {
         unsigned char val;
         if (w == 0 && i != 0) {
             val = ' ';

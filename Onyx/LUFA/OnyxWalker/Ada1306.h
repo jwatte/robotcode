@@ -15,5 +15,6 @@ void LCD_Flush(void);
 void LCD_DrawChar(unsigned char ch, unsigned char x, unsigned char y);
 void LCD_DrawString(char const *str, unsigned char x, unsigned char y, unsigned char wrap);
 void LCD_DrawUint(unsigned short w, unsigned char x, unsigned char y);
+void LCD_DrawFrac(unsigned short w, unsigned char ndec, unsigned char x, unsigned char y);
 
 #endif  //  Ada1306_h

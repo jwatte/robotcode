@@ -24,6 +24,7 @@ unsigned char ping_packet[] = {
     (unsigned char)~(1 + 0x02 + 0x01)   //  checksum
 };
 
+#define BAUD_OFFSET 2
 #define ID_OFFSET 6
 #define CKSUM_OFFSET 9
 void set_id(unsigned char id) {
@@ -53,6 +54,11 @@ void do_packet(unsigned char const *start, size_t size) {
     std::cerr << hexnum(start[0]) << std::endl;
 }
 
+void usage() {
+    fprintf(stderr, "usage: scan [-baudbyte] [id ...]\n");
+    exit(1);
+}
+
 int main(int argc, char const *argv[]) {
     boost::shared_ptr<Settings> st(Settings::load("settings.ini"));
     boost::shared_ptr<Module> usbl(USBLink::open(st, boost::shared_ptr<Logger>()));
@@ -60,6 +66,15 @@ int main(int argc, char const *argv[]) {
     unsigned char init_junk = 0xfe;
     ul->raw_send(&init_junk, 1);
     time_t last = 0;
+    if (argc > 1 && argv[1][0] == '-') {
+        int i = -atoi(argv[1]);
+        if (i < 1 || i > 100) {
+            usage();
+        }
+        ping_packet[BAUD_OFFSET] = (unsigned char)i;
+        ++argv;
+        --argc;
+    }
     if (argc > 1) {
         set_id(boost::lexical_cast<unsigned int>(argv[1]));
         argc--;

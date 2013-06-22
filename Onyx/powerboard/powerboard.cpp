@@ -187,6 +187,7 @@ void check_twi(unsigned short jifs) {
         cli();
         usiTwiTransmitByte(read_state & 0xff);
         usiTwiTransmitByte((read_state >> 8) & 0xff);
+        usiTwiTransmitByte(write_state);
         usiTwiTransmitByte(force_off);
         sei();
     }

@@ -56,12 +56,13 @@ unsigned short MY_DelayTicks(unsigned short togo) {
     unsigned short start = TCNT1;
     while (1) {
         unsigned short d = TCNT1 - start;
+        start += d;
         if (d >= togo) {
             break;
         }
-        start += d;
         togo -= d;
     }
+    return start;
 }
 
 void MY_Failure(char const *txt, unsigned char a, unsigned char b) {

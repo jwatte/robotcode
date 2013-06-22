@@ -324,7 +324,6 @@ void USBLink::thread_fn() {
         libusb_handle_events_timeout_completed(ctx_, &tv, 0);
         xfer_->poke();
     }
-    std::cerr << "USBLink::thread_fn() returning" << std::endl;
 }
 
 std::string const &USBLink::name() {

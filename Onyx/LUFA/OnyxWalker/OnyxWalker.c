@@ -118,8 +118,8 @@ char const err_TMR[] = "Too much response";
 
 void add_response_sz(unsigned char code, unsigned char sz, unsigned char const *data) {
     unsigned char adj = (sz >= 15) ? 2 : 1;
-    if (sizeof(out_packet) - out_packet_ptr - adj < sz) {
-        MY_Failure(err_TMR, sz, sizeof(out_packet) - out_packet_ptr - adj);
+    if (sizeof(in_packet) - in_packet_ptr - adj < sz) {
+        MY_Failure(err_TMR, sz, sizeof(in_packet) - in_packet_ptr - adj);
     }
     if (sz < 15) {
         code = code | sz;
@@ -127,12 +127,12 @@ void add_response_sz(unsigned char code, unsigned char sz, unsigned char const *
     else {
         code = code | 0xf;
     }
-    out_packet[out_packet_ptr++] = code;
+    in_packet[in_packet_ptr++] = code;
     if (sz >= 15) {
-        out_packet[out_packet_ptr++] = sz;
+        in_packet[in_packet_ptr++] = sz;
     }
-    memcpy(&out_packet[out_packet_ptr], data, sz);
-    out_packet_ptr += sz;
+    memcpy(&in_packet[in_packet_ptr], data, sz);
+    in_packet_ptr += sz;
 }
 
 /* power */
@@ -140,13 +140,23 @@ void add_response_sz(unsigned char code, unsigned char sz, unsigned char const *
 #define POWER_WRITE_ADDR 0x12
 #define POWER_READ_ADDR 0x13
 
-unsigned short power_cvolts;
-unsigned char power_status = 0;
+/* these must live together in RAM */
+struct {
+    unsigned short p_cvolts;
+    unsigned char p_status;
+    unsigned char p_failure;
+}
+_power_data = { 0 };
+#define power_cvolts _power_data.p_cvolts
+#define power_status _power_data.p_status
+#define power_failure _power_data.p_failure
+/* end together */
+
 unsigned short last_cvolts;
 
 void power_tick(void) {
     unsigned char dummy;
-    if (TWI_ReadPacket(POWER_READ_ADDR, 1, &dummy, 0, (unsigned char *)&power_cvolts, 3) != TWI_ERROR_NoError) {
+    if (TWI_ReadPacket(POWER_READ_ADDR, 1, &dummy, 0, (unsigned char *)&_power_data, 4) != TWI_ERROR_NoError) {
         power_cvolts = 0;
     }
     else {
@@ -162,8 +172,9 @@ void set_status_power(unsigned char sz, unsigned char const *ptr) {
 }
 
 void get_status_power(void) {
-    unsigned char d[3] = { TargetPower, power_cvolts & 0xff, (power_cvolts >> 8) & 0xff };
-    add_response_sz(OpGetStatus, 3, d);
+    unsigned char d[5] = { TargetPower, power_cvolts & 0xff, (power_cvolts >> 8) & 0xff,
+        power_status, power_failure };
+    add_response_sz(OpGetStatus, 5, d);
 }
 
 void invalid_target(unsigned char target) {
@@ -235,6 +246,7 @@ bool waitchar(unsigned char ptr) {
         }
     }
     read_servo_buf[ptr] = UDR1;
+    return true;
 }
 
 enum {
@@ -394,7 +406,7 @@ void OnyxWalker_Task(void) {
     if (now - lastVolts > 15000) {
         lastVolts = now;
         ++voltBlink;
-        if ((power_cvolts > 1320 && !power_status) || (voltBlink & 1)) {
+        if ((power_cvolts > 1320 && !power_failure) || (voltBlink & 1)) {
             LCD_DrawFrac(power_cvolts, 2, 0, 3);
             LCD_DrawChar(' ', 6, 3);
             LCD_DrawChar('V', 7, 3);

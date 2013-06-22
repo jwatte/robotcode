@@ -354,7 +354,7 @@ static void dispatch_out(void) {
             sz = out_packet[ptr];
             ++ptr;
         }
-        if (ptr + sz > out_packet_ptr) {
+        if (ptr + sz > out_packet_ptr || ptr + sz < ptr) {
 too_big:
             MY_Failure("Too big recv", ptr + sz, out_packet_ptr);
         }
@@ -368,7 +368,7 @@ unknown_op:
         if (sz < msz) {
             MY_Failure("Too small data", sz, code);
         }
-        unsigned char *base = &out_packet[out_packet_ptr];
+        unsigned char *base = &out_packet[ptr];
         switch (code & 0xf0) {
         case OpSetStatus:
             set_status(base[0], sz-1, base+1);

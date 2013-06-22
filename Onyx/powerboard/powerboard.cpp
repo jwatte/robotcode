@@ -183,7 +183,6 @@ void check_twi(unsigned short jifs) {
     }
     if (usiTwiTransmitBufferEmpty()) {
         read_state = get_adc();
-        //  this is a race!
         cli();
         usiTwiTransmitByte(read_state & 0xff);
         usiTwiTransmitByte((read_state >> 8) & 0xff);

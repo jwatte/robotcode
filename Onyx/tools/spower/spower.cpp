@@ -156,7 +156,6 @@ int main(int argc, char const *argv[]) {
         }
         set_packet[3] = state;
         while (sr.state_ != state && !sr.decode(ul)) {
-            fprintf(stderr, "receive\n");
             ul->raw_send(set_packet, sizeof(set_packet));
             ul->raw_send(get_packet, sizeof(get_packet));
             ul->step();

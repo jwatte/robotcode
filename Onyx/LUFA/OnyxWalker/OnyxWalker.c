@@ -15,6 +15,17 @@
 //  Respond every 16 miliseconds, if not more often
 #define FLUSH_TICK_INTERVAL 1000
 
+#define RAW_READ_TIMEOUT 100
+
+#define MAX_WRITE_SIZE 64
+#define MAX_READ_SIZE 64
+
+#define DXL_READ_DATA 0x2
+#define DXL_WRITE_DATA 0x3
+
+#define ID_BROADCAST 0xfe
+
+
 void Reconfig(void);
 
 int main(void) {
@@ -54,8 +65,14 @@ void SetupHardware(void) {
     TWI_Init(TWI_BIT_PRESCALE_1, TWI_BITLENGTH_FROM_FREQ(1, 400000));
     Serial_Init(2000000, true);
 
-    DDRC |= (1 << 6);
+    //  noisy thing
     PORTC &= ~(1 << 6);
+    DDRC |= (1 << 6);
+
+    //  don't txen
+    PORTD &= ~(1 << 4);
+    PORTD |= (1 << 2);  //  pull-up
+    DDRD |= (1 << 4);
 }
 
 void EVENT_USB_Device_Connect(void) {
@@ -107,7 +124,7 @@ unsigned short numWraps;
 
 #define MAX_SERVOS 24
 
-unsigned char servo_stati[MAX_SERVOS];
+unsigned char servo_stati[MAX_SERVOS+1];
 
 unsigned char in_packet[DATA_RX_EPSIZE];
 unsigned char in_packet_ptr;
@@ -172,9 +189,19 @@ void set_status_power(unsigned char sz, unsigned char const *ptr) {
 }
 
 void get_status_power(void) {
-    unsigned char d[5] = { TargetPower, power_cvolts & 0xff, (power_cvolts >> 8) & 0xff,
-        power_status, power_failure };
+    unsigned char d[5] = {
+        TargetPower,
+        power_cvolts & 0xff,
+        (power_cvolts >> 8) & 0xff,
+        power_status,
+        power_failure
+    };
     add_response_sz(OpGetStatus, 5, d);
+}
+
+void get_status_servos(void) {
+    servo_stati[0] = TargetServos;
+    add_response_sz(OpGetStatus, MAX_SERVOS + 1, servo_stati);
 }
 
 void invalid_target(unsigned char target) {
@@ -196,50 +223,58 @@ void get_status(unsigned char target) {
     case TargetPower:
         get_status_power();
         break;
+    case TargetServos:
+        get_status_servos();
+        break;
     default:
         invalid_target(target);
     }
 }
 
-#define MAX_PACKET_SIZE 32
-#define CMD_READ_DATA 0x02
-#define CMD_WRITE_DATA 0x03
-
-#define MAX_WRITE_SIZE 64
-#define MAX_READ_SIZE 64
-
-void write_servo(unsigned char id, unsigned char reg, unsigned char sz, unsigned char const *ptr) {
-    if (sz > MAX_WRITE_SIZE) {
-        MY_Failure("Write Size", sz, MAX_WRITE_SIZE);
-    }
-    if (id >= MAX_SERVOS) {
-        MY_Failure("Servo ID", id, MAX_SERVOS-1);
-    }
+void servo_cmd(unsigned char id, unsigned char pre_len, unsigned char const *pre, unsigned char len, unsigned char const *ptr) {
     PORTD |= (1 << 4);
     unsigned char cs = 0;
     Serial_SendByte(0xff);
     Serial_SendByte(0xff);
     Serial_SendByte(id);
     cs += id;
-    Serial_SendByte(2 + sz);
-    cs += 3 + sz;
-    Serial_SendByte(CMD_WRITE_DATA);
-    cs += CMD_WRITE_DATA;
-    Serial_SendByte(reg);
-    cs += reg;
-    for (unsigned char ix = 0; ix != sz; ++ix) {
+    Serial_SendByte(len + pre_len + 1);
+    cs += len + pre_len + 1;
+    for (unsigned char ix = 0; ix != pre_len; ++ix) {
+        Serial_SendByte(pre[ix]);
+        cs += pre[ix];
+    }
+    for (unsigned char ix = 0; ix != len; ++ix) {
         Serial_SendByte(ptr[ix]);
         cs += ptr[ix];
     }
     Serial_SendByte(~cs);
-    while (!(UCSR1A & (1 << UDRE1)));
+    while (!(UCSR1A & (1 << UDRE1)))
+        ;
+    _delay_us(5);
     PORTD &= ~(1 << 4);
+}
+
+void write_servo(unsigned char id, unsigned char reg, unsigned char sz, unsigned char const *ptr) {
+
+    cli();
+
+    if (sz > MAX_WRITE_SIZE) {
+        MY_Failure("Write Size", sz, MAX_WRITE_SIZE);
+    }
+    if (id >= MAX_SERVOS && id != ID_BROADCAST) {
+        MY_Failure("Servo ID", id, MAX_SERVOS-1);
+    }
+    unsigned char cmd[2] = { DXL_WRITE_DATA, reg };
+    servo_cmd(id, 2, cmd, sz, ptr);
+
+    sei();
 }
 
 unsigned char read_servo_buf[MAX_READ_SIZE + 9];
 
 bool waitchar(unsigned char ptr) {
-    unsigned short ctr = 2000;
+    unsigned short ctr = 15000;
     while (!(Serial_IsCharReceived())) {
         if (ctr-- == 0) {
             return false;
@@ -251,67 +286,100 @@ bool waitchar(unsigned char ptr) {
 
 enum {
     ERR_NOTPRESENT = 0,
-    ERR_READ_ERROR = 1,
-    ERR_BAD_CHECKSUM = 2
+    ERR_BAD_SYNC1 = 1,
+    ERR_BAD_SYNC2 = 2,
+    ERR_BAD_ID = 3,
+    ERR_BAD_LENGTH = 4,
+    ERR_BAD_STATUS = 5,
+    ERR_READ_ERROR = 6,
+    ERR_BAD_CHECKSUM = 7,
 };
 
-void error_recv(unsigned char id, unsigned char kind) {
-    LCD_DrawUint(kind, WIDTH-5, 1);
-    LCD_DrawUint(id, WIDTH-8, 1);
-    LCD_DrawString("RcvErr", WIDTH-11, 1, 0);
+void error_recv(unsigned char id, unsigned char kind, unsigned char offset) {
+    LCD_DrawUint(offset, WIDTH-6, 1);
+    LCD_DrawUint(kind, WIDTH-9, 1);
+    LCD_DrawUint(id, WIDTH-12, 1);
+    LCD_DrawString("RcvErr", WIDTH-17, 1, 0);
+    LCD_DrawHex(read_servo_buf, offset+1, 1, 2);
 }
 
 
 void read_servo(unsigned char id, unsigned char reg, unsigned char sz) {
+
+    cli();
+    UCSR1B &= ~(1 << RXEN1);    //  reset receiver
+    _delay_us(1);
+    UCSR1B |= (1 << RXEN1);    //  reset receiver
+
     if (sz > MAX_READ_SIZE) {
         MY_Failure("Read Size", sz, MAX_READ_SIZE);
     }
-    if (id >= MAX_SERVOS) {
+    if (id >= MAX_SERVOS) { //  can't read from broadcast address
         MY_Failure("Servo ID", id, MAX_SERVOS-1);
     }
     unsigned char cs = 0;
     unsigned char ptr = 0;
-    read_servo_buf[0] = reg;
-    read_servo_buf[1] = sz;
-    write_servo(id, reg, 2, read_servo_buf);
+    unsigned char cmd[3] = { DXL_READ_DATA, reg, sz };
+
+
+    servo_cmd(id, 3, cmd, 0, cmd);
+    //  empty the receive pipe
+    while (Serial_IsCharReceived()) {
+        read_servo_buf[0] = UDR1;
+    }
+
+    //  now read response
     read_servo_buf[0] = 0xff;
     if (!waitchar(ptr) || read_servo_buf[ptr] != 0xff) {
-        error_recv(id, read_servo_buf[ptr] == 0xff ? ERR_NOTPRESENT : ERR_READ_ERROR);
-        return;
+        error_recv(id, read_servo_buf[ptr] == 0xff ? ERR_NOTPRESENT : ERR_BAD_SYNC1, ptr);
+        goto out;
     }
     if (!waitchar(ptr) || read_servo_buf[ptr] != 0xff) {
-        error_recv(id, ERR_READ_ERROR);
-        return;
+        error_recv(id, ERR_BAD_SYNC2, ptr);
+        goto out;
     }
     //  id
     if (!waitchar(ptr) || read_servo_buf[ptr] != id) {
-        error_recv(id, ERR_READ_ERROR);
-        return;
+        error_recv(id, ERR_BAD_ID, ptr);
+        goto out;
     }
+    //  save the ID
     ++ptr;
     //  length
-    if (!waitchar(ptr) || read_servo_buf[ptr] != sz) {
-        error_recv(id, ERR_READ_ERROR);
-        return;
+    if (!waitchar(ptr) || read_servo_buf[ptr] != sz + 2) {
+        error_recv(id, ERR_BAD_LENGTH, ptr);
+        goto out;
     }
-    cs = id + sz;
+    cs = id + sz + 2;
     if (!waitchar(ptr)) {
-        error_recv(id, ERR_READ_ERROR);
-        return;
+        error_recv(id, ERR_BAD_STATUS, ptr);
+        goto out;
     }
     servo_stati[id] = read_servo_buf[ptr];
     cs += read_servo_buf[ptr];
+    read_servo_buf[ptr] = reg;
+    //  return also what the length is
+    ++ptr;
     for (unsigned char ix = 0; ix != sz; ++ix) {
         if (!waitchar(ptr)) {
-            error_recv(id, ERR_READ_ERROR);
-            return;
+            error_recv(id, ERR_READ_ERROR, ptr);
+            goto out;
         }
         cs += read_servo_buf[ptr];
+        //  save the actual data
         ++ptr;
     }
+    cs = ~cs;
     if (!waitchar(ptr) || cs != read_servo_buf[ptr]) {
-        error_recv(id, ERR_BAD_CHECKSUM);
+        error_recv(id, ERR_BAD_CHECKSUM, ptr);
+        goto out;
     }
+    //  buf is id + reg + data
+    add_response_sz(OpReadServo, ptr, read_servo_buf);
+
+out:
+
+    sei();
 }
 
 void out_text(unsigned char sz, unsigned char const *ptr) {
@@ -325,13 +393,57 @@ void out_text(unsigned char sz, unsigned char const *ptr) {
     }
 }
 
+void raw_write(unsigned char sz, unsigned char const *data) {
+
+    cli();
+    PORTD |= (1 << 4);
+
+    unsigned char const *end = data + sz;
+    while (data < end) {
+        Serial_SendByte(*data);
+        data++;
+    }
+
+    //  wait for completion
+    while (!(UCSR1A & (1 << UDRE1)))
+        ;
+    _delay_us(5);
+
+    PORTD &= ~(1 << 4);
+    sei();
+}
+
+void raw_read(unsigned char sz) {
+
+    cli();
+
+    if (sz > MAX_READ_SIZE) {
+        MY_Failure("RawReadSize", sz, MAX_READ_SIZE);
+    }
+
+    unsigned short ticks = MY_GetTicks();
+    unsigned char offset = 0;
+    while (MY_GetTicks() - ticks < RAW_READ_TIMEOUT && offset < sz) {
+        if (Serial_IsCharReceived()) {
+            read_servo_buf[offset] = UDR1;
+            ++offset;
+        }
+    }
+
+    sei();
+
+    add_response_sz(OpRawRead, offset, read_servo_buf);
+}
+
 
 static const PROGMEM unsigned char min_size[] = {
-    0x2,
-    0x1,
-    0x3,
-    0x3,
-    0x2
+    0x2,    //  set status
+    0x1,    //  get status
+    0x3,    //  write servo
+    0x3,    //  read servo
+    0x2,    //  text out
+    0x1,    //  raw write
+    0x1,    //  raw read
 };
 
 static void dispatch_out(void) {
@@ -384,6 +496,12 @@ unknown_op:
             break; 
         case OpOutText:
             out_text(sz, base);
+            break;
+        case OpRawWrite:
+            raw_write(sz, base);
+            break;
+        case OpRawRead:
+            raw_read(base[0]);
             break;
         default:
             goto unknown_op;
@@ -458,6 +576,7 @@ void OnyxWalker_Task(void) {
     /* see if there's data from the host */
     Endpoint_SelectEndpoint(DATA_TX_EPNUM);
     Endpoint_SetEndpointDirection(ENDPOINT_DIR_OUT);
+    MY_SetLed(LED_act, false);
     if (Endpoint_IsConfigured() && 
         Endpoint_IsOUTReceived() && 
         Endpoint_IsReadWriteAllowed()) {
@@ -474,7 +593,6 @@ void OnyxWalker_Task(void) {
         }
         Endpoint_ClearOUT();
         dispatch_out();
-        MY_SetLed(LED_act, false);
     }
 }
 

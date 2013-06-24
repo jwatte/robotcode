@@ -146,7 +146,7 @@ void update_state(unsigned short jifs) {
     check_bit(use_state, STATE_GUNS, PORTA, AOUT_GUNSON);
 }
 
-#define ARMED_OUT_WAIT 200
+#define ARMED_OUT_WAIT 100
 #define ARMED_OUT_BLINK 50
 #define INDICATOR_OUT_WAIT 30
 #define INDICATOR_OUT_BLINK 170

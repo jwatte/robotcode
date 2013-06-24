@@ -229,3 +229,22 @@ void LCD_DrawUint(unsigned short w, unsigned char x, unsigned char y) {
     }
 }
 
+unsigned char hexdig(unsigned char val) {
+    if (val < 10) {
+        return '0' + val;
+    }
+    return 'A' + (val - 10);
+}
+
+void LCD_DrawHex(unsigned char const *buf, unsigned char sz, unsigned char x, unsigned char y) {
+    for (unsigned char ch = 0; ch < sz; ++ch) {
+        LCD_DrawChar(hexdig(buf[0] >> 4), x, y);
+        LCD_DrawChar(hexdig(buf[0] & 0xf), x+1, y);
+        LCD_DrawChar(' ', x+2, y);
+        x += 3;
+        if (x >= WIDTH-1) {
+            break;
+        }
+        buf += 1;
+    }
+}

@@ -2,6 +2,8 @@
 #define ServoSet_h
 
 #include <boost/shared_ptr.hpp>
+//  eek!
+#include "../LUFA/OnyxWalker/MyProto.h"
 
 class USBLink;
 class Module;
@@ -131,17 +133,18 @@ public:
     void step();
     void set_torque(unsigned short thousandths, unsigned char steps = 1);
     unsigned int queue_depth();
-    //  byte 0 is the number of detected droped byte events.
-    //  byte 1 .. n is status byte for servo 0 .. n-1.
-    //  return value is OR of servo status bytes.
+    //  byte 0 .. n-1 is status byte for servo 0 .. n-1.
+    //  return value is number of actual status bytes
     unsigned char get_status(unsigned char *bytes, unsigned char cnt);
     //  get a particular register across all servos
-    void slice_reg1(unsigned char reg, unsigned char *bytes, unsigned char cnt);
-    void slice_reg2(unsigned char reg, unsigned short *bytes, unsigned char cnt);
-    //  set many poses over some future amount of time
-    void lerp_pose(unsigned short ms, cmd_pose const *pose, unsigned char npose);
-    unsigned char battery();
-    unsigned char dips();
+    unsigned char slice_reg1(unsigned char reg, unsigned char *bytes, unsigned char cnt);
+    unsigned char slice_reg2(unsigned char reg, unsigned short *bytes, unsigned char cnt);
+
+    unsigned short battery();
+    unsigned char power();
+    unsigned char power_fail();
+    void set_power(unsigned char pwr);
+
     //  this is needed because ServoSet actually does protocol 
     //  framing, which ought to live in USBLink
     void raw_cmd(void const *data, unsigned char sz);
@@ -162,12 +165,15 @@ private:
     unsigned char lastServoId_;
     unsigned char lastSeq_;
     unsigned char nextSeq_;
-    unsigned char battery_;
-    unsigned char dips_;
+    unsigned short battery_;
+    unsigned char power_;
+    unsigned char powerFail_;
 
     void add_cmd(servo_cmd const &cmd);
-    unsigned char do_read_complete(unsigned char const *pack, unsigned char sz);
-    unsigned char do_status_complete(unsigned char const *pack, unsigned char sz);
+    void do_read_complete(unsigned char const *pack, unsigned char sz);
+    void do_status_complete(unsigned char const *pack, unsigned char sz);
+    void do_status_power(unsigned char const *pack, unsigned char sz);
+    void do_status_servos(unsigned char const *pack, unsigned char sz);
 };
 
 #endif  //  ServoSet_h

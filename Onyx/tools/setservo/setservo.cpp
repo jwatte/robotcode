@@ -15,9 +15,10 @@
 
 
 void usage() {
-    fprintf(stderr, "usage: setservo [-v] [-t nnn] id:position ...\n");
-    fprintf(stderr, "id = 1 .. 254\n");
+    fprintf(stderr, "usage: setservo [-v] [-t torque] id:position ...\n");
+    fprintf(stderr, "id       = 1 .. 254\n");
     fprintf(stderr, "position = 0 .. 4095\n");
+    fprintf(stderr, "torque   = 0 .. 1023\n");
     exit(1);
 }
 
@@ -33,8 +34,7 @@ public:
         for (size_t i = 0; i < size; ++i)
         {
             ss << " " << (int)((unsigned char *)data)[i];
-        }
-        std::cerr << ss.str() << std::endl;
+        } std::cerr << ss.str() << std::endl;
     }
 };
 
@@ -90,7 +90,13 @@ again:
             }
         }
         if (!(i & 31)) {
-            fprintf(stderr, "battery: %.1f\n", ss.battery() / 10.0f);
+            fprintf(stderr, "battery: %.1f\n", ss.battery() / 100.0f);
+            unsigned char sliced[32] = { 0 };
+            unsigned char n = ss.slice_reg1(REG_PRESENT_TEMPERATURE, sliced, 32);
+            for (unsigned char j = 0; j != n; ++j) {
+                std::cerr << " " << (int)sliced[j] << "C";
+            }
+            std::cerr << std::endl;
         }
         if (!nst) {
             unsigned char bb[32] = { 0 };

@@ -56,6 +56,6 @@ $(LIB):	$(OBJS_lib)
 
 bld/%.o:	%.cpp
 	@mkdir -p $(dir $@)
-	g++ -c -o $@ $< $(CFLAGS) -MMD -Wall -Werror -I.
+	g++ -c -o $@ $< $(CFLAGS) -MMD -Wall -Werror -I. -pipe
 
 -include $(patsubst %.o,%.d,$(OBJS_lib) $(TOOL_OBJS) $(APP_OBJS))

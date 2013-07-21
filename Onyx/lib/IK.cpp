@@ -145,7 +145,34 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     //  Knee-to-tip is split into two segments "a" and "b" at the 
     //  intersection of the perpendicular line "c" from base to ankle.
     //  The "b" segment may have negative length.
+    //
+    //  c2+a2 = third2
+    //  c2+b2 = second2
+    //  a+b = distance
+    //  b = distance-a
+    //  c2+(distance-a)2 = second2
+    //  a2-(distance-a)2 = third2-second2
+    //  a2-distance2+2adistance-a2 = third2-second2
+    //  2adistance-distance2 = third2-second2
+    //  a = (third2-second2+distance2)/2distance
 
+    float len_a = (leg.l2-leg.x1+distance*distance)/(2*distance);
+    float len_b = distance-len_a;
+    assert(leg.l2 >= len_a);
+    float len_c = sqrtf(leg.l2*leg.l2-len_a*len_a);
+
+    //  alpha = angle from hip plane to tip
+    //  delta = angle from shin to hip/tip
+    //  beta = angle from hip plane to shin (which we seek)
+    float hdist = sqrtf(hdx*hdx + hdy*hdy);
+    float alpha = atan2f(-dz, hdist);
+    float delta = atan2f(len_c, len_b);
+    float beta = delta - alpha;
+    float ang1 = beta;
+
+    //  epsilon = angle between "c" and foot
+    float epsilon = atan2f(len_a, len_c);
+    float ang2 = hpi - delta + epsilon;
 
     ang0 = ang0 + leg.delta0;
     if (ang0 < leg.min0) {

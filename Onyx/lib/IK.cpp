@@ -2,6 +2,7 @@
 #include "ServoSet.h"
 #include <math.h>
 #include <boost/lexical_cast.hpp>
+#include "Transform.h"
 
 #define CENTER_X 45
 #define CENTER_Y 62
@@ -224,5 +225,26 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     return ret;
 }
 
+
+void forward_leg(leginfo const &leg, legpose const &lp, float &ox, float &oy, float &oz)
+{
+    //  right now, only leg 0
+    assert(leg.cx > 0 && leg.cy > 0 && leg.cz > 0);
+
+    Transform t(
+        Translate(leg.cx, leg.cy, leg.cz) *
+        Rotate(lp.a*M_PI/2048 - leg.delta0, 0, 1, 0) *
+        Translate(0, leg.x0, 0) *
+        Rotate(lp.b*M_PI/2048 - leg.delta1, 1, 0, 0) *
+        Translate(0, leg.x1, 0) *
+        Rotate(lp.c*M_PI/2048 - leg.delta2, 1, 0, 0) *
+        Translate(0, 0, -leg.l2) *
+        Transform()
+        );
+    vec4 o(t * vec4(0, 0, 0, 1));
+    ox = o.v[0];
+    oy = o.v[1];
+    oz = o.v[2];
+}
 
 

@@ -28,6 +28,16 @@ usage:
             std::cerr << "leg " << leg <<  "  error: " << solve_error << std::endl;
             allok = false;
         }
+        else {
+            float ox = 0, oy = 0, oz = 0;
+            forward_leg(legs[leg], op, ox, oy, oz);
+            if (fabsf(ox-x) > 2 || fabsf(oy-y) > 2 || fabsf(oz-z) > 2) {
+                std::cerr << "position after solution does not match input: " <<
+                    "x=" << ox << " (" << x << "), y=" << oy << " (" << y <<
+                    ") z=" << oz << " (" << z << ")" << std::endl;
+                allok = false;
+            }
+        }
         std::cerr << "leg " << leg << ": " << op.a << " " << op.b << " " << op.c << std::endl;
         argc -= 4;
         argv += 4;

@@ -54,6 +54,7 @@ extern std::string solve_error;
 
 extern bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op);
 extern void get_leg_params(legparams &op);
+extern void forward_leg(leginfo const &leg, legpose const &lp, float &ox, float &oy, float &oz);
 
 #endif  //  Onyx_IK_h
 

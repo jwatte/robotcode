@@ -14,23 +14,32 @@ struct legparams {
     float third_length;
 };
 
-enum legori {
-    legori_forward, legori_45_out, legori_90_out, legori_90_up, legori_90_down
-};
-
 struct leginfo {
+    //  horizontal pivot location
     float cx;           //  center x in body space
     float cy;           //  center y in body space
     float cz;           //  center z in body space
+
+    //  leg segment dimensions
+
     float x0;           //  what extent at center for 1st joint
     float direction0;   //  positive (counterclockwise, inward) or negative
+    float delta0;       //  delta angle 0
+    float min0;         //  in radians
+    float max0;         //  in radians
+
     float x1;           //  extent at center for 2nd joint
     float direction1;   //  positive (counterclockwise, up) or negative
+    float delta1;       //  delta angle 1
+    float min1;         //  in radians
+    float max1;         //  in radians
+
     float l2;           //  length of x2/z2
     float direction2;   //  positive (counterclockwise, up/out) or negative
-    legori servo0;      //  orientation of "center" of first servo
-    legori servo1;      //  orientation of "center" of second servo
-    legori servo2;      //  orientation of "center" of third servo
+    float delta2;       //  delta angle 2
+    float min2;         //  in radians
+    float max2;         //  in radians
+
 };
 
 struct legpose {

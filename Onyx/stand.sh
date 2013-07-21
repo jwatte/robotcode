@@ -1,3 +1,3 @@
 #!/bin/sh
-trap 'bld/obj/off' EXIT SIGINT
-bld/obj/setservo -t 900 14:2048 13:2048 1:2700 2:1400 3:1400 4:1400 5:2700 6:2700 7:1400 8:2700 9:2700 10:2700 11:1400 12:1400
+trap 'bld/obj/spower noservos' EXIT SIGINT
+bld/obj/setservo -t 500 1:2600 2:2550 3:2550 4:1500 5:1530 6:1530 7:1500 8:1530 9:1530 10:2600 11:2550 12:2550

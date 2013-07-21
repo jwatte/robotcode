@@ -77,6 +77,7 @@ again:
     for (auto ptr(positions.begin()), end(positions.end()); ptr != end; ++ptr) {
         ss.add_servo((*ptr).first, (*ptr).second);
     }
+    ss.set_power(7);
     int i = 0;
     int nst = 0;
     while (true) {

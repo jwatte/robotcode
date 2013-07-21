@@ -12,7 +12,7 @@
 #define THIRD_LENGTH 161
 #define THIRD_HORIZONTAL 50
 
-#define THIRD_ANGLE (acosf(THIRD_HORIZONTAL/THIRD_LENGTH))
+#define THIRD_ANGLE (asinf(THIRD_HORIZONTAL/THIRD_LENGTH))
 
 //  The direction constant is additionally 
 //  multiplied by sgn(xpos)*sgn(ypos)
@@ -20,22 +20,22 @@ leginfo legs[] = {
     {   CENTER_X, CENTER_Y, CENTER_Z,
         FIRST_LENGTH, -1, 0,            -0.6*M_PI, 0.1*M_PI,
         SECOND_LENGTH, 1, 0,            -0.25*M_PI, 0.5*M_PI,
-        THIRD_LENGTH,  1, THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
+        THIRD_LENGTH,  1, -THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
         },
     { -CENTER_X, CENTER_Y, CENTER_Z,
         FIRST_LENGTH, -1, 0,            -0.6*M_PI, 0.1*M_PI,
         SECOND_LENGTH, 1, 0,            -0.25*M_PI, 0.5*M_PI,
-        THIRD_LENGTH,  1, THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
+        THIRD_LENGTH,  1, -THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
         },
     { CENTER_X, -CENTER_Y, CENTER_Z, 
         FIRST_LENGTH, -1, 0,            -0.6*M_PI, 0.1*M_PI,
         SECOND_LENGTH, 1, 0,            -0.25*M_PI, 0.5*M_PI,
-        THIRD_LENGTH,  1, THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
+        THIRD_LENGTH,  1, -THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
         },
     { -CENTER_X, -CENTER_Y, CENTER_Z,
         FIRST_LENGTH, -1, 0,            -0.6*M_PI, 0.1*M_PI,
         SECOND_LENGTH, 1, 0,            -0.25*M_PI, 0.5*M_PI,
-        THIRD_LENGTH,  1, THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
+        THIRD_LENGTH,  1, -THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
         },
 };
 
@@ -119,14 +119,18 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     }
     if (distance < minreach) {
         ret = false;
-        solve_error = "Leg cannot reach close to knee.";
+        std::stringstream ss;
+        ss << "distance=" << distance << ", minreach=" << minreach << ", leg too close to knee.";
+        solve_error = ss.str();
         //  fix up by moving leg downwards
         dz = -minreach;
         distance = sqrtf(hdx*hdx + hdy*hdy + dz*dz);
     }
     if (distance > maxreach) {
         ret = false;
-        solve_error = "Leg cannot reach far from body.";
+        std::stringstream ss;
+        ss << "distance=" << distance << ", minreach=" << minreach << ", leg too far from body.";
+        solve_error = ss.str();
         //  fix up by moving closer to body
         hdx *= maxreach / distance * 0.9999;
         hdy *= maxreach / distance * 0.9999;
@@ -135,28 +139,15 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     }
     assert(distance >= minreach && distance <= maxreach);
 
-    //  Now I have a triangle, from knee joint, to ankle joint, to foot contact point.
-    //  I know the length of each of the sides; now I want to know the coordinates of 
-    //  the sides so I can calculate the angles.
-    //  a == distance, b == x1, c == l2
-    //  A = angle at ankle, B = angle at foot, C = angle at knee (from foot, to ankle)
-    //  Cosine rule: a2 = b2 + c2 - 2bc cos A.
-    float cosA = (leg.x1*leg.x1 + leg.l2*leg.l2 - distance*distance) / (2 * leg.x1 * leg.l2);
-    assert(cosA <= 1.0f);
-    float ang2 = acosf(cosA) - hpi;
-    float cosC = (leg.x1*leg.x1 + distance*distance - leg.l2*leg.l2) / (2 * leg.x1 * distance);
-    assert(cosC <= 1.0f);
-    float angC = acosf(cosC);
-    //  Now, I actually know the right triangle from point of contact, to below knee, to knee
-    float xydist = sqrtf(hdx*hdx + hdy*hdy);
-    float Bprime = hpi - atan2f(xydist, -dz);
-    float ang1 = angC - Bprime;
-    if (ang1 > hpi && z < 0) {
-        assert(angC < M_PI);
-        ang1 += (angC - M_PI) * 2;
-        assert(ang1 <= hpi);
-    }
+    //  Two-bone IK to find the angles of the knee and ankle joints
+    //  First, split the triangle in two right-angle triangles, where 
+    //  the base is distance from knee to tip.
+    //  Knee-to-tip is split into two segments "a" and "b" at the 
+    //  intersection of the perpendicular line "c" from base to ankle.
+    //  The "b" segment may have negative length.
 
+
+    ang0 = ang0 + leg.delta0;
     if (ang0 < leg.min0) {
         ang0 = leg.min0;
         ret = false;
@@ -167,6 +158,7 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
         ret = false;
         solve_error = "hip turn above maximum";
     }
+    ang1 = ang1 + leg.delta1;
     if (ang1 < leg.min1) {
         ang1 = leg.min1;
         ret = false;
@@ -177,6 +169,7 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
         ret = false;
         solve_error = "knee turn above maximum";
     }
+    ang2 = ang2 + leg.delta2;
     if (ang2 < leg.min2) {
         ang2 = leg.min2;
         ret = false;
@@ -188,9 +181,9 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
         solve_error = "angle turn above maximum";
     }
 
-    ang0 = (ang0 + leg.delta0) * (flip ? -1 : 1) * leg.direction0;
-    ang1 = (ang1 + leg.delta1) * (flip ? -1 : 1) * leg.direction1;
-    ang2 = (ang2 + leg.delta2) * (flip ? -1 : 1) * leg.direction2;
+    ang0 = ang0 * (flip ? -1 : 1) * leg.direction0;
+    ang1 = ang1 * (flip ? -1 : 1) * leg.direction1;
+    ang2 = ang2 * (flip ? -1 : 1) * leg.direction2;
 
     //  Now, orient the output solution based on the orientation of the servos
     op.a = 2048 + ang0 * 2048 / M_PI;  //  assume ori right/outwards

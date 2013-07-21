@@ -13,7 +13,7 @@ usage:
         std::cerr << "lengths: " << lp.first_length << " " << lp.second_length << " " << lp.third_length << std::endl;
         exit(1);
     }
-    bool allok = true;
+    ServoSet ss(true, boost::shared_ptr<Logger>());
     while (argc > 1) {
         int leg = atoi(argv[1]);
         float x = atof(argv[2]);
@@ -26,11 +26,32 @@ usage:
         bool ret = solve_leg(legs[leg], x, y, z, op);
         if (!ret) {
             std::cerr << "leg " << leg <<  "  error: " << solve_error << std::endl;
-            allok = false;
         }
         std::cerr << "leg " << leg << ": " << op.a << " " << op.b << " " << op.c << std::endl;
+
+        for (int i = 0; i < 3; ++i) {
+            ss.add_servo(i + leg * 3 + 1, 2048);
+            ss.id(i + leg * 3 + 1).set_goal_position(((short *)&op.a)[i]);
+        }
         argc -= 4;
         argv += 4;
     }
-    return allok ? 0 : 1;
+    ss.set_torque(1023, 1);
+    ss.set_power(7);    //  power, servos, fans
+    int n = 0;
+    while (true) {
+        ss.step();
+        usleep(50000);
+        ++n;
+        if (n == 20) {
+            unsigned char bytes[32] = { 0 };
+            ss.slice_reg1(REG_PRESENT_TEMPERATURE, bytes, 32);
+            for (int i = 1; i != 13; ++i) {
+                std::cout << (int)bytes[i] << " ";
+            }
+            std::cout << std::endl;
+            n = 0;
+        }
+    }
+    return 0;
 }

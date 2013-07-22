@@ -215,15 +215,15 @@ static void do_display() {
     draw_sprite(g_bar, 16, g_state.loss / 4 + 1, 38, 630);
 
     //  battery voltage meter
-    unsigned char bat = g_state.battery;
-    if (bat < 128) {
-        bat = 128;
+    unsigned short bat = g_state.battery;
+    if (bat < 1280) {
+        bat = 1280;
     }
-    if (bat > 144) {
+    if (bat > 1440) {
         //  green goodness
         glColor4ub(32, 128, 96, 128);
     }
-    else if (bat > 137) {
+    else if (bat > 1370) {
         //  yellow warning
         if ((int)(fmod(now, 4.0) * 2) % 4) {
             glColor4ub(32, 128, 96, 128);
@@ -241,7 +241,7 @@ static void do_display() {
             glColor4ub(255, 96, 32, 255);
         }
     }
-    draw_sprite(g_bar, (bat - 127) * 5, 22, 200, 680);
+    draw_sprite(g_bar, (bat - 1270) / 2, 22, 200, 680);
 
     /* text */
     glColor4f(0, 0, 0, 0.25f);

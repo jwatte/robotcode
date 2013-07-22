@@ -21,7 +21,7 @@ struct GuiState {
     unsigned char hitdir;
     unsigned char status;
     unsigned char loss;
-    unsigned char battery;
+    unsigned short battery;
 };
 
 class ITime;

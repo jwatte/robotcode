@@ -26,7 +26,7 @@ void usage() {
 
 
 void format_battery(logrec const *rec, void const *data, size_t size) {
-    fprintf(stdout, "battery, %.1f\n", rec->value);
+    fprintf(stdout, "battery, %.2f\n", rec->value / 100.0);
 }
 
 void format_error(logrec const *rec, void const *data, size_t size) {

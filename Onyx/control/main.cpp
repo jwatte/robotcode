@@ -35,7 +35,7 @@ IPacketizer *ipacketizer;
 bool has_robot = false;
 double last_status_time = 0;
 int hitpoints = 21;
-unsigned char battery = 0;
+unsigned short battery = 0;
 
 double last_vf_request;
 static GuiState gs;

@@ -39,7 +39,7 @@ unsigned short MAX_TORQUE = 900;
 
 static ITime *itime;
 static IStatus *istatus;
-static unsigned char battery;
+static unsigned short battery;
 static unsigned char maxtemp;
 static volatile bool running = true;
 
@@ -144,7 +144,7 @@ void usb_thread_fn() {
         frames = frames + 1;
         if (thetime - intime > 20) {
             fprintf(stderr, "\nusb fps: %.1f  battery: %.1f  maxtemp: %d\n", frames / (thetime - intime),
-                (float)battery / 10.0, maxtemp);
+                (float)battery / 100.0, maxtemp);
             if (!REAL_USB) {
                 fprintf(stderr, "\n1:%d 2:%d 3:%d  4:%d 5:%d 6:%d  7:%d 8:%d 9:%d  10:%d 11:%d 12:%d\n",
                     last_pose[0].a, last_pose[0].b, last_pose[0].c,

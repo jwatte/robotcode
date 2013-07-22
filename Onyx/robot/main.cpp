@@ -509,7 +509,7 @@ usage:
         thetime = read_clock();
         frames = frames + 1;
         if (thetime - intime > (REAL_USB ? 20 : 2)) {
-            fprintf(stderr, "main fps: %.1f  battery: %.1f\n", frames / (thetime - intime),
+            fprintf(stderr, "main fps: %.1f  battery: %.2f\n", frames / (thetime - intime),
                 (float)battery / 100.0);
             frames = 0;
             intime = thetime;

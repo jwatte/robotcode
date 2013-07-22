@@ -91,7 +91,7 @@ again:
             }
         }
         if (!(i & 31)) {
-            fprintf(stderr, "battery: %.1f\n", ss.battery() / 100.0f);
+            fprintf(stderr, "battery: %.2f\n", ss.battery() / 100.0f);
             unsigned char sliced[32] = { 0 };
             unsigned char n = ss.slice_reg1(REG_PRESENT_TEMPERATURE, sliced, 32);
             for (unsigned char j = 0; j != n; ++j) {

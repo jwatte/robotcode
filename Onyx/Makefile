@@ -26,12 +26,14 @@ delbld:
 all clean:
 	make -C LUFA $@ && make -C powerboard $@
 
+LIB_displaypose:=-lncurses
+
 define mk_tool
 SRCS_$(1):=$$(wildcard tools/$(1)/*.cpp)
 OBJS_$(1):=$$(patsubst %.cpp,bld/%.o,$$(SRCS_$(1)))
 TOOL_OBJS+=$$(OBJS_$(1))
 bld/obj/$(1):	$$(OBJS_$(1)) $(LIB)
-	g++ -o $$@ $$(OBJS_$(1)) $$(LFLAGS) -Wall -Werror
+	g++ -o $$@ $$(OBJS_$(1)) $$(LFLAGS) -Wall -Werror $(LIB_$(1))
 endef
 
 $(foreach tool,$(TOOLS),$(eval $(call mk_tool,$(tool))))

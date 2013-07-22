@@ -21,22 +21,22 @@ leginfo legs[] = {
     {   CENTER_X, CENTER_Y, CENTER_Z,
         FIRST_LENGTH, -1, 0,            -0.6*M_PI, 0.1*M_PI,
         SECOND_LENGTH, 1, 0,            -0.25*M_PI, 0.5*M_PI,
-        THIRD_LENGTH,  1, THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
+        THIRD_LENGTH,  1, -THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
         },
     { -CENTER_X, CENTER_Y, CENTER_Z,
         FIRST_LENGTH, -1, 0,            -0.6*M_PI, 0.1*M_PI,
         SECOND_LENGTH, 1, 0,            -0.25*M_PI, 0.5*M_PI,
-        THIRD_LENGTH,  1, THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
+        THIRD_LENGTH,  1, -THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
         },
     { CENTER_X, -CENTER_Y, CENTER_Z, 
         FIRST_LENGTH, -1, 0,            -0.6*M_PI, 0.1*M_PI,
         SECOND_LENGTH, 1, 0,            -0.25*M_PI, 0.5*M_PI,
-        THIRD_LENGTH,  1, THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
+        THIRD_LENGTH,  1, -THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
         },
     { -CENTER_X, -CENTER_Y, CENTER_Z,
         FIRST_LENGTH, -1, 0,            -0.6*M_PI, 0.1*M_PI,
         SECOND_LENGTH, 1, 0,            -0.25*M_PI, 0.5*M_PI,
-        THIRD_LENGTH,  1, THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
+        THIRD_LENGTH,  1, -THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
         },
 };
 
@@ -177,10 +177,10 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     float ang2 = hpi - delta + gamma;
     ang2 = ang2 - hpi;
 
-    std::cerr << "len_a=" << len_a << ", len_b=" << len_b << ", len_c=" <<
-        len_c << ", hdist=" << hdist << ", alpha=" << alpha << ", beta=" << 
-        beta << ", delta=" << delta << ", gamma=" << gamma << ", ang0=" << 
-        ang0 << ", ang1=" << ang1 << ", ang2=" << ang2 << std::endl;
+    //std::cerr << "len_a=" << len_a << ", len_b=" << len_b << ", len_c=" <<
+    //    len_c << ", hdist=" << hdist << ", alpha=" << alpha << ", beta=" << 
+    //    beta << ", delta=" << delta << ", gamma=" << gamma << ", ang0=" << 
+    //    ang0 << ", ang1=" << ang1 << ", ang2=" << ang2 << std::endl;
 
     ang0 = ang0 - leg.delta0;
     if (ang0 < leg.min0) {
@@ -236,45 +236,36 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
 void forward_leg(leginfo const &leg, legpose const &lp, float &ox, float &oy, float &oz)
 {
     float flip = 1;
+    float cx = leg.cx;
+    float cy = leg.cy;
+    float cz = leg.cz;
     if (leg.cx < 0) {
         flip = flip * -1;
+        cx = -cx;
     }
     if (leg.cy < 0) {
         flip = flip * -1;
+        cy = -cy;
     }
-    /*
-    Transform t(
-        Translate(leg.cx, leg.cy, leg.cz) *
-        Rotate((lp.a - 2048)*M_PI/2048 + leg.delta0, 0, leg.direction0 * flip, 0) *
-        Translate(0, leg.x0, 0) *
-        Rotate((lp.b - 2048)*M_PI/2048 + leg.delta1, leg.direction1 * flip, 0, 0) *
-        Translate(0, leg.x1, 0) *
-        Rotate((lp.c - 2048)*M_PI/2048 + leg.delta2, leg.direction2 * flip, 0, 0) *
-        Translate(0, 0, -leg.l2)
-        );
-    vec4 o(t * vec4(0, 0, 0, 1));
-    ox = o.v[0];
-    oy = o.v[1];
-    oz = o.v[2];
-     */
+
     vec4 r(0, 0, 0, 1);
-    std::cerr << " a. " << r << std::endl;
+    //std::cerr << " a. " << r << std::endl;
     r = Translate(0, 0, -leg.l2) * r;
-    std::cerr << "tb. " << r << std::endl;
+    //std::cerr << "tb. " << r << std::endl;
     r = Rotate((lp.c - 2048)*M_PI/2048 + leg.delta2, leg.direction2 * flip, 0, 0) * r;
-    std::cerr << "rc. " << r << std::endl;
+    //std::cerr << "rc. " << r << std::endl;
     r = Translate(0, leg.x1, 0) * r;
-    std::cerr << "td. " << r << std::endl;
+    //std::cerr << "td. " << r << std::endl;
     r = Rotate((lp.b - 2048)*M_PI/2048 + leg.delta1, leg.direction1 * flip, 0, 0) * r;
-    std::cerr << "re. " << r << std::endl;
+    //std::cerr << "re. " << r << std::endl;
     r = Translate(0, leg.x0, 0) * r;
-    std::cerr << "tf. " << r << std::endl;
+    //std::cerr << "tf. " << r << std::endl;
     r = Rotate((lp.a - 2048)*M_PI/2048 + leg.delta0, 0, 0, leg.direction0 * flip) * r;
-    std::cerr << "rg. " << r << std::endl;
-    r = Translate(leg.cx, leg.cy, leg.cz) * r;
-    std::cerr << "th. " << r << std::endl;
-    ox = r.x;
-    oy = r.y;
+    //std::cerr << "rg. " << r << std::endl;
+    r = Translate(cx, cy, cz) * r;
+    //std::cerr << "th. " << r << std::endl;
+    ox = r.x * ((leg.cx < 0) ? -1 : 1);
+    oy = r.y * ((leg.cy < 0) ? -1 : 1);
     oz = r.z;
 }
 

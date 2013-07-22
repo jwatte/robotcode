@@ -25,9 +25,9 @@
 #define CMD_FIRE 0x12
 
 
-const float CENTER_XPOS = 145.0f;
-const float CENTER_YPOS = 135.0f;
-const float CENTER_ZPOS = -20.0f;
+const float CENTER_XPOS = 180.0f;
+const float CENTER_YPOS = 120.0f;
+const float CENTER_ZPOS = -30.0f;
 
 #define MAX_SERVO_COUNT 16
 
@@ -46,7 +46,7 @@ static IStatus *istatus;
 static ISockets *isocks;
 static INetwork *inet;
 static IPacketizer *ipackets;
-static unsigned char battery;
+static unsigned short battery;
 
 static unsigned char firing_value;
 
@@ -320,6 +320,7 @@ void usb_thread_fn() {
     get_leg_params(lparam);
     boost::shared_ptr<Logger> logger(new USBLogger());
     ServoSet ss(REAL_USB, logger);
+    ss.set_power(15);
     for (size_t i = 0; i < sizeof(init)/sizeof(init[0]); ++i) {
         ss.add_servo(init[i].id, init[i].center);
     }
@@ -509,7 +510,7 @@ usage:
         frames = frames + 1;
         if (thetime - intime > (REAL_USB ? 20 : 2)) {
             fprintf(stderr, "main fps: %.1f  battery: %.1f\n", frames / (thetime - intime),
-                (float)battery / 10.0);
+                (float)battery / 100.0);
             frames = 0;
             intime = thetime;
             if (!REAL_USB) {

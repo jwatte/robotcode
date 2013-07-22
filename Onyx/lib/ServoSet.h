@@ -165,6 +165,7 @@ private:
     unsigned char lastServoId_;
     unsigned char lastSeq_;
     unsigned char nextSeq_;
+    int lastOutSeq_;
     unsigned short battery_;
     unsigned char power_;
     unsigned char powerFail_;

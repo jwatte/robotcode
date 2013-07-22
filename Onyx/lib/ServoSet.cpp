@@ -25,6 +25,8 @@
 #define DEFAULT_TORQUE_LIMIT 1023
 #define DEFAULT_TORQUE_STEPS 1
 
+#define MAX_OUTSTANDING_PACKETS 3
+
 static const unsigned char read_regs[] = {
     REG_MODEL_NUMBER,
     REG_MODEL_NUMBER_HI,
@@ -254,6 +256,7 @@ ServoSet::ServoSet(bool usb, boost::shared_ptr<Logger> const &l, IStatus *status
     torqueSteps_ = DEFAULT_TORQUE_STEPS;
     lastServoId_ = 0;
     lastSeq_ = nextSeq_ = 0;
+    lastOutSeq_ = -1;
     lastStep_ = 0;
     lastSend_ = 0;
     battery_ = 0;
@@ -365,7 +368,7 @@ void ServoSet::step() {
 
     //  select next servo
     if (timeready && servos_.size()) {
-        if ((unsigned char)(nextSeq_ - lastSeq_) < 3) {
+        if ((unsigned char)(nextSeq_ - lastSeq_) < MAX_OUTSTANDING_PACKETS) {
             buf[bufptr++] = nextSeq_;
             ++nextSeq_;
             while (true) {
@@ -454,10 +457,16 @@ void ServoSet::step() {
                 }
                 cmds_.erase(cmds_.begin(), ptr);
             }
+            lastOutSeq_ = -1;
         }
         else {
-            fprintf(stderr, "outstanding packets: %d-%d=%d\n",
-                nextSeq_, lastSeq_, nextSeq_-lastSeq_);
+            if (nextSeq_ != lastOutSeq_) {
+            /*
+                fprintf(stderr, "outstanding packets: %d-%d=%d\n",
+                    nextSeq_, lastSeq_, nextSeq_-lastSeq_);
+             */
+                lastOutSeq_ = nextSeq_;
+            }
         }
     }
 

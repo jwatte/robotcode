@@ -13,6 +13,7 @@ int main() {
     Transform a(Translate(2, 0, 0));
     check(a * vec4(0, 0, 0), vec4(2, 0, 0));
     Transform b(Rotate(M_PI*0.5, 0, 1, 0));
+    //  90 degrees around Y takes X onto -Z
     check(b * vec4(2, 0, 0), vec4(0, 0, -2));
     Transform c(Rotate(M_PI*0.5, 0, 1, 0)
         * Translate(2, 0, 0));

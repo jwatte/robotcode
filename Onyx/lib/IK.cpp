@@ -4,14 +4,14 @@
 #include <boost/lexical_cast.hpp>
 #include "Transform.h"
 
-#define CENTER_X 45
-#define CENTER_Y 62
-#define CENTER_Z 40
+#define CENTER_X 45.0f
+#define CENTER_Y 62.0f
+#define CENTER_Z 40.0f
 
-#define FIRST_LENGTH 60
-#define SECOND_LENGTH 80
-#define THIRD_LENGTH 161
-#define THIRD_HORIZONTAL 50
+#define FIRST_LENGTH 60.0f
+#define SECOND_LENGTH 80.0f
+#define THIRD_LENGTH 161.0f
+#define THIRD_HORIZONTAL 50.0f
 
 #define THIRD_ANGLE (asinf(THIRD_HORIZONTAL/THIRD_LENGTH))
 
@@ -21,22 +21,22 @@ leginfo legs[] = {
     {   CENTER_X, CENTER_Y, CENTER_Z,
         FIRST_LENGTH, -1, 0,            -0.6*M_PI, 0.1*M_PI,
         SECOND_LENGTH, 1, 0,            -0.25*M_PI, 0.5*M_PI,
-        THIRD_LENGTH,  1, -THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
+        THIRD_LENGTH,  1, THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
         },
     { -CENTER_X, CENTER_Y, CENTER_Z,
         FIRST_LENGTH, -1, 0,            -0.6*M_PI, 0.1*M_PI,
         SECOND_LENGTH, 1, 0,            -0.25*M_PI, 0.5*M_PI,
-        THIRD_LENGTH,  1, -THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
+        THIRD_LENGTH,  1, THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
         },
     { CENTER_X, -CENTER_Y, CENTER_Z, 
         FIRST_LENGTH, -1, 0,            -0.6*M_PI, 0.1*M_PI,
         SECOND_LENGTH, 1, 0,            -0.25*M_PI, 0.5*M_PI,
-        THIRD_LENGTH,  1, -THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
+        THIRD_LENGTH,  1, THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
         },
     { -CENTER_X, -CENTER_Y, CENTER_Z,
         FIRST_LENGTH, -1, 0,            -0.6*M_PI, 0.1*M_PI,
         SECOND_LENGTH, 1, 0,            -0.25*M_PI, 0.5*M_PI,
-        THIRD_LENGTH,  1, -THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
+        THIRD_LENGTH,  1, THIRD_ANGLE,  -0.5*M_PI, 0.5*M_PI,
         },
 };
 
@@ -86,17 +86,18 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     //  Hip--x0--Knee   |
     //                  |
 
+    solve_error = "";
     if (dx < 0 && dy < FIRST_LENGTH) {
         //  don't allow poses that turn the legs inside the body
         dx = 0;
         ret = false;
-        solve_error = "pose cannot go inside body sideways";
+        solve_error += "pose cannot go inside body sideways\n";
     }
     if (dz > 0) {
         //  don't allow poses that lift legs above the hips
         dz = 0;
         ret = false;
-        solve_error = "pose cannot lift legs above hips";
+        solve_error += "pose cannot lift legs above hips\n";
     }
     if (fabsf(dx) < 1e-3 && fabsf(dy) < 1e-3) {
         //  make sure it doesn't go divide-by-zero
@@ -104,13 +105,13 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     }
     //  dx, dy, dz, are relative to the hip joint
     //  orient the thigh in the direction of the target point
-    float xylen = sqrtf(dx*dx + dy*dy);
-    float xynorm = 1.0f / xylen;
     float ang0 = atan2f(dy, dx) - (float)(0.5*M_PI);    //  0 == front
     //  Calculate distance from the oriented point.
     //  The fixed-length thigh bone points in the direction of the desired point
-    float hdx = dx - dx * xynorm * leg.x0;
-    float hdy = dy - dy * xynorm * leg.x0;
+    float sin_ang0 = sinf(ang0);
+    float cos_ang0 = cosf(ang0);
+    float hdx = dx + sin_ang0 * leg.x0;   //  because 0 == front
+    float hdy = dy - cos_ang0 * leg.x0;
     //  hdx, hdy are relative to the knee joint
     float maxreach = leg.x1 + leg.l2;
     float minreach = fabsf(leg.x1 - leg.l2);
@@ -121,8 +122,8 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     if (distance < minreach) {
         ret = false;
         std::stringstream ss;
-        ss << "distance=" << distance << ", minreach=" << minreach << ", leg too close to knee.";
-        solve_error = ss.str();
+        ss << "distance=" << distance << ", minreach=" << minreach << ", leg too close to knee.\n";
+        solve_error += ss.str();
         //  fix up by moving leg downwards
         dz = -minreach;
         distance = sqrtf(hdx*hdx + hdy*hdy + dz*dz);
@@ -130,8 +131,8 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     if (distance > maxreach) {
         ret = false;
         std::stringstream ss;
-        ss << "distance=" << distance << ", minreach=" << minreach << ", leg too far from body.";
-        solve_error = ss.str();
+        ss << "distance=" << distance << ", minreach=" << minreach << ", leg too far from body.\n";
+        solve_error += ss.str();
         //  fix up by moving closer to body
         hdx *= maxreach / distance * 0.9999;
         hdy *= maxreach / distance * 0.9999;
@@ -157,7 +158,7 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     //  2adistance-distance2 = third2-second2
     //  a = (third2-second2+distance2)/2distance
 
-    float len_a = (leg.l2-leg.x1+distance*distance)/(2*distance);
+    float len_a = (leg.l2*leg.l2-leg.x1*leg.x1+distance*distance)/(2*distance);
     float len_b = distance-len_a;
     assert(leg.l2 >= len_a);
     float len_c = sqrtf(leg.l2*leg.l2-len_a*len_a);
@@ -171,42 +172,48 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
     float beta = delta - alpha;
     float ang1 = beta;
 
-    //  epsilon = angle between "c" and foot
-    float epsilon = atan2f(len_a, len_c);
-    float ang2 = hpi - delta + epsilon;
+    //  gamma = angle between "c" and foot
+    float gamma = atan2f(len_a, len_c);
+    float ang2 = hpi - delta + gamma;
+    ang2 = ang2 - hpi;
 
-    ang0 = ang0 + leg.delta0;
+    std::cerr << "len_a=" << len_a << ", len_b=" << len_b << ", len_c=" <<
+        len_c << ", hdist=" << hdist << ", alpha=" << alpha << ", beta=" << 
+        beta << ", delta=" << delta << ", gamma=" << gamma << ", ang0=" << 
+        ang0 << ", ang1=" << ang1 << ", ang2=" << ang2 << std::endl;
+
+    ang0 = ang0 - leg.delta0;
     if (ang0 < leg.min0) {
         ang0 = leg.min0;
         ret = false;
-        solve_error = "hip turn below minimum";
+        solve_error += "hip turn below minimum\n";
     }
     if (ang0 > leg.max0) {
         ang0 = leg.max0;
         ret = false;
-        solve_error = "hip turn above maximum";
+        solve_error += "hip turn above maximum\n";
     }
-    ang1 = ang1 + leg.delta1;
+    ang1 = ang1 - leg.delta1;
     if (ang1 < leg.min1) {
         ang1 = leg.min1;
         ret = false;
-        solve_error = "knee turn below minimum";
+        solve_error += "knee turn below minimum\n";
     }
     if (ang1 > leg.max1) {
         ang1 = leg.max1;
         ret = false;
-        solve_error = "knee turn above maximum";
+        solve_error += "knee turn above maximum\n";
     }
-    ang2 = ang2 + leg.delta2;
+    ang2 = ang2 - leg.delta2;
     if (ang2 < leg.min2) {
         ang2 = leg.min2;
         ret = false;
-        solve_error = "ankle turn below minimum";
+        solve_error += "ankle turn below minimum\n";
     }
     if (ang2 > leg.max2) {
         ang2 = leg.max2;
         ret = false;
-        solve_error = "angle turn above maximum";
+        solve_error += "angle turn above maximum\n";
     }
 
     ang0 = ang0 * (flip ? -1 : 1) * leg.direction0;
@@ -228,23 +235,47 @@ bool solve_leg(leginfo const &leg, float x, float y, float z, legpose &op) {
 
 void forward_leg(leginfo const &leg, legpose const &lp, float &ox, float &oy, float &oz)
 {
-    //  right now, only leg 0
-    assert(leg.cx > 0 && leg.cy > 0 && leg.cz > 0);
-
+    float flip = 1;
+    if (leg.cx < 0) {
+        flip = flip * -1;
+    }
+    if (leg.cy < 0) {
+        flip = flip * -1;
+    }
+    /*
     Transform t(
         Translate(leg.cx, leg.cy, leg.cz) *
-        Rotate(lp.a*M_PI/2048 - leg.delta0, 0, 1, 0) *
+        Rotate((lp.a - 2048)*M_PI/2048 + leg.delta0, 0, leg.direction0 * flip, 0) *
         Translate(0, leg.x0, 0) *
-        Rotate(lp.b*M_PI/2048 - leg.delta1, 1, 0, 0) *
+        Rotate((lp.b - 2048)*M_PI/2048 + leg.delta1, leg.direction1 * flip, 0, 0) *
         Translate(0, leg.x1, 0) *
-        Rotate(lp.c*M_PI/2048 - leg.delta2, 1, 0, 0) *
-        Translate(0, 0, -leg.l2) *
-        Transform()
+        Rotate((lp.c - 2048)*M_PI/2048 + leg.delta2, leg.direction2 * flip, 0, 0) *
+        Translate(0, 0, -leg.l2)
         );
     vec4 o(t * vec4(0, 0, 0, 1));
     ox = o.v[0];
     oy = o.v[1];
     oz = o.v[2];
+     */
+    vec4 r(0, 0, 0, 1);
+    std::cerr << " a. " << r << std::endl;
+    r = Translate(0, 0, -leg.l2) * r;
+    std::cerr << "tb. " << r << std::endl;
+    r = Rotate((lp.c - 2048)*M_PI/2048 + leg.delta2, leg.direction2 * flip, 0, 0) * r;
+    std::cerr << "rc. " << r << std::endl;
+    r = Translate(0, leg.x1, 0) * r;
+    std::cerr << "td. " << r << std::endl;
+    r = Rotate((lp.b - 2048)*M_PI/2048 + leg.delta1, leg.direction1 * flip, 0, 0) * r;
+    std::cerr << "re. " << r << std::endl;
+    r = Translate(0, leg.x0, 0) * r;
+    std::cerr << "tf. " << r << std::endl;
+    r = Rotate((lp.a - 2048)*M_PI/2048 + leg.delta0, 0, 0, leg.direction0 * flip) * r;
+    std::cerr << "rg. " << r << std::endl;
+    r = Translate(leg.cx, leg.cy, leg.cz) * r;
+    std::cerr << "th. " << r << std::endl;
+    ox = r.x;
+    oy = r.y;
+    oz = r.z;
 }
 
 

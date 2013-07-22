@@ -13,6 +13,15 @@ struct vec4 {
     float dot(vec4 const &o) const {
         return v[0]*o.v[0] + v[1]*o.v[1] + v[2]*o.v[2] + v[3]*o.v[3];
     }
+    vec4 operator*(float f) const {
+        return vec4(x*f, y*f, z*f, w*f);
+    }
+    vec4 operator-(vec4 const &o) const {
+        return vec4(x-o.x, y-o.y, z-o.z, w-o.w);
+    }
+    vec4 operator+(vec4 const &o) const {
+        return vec4(x+o.x, y+o.y, z+o.z, w+o.w);
+    }
     union {
         float v[4];
         struct {
@@ -78,7 +87,12 @@ inline Transform Translate(float dx, float dy, float dz) {
     ret.m[0].v[3] = dx;
     ret.m[1].v[3] = dy;
     ret.m[2].v[3] = dz;
+    ret.m[3].v[3] = 1;
     return ret;
+}
+
+inline Transform Translate(vec4 const &v) {
+    return Translate(v.x, v.y, v.z);
 }
 
 inline Transform Rotate(float rad, float ax, float ay, float az) {
@@ -86,17 +100,29 @@ inline Transform Rotate(float rad, float ax, float ay, float az) {
     float cphi = cosf(rad);
     float sphi = sinf(rad);
     float omcphi = 1-cphi;
-    //  straight from Wikipedia -- let's hope they use column vectors on the right...
+    //  straight from Wikipedia
     ret.m[0].v[0] = cphi + ax*ax*omcphi;
-    ret.m[0].v[1] = ax*ay*omcphi - az*az*sphi;
+    ret.m[0].v[1] = ax*ay*omcphi - az*sphi;
     ret.m[0].v[2] = ax*az*omcphi + ay*sphi;
     ret.m[1].v[0] = ax*ay*omcphi + az*sphi;
     ret.m[1].v[1] = cphi + ay*ay*omcphi;
-    ret.m[1].v[2] = ay*az*omcphi - az*sphi;
+    ret.m[1].v[2] = ay*az*omcphi - ax*sphi;
     ret.m[2].v[0] = az*ax*omcphi - ay*sphi;
     ret.m[2].v[1] = az*ay*omcphi + ax*sphi;
     ret.m[2].v[2] = cphi + az*az*omcphi;
+    ret.m[3].v[3] = 1;  //  shouldn't be needed
     return ret;
+}
+
+inline Transform Rotate(float rad, vec4 const &a) {
+    return Rotate(rad, a.x, a.y, a.z);
+}
+
+inline Transform RotateAround(float rad, vec4 const &axis, vec4 const &pos) {
+    return Translate(pos.x, pos.y, pos.z) *
+        Rotate(rad, axis.x, axis.y, axis.z) *
+        Translate(-pos.x, -pos.y, -pos.z)
+        ;
 }
 
 
